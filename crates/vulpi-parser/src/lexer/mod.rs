@@ -42,10 +42,7 @@
 use std::{iter::Peekable, str::Chars};
 
 use vulpi_location::Spanned;
-
-use self::token::{Comment, Token, TokenData};
-
-pub mod token;
+use vulpi_syntax::token::{Comment, Token, TokenData};
 
 /// Checks if a char is a valid identifier part.
 pub fn is_identifier_char(char: &char) -> bool {
