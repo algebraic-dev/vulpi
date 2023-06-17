@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "crates/vulpi-parser",
+    "crates/vulpi-location",
+]
+
+resolver = "1"
