@@ -1,5 +1,5 @@
 //! This module declares a bunch of tokens that are units of meaning in the language. There are a
-//! bunch of them that are virtual token
+//! bunch of them that are virtual token.
 
 use std::fmt::Display;
 
@@ -7,18 +7,20 @@ use vulpi_location::Spanned;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenData {
-    Let,  // 'let' keyword
-    When, // 'when' keyword
-    Is,   // 'is' keyword
-    With, // 'with' keyword
-    If,   // 'if' keyword
-    Else, // 'else' keyword
-    Then, // 'then' keyword
-    Use,  // 'use' keyword
-    As,   // 'as' keyword
-    Type, // 'type' keyword
-    Pub,  // 'pub' keyword
-    Do,   // 'do' keyword
+    Let,    // 'let' keyword
+    When,   // 'when' keyword
+    Is,     // 'is' keyword
+    With,   // 'with' keyword
+    If,     // 'if' keyword
+    Else,   // 'else' keyword
+    Then,   // 'then' keyword
+    Use,    // 'use' keyword
+    As,     // 'as' keyword
+    Type,   // 'type' keyword
+    Pub,    // 'pub' keyword
+    Do,     // 'do' keyword
+    In,     // 'in' keyword
+    Forall, // 'forall' keyword
 
     String, // String literal
     Int,    // Integer literal
@@ -26,15 +28,16 @@ pub enum TokenData {
 
     LBrace,     // '{'
     RBrace,     // '}'
-    LParen,     // '('
-    RParen,     // ')'
+    LPar,       // '('
+    RPar,       // ')'
     LBracket,   // '['
     RBracket,   // ']'
     LeftArrow,  // '<-'
     RightArrow, // '->'
     FatArrow,   // '=>'
 
-    Identifier, // Identifier
+    LowerIdent, // Identifier
+    UpperIdent, // Identifier
 
     Colon,       // ':'
     Semicolon,   // ';'
@@ -42,12 +45,14 @@ pub enum TokenData {
     Dot,         // '.'
     Exclamation, // '!'
     Equal,       // '='
-    Pipe,        // '|'
+    Bar,         // '|'
+    PipeRight,   // '|>'
 
     Plus,      // '+'
     Minus,     // '-'
     Star,      // '*'
     Slash,     // '/'
+    BackSlash, // '\'
     Percent,   // '%'
     Caret,     // '^'
     Ampersand, // '&'
@@ -63,9 +68,9 @@ pub enum TokenData {
     And, // '&&'
     Or,  // '||'
 
-    VBegin, // Virtual token for beginning of a block
-    VEnd,   // Virtual token for end of a block
-    VSemi,  // Virtual token for a semicolon
+    Begin, // Virtual token for beginning of a block
+    End,   // Virtual token for end of a block
+    Sep,   // Virtual token for a semicolon
 
     Error,
     Eof,
@@ -92,14 +97,15 @@ impl<'a> Display for Token<'a> {
             String => format!("\"{}\"", self.data),
             Int => format!("{}", self.data),
             Float => format!("{}", self.data),
-            Identifier => format!("{}", self.data),
+            LowerIdent => format!("{}", self.data),
+            UpperIdent => format!("{}", self.data),
             Colon => ":".to_string(),
             Semicolon => ";".to_string(),
             Comma => ",".to_string(),
             Dot => ".".to_string(),
             Exclamation => "!".to_string(),
             Equal => "=".to_string(),
-            Pipe => "|".to_string(),
+            Bar => "|".to_string(),
             Plus => "+".to_string(),
             Minus => "-".to_string(),
             Star => "*".to_string(),
@@ -116,9 +122,9 @@ impl<'a> Display for Token<'a> {
             DoubleEqual => "==".to_string(),
             And => "&&".to_string(),
             Or => "||".to_string(),
-            VBegin => "{{".to_string(),
-            VEnd => "}}".to_string(),
-            VSemi => ";".to_string(),
+            Begin => "{{".to_string(),
+            End => "}}".to_string(),
+            Sep => ";".to_string(),
             Error => "error".to_string(),
             Eof => "eof".to_string(),
             Let => "let".to_string(),
@@ -135,13 +141,17 @@ impl<'a> Display for Token<'a> {
             Do => "do".to_string(),
             LBrace => "{{".to_string(),
             RBrace => "}}".to_string(),
-            LParen => "(".to_string(),
-            RParen => ")".to_string(),
+            LPar => "(".to_string(),
+            RPar => ")".to_string(),
             LBracket => "[".to_string(),
             RBracket => "]".to_string(),
             LeftArrow => "<-".to_string(),
             RightArrow => "->".to_string(),
             FatArrow => "=>".to_string(),
+            In => "in".to_string(),
+            Forall => "forall".to_string(),
+            BackSlash => "\\".to_string(),
+            PipeRight => "|>".to_string(),
         };
 
         write!(f, "{}", data)

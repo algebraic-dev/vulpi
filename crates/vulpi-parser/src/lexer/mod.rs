@@ -70,7 +70,6 @@ pub enum LexState {
     Common,
     PushLayout,
 }
-
 /// A state that can be stored and recovered further in the lexing process.
 #[derive(Clone)]
 pub struct State {
@@ -97,9 +96,9 @@ pub struct State {
 /// The lexer struct that contains the input and the current state. This struct is the entry point
 /// for the lexer.
 pub struct Lexer<'a> {
-    pub peekable: Peekable<Chars<'a>>,
-    pub input: &'a str,
-    pub state: State,
+    peekable: Peekable<Chars<'a>>,
+    input: &'a str,
+    state: State,
 }
 
 impl<'a> Lexer<'a> {
@@ -119,7 +118,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Advances one char modifying the storable [State].
-    pub fn advance(&mut self) -> Option<char> {
+    fn advance(&mut self) -> Option<char> {
         let char = self.peekable.next()?;
         self.state.index += char.len_utf8();
 
@@ -134,12 +133,12 @@ impl<'a> Lexer<'a> {
     }
 
     /// Sets the current index to the start index.
-    pub fn save(&mut self) {
+    fn save(&mut self) {
         self.state.start = self.state.index;
     }
 
     /// Creates a new spanned token using the selected part of the code.
-    pub fn spanned<T>(&self, token: T) -> Spanned<T> {
+    fn spanned<T>(&self, token: T) -> Spanned<T> {
         Spanned::new(token, self.state.start, self.state.index)
     }
 
@@ -196,12 +195,15 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn classify_identifier(&mut self) -> TokenData {
+    fn classify_identifier(&mut self) -> TokenData {
         let data = &self.input[self.state.start..self.state.index];
         match data {
             "let" => TokenData::Let,
             "when" => TokenData::When,
-            "is" => TokenData::Is,
+            "is" => {
+                self.state.lex_state = LexState::PushLayout;
+                TokenData::Is
+            }
             "with" => TokenData::With,
             "if" => TokenData::If,
             "else" => TokenData::Else,
@@ -210,11 +212,13 @@ impl<'a> Lexer<'a> {
             "as" => TokenData::As,
             "type" => TokenData::Type,
             "pub" => TokenData::Pub,
+            "in" => TokenData::In,
             "do" => {
                 self.state.lex_state = LexState::PushLayout;
                 TokenData::Do
             }
-            _ => TokenData::Identifier,
+            "forall" => TokenData::Forall,
+            _ => TokenData::LowerIdent,
         }
     }
 
@@ -228,9 +232,9 @@ impl<'a> Lexer<'a> {
                 Some(last_column) if column > *last_column => (),
                 Some(last_column) if column < *last_column => {
                     self.state.layout.pop();
-                    return TokenData::VEnd;
+                    return TokenData::End;
                 }
-                Some(_) => return TokenData::VSemi,
+                Some(_) => return TokenData::Sep,
             }
         }
 
@@ -238,8 +242,8 @@ impl<'a> Lexer<'a> {
             match char {
                 '{' => TokenData::LBrace,
                 '}' => TokenData::RBrace,
-                '(' => TokenData::LParen,
-                ')' => TokenData::RParen,
+                '(' => TokenData::LPar,
+                ')' => TokenData::RPar,
                 '[' => TokenData::LBracket,
                 ']' => TokenData::RBracket,
                 '<' => {
@@ -269,10 +273,28 @@ impl<'a> Lexer<'a> {
                 '+' => TokenData::Plus,
                 '*' => TokenData::Star,
                 '/' => TokenData::Slash,
+                '\\' => TokenData::BackSlash,
                 '%' => TokenData::Percent,
                 '^' => TokenData::Caret,
-                '&' => TokenData::Ampersand,
-                '|' => TokenData::Pipe,
+                '&' => {
+                    if let Some('&') = self.peekable.peek() {
+                        self.advance();
+                        TokenData::And
+                    } else {
+                        TokenData::Ampersand
+                    }
+                }
+                '|' => {
+                    if let Some('|') = self.peekable.peek() {
+                        self.advance();
+                        TokenData::Or
+                    } else if let Some('>') = self.peekable.peek() {
+                        self.advance();
+                        TokenData::PipeRight
+                    } else {
+                        TokenData::Bar
+                    }
+                }
                 '~' => TokenData::Tilde,
                 '!' => {
                     if let Some('=') = self.peekable.peek() {
@@ -286,6 +308,9 @@ impl<'a> Lexer<'a> {
                     if let Some('=') = self.peekable.peek() {
                         self.advance();
                         TokenData::DoubleEqual
+                    } else if let Some('>') = self.peekable.peek() {
+                        self.advance();
+                        TokenData::FatArrow
                     } else {
                         TokenData::Equal
                     }
@@ -314,6 +339,10 @@ impl<'a> Lexer<'a> {
                         TokenData::Error
                     }
                 }
+                'A'..='Z' => {
+                    self.accumulate(is_identifier_char);
+                    TokenData::UpperIdent
+                }
                 c if is_identifier_char(&c) => {
                     self.accumulate(is_identifier_char);
                     self.classify_identifier()
@@ -321,10 +350,14 @@ impl<'a> Lexer<'a> {
                 _ => TokenData::Error,
             }
         } else if self.state.layout.pop().is_some() {
-            TokenData::VEnd
+            TokenData::End
         } else {
             TokenData::Eof
         }
+    }
+
+    pub fn pop_layout(&mut self) {
+        self.state.layout.pop();
     }
 
     /// Lexes a single token from the input.
@@ -340,7 +373,7 @@ impl<'a> Lexer<'a> {
             LexState::PushLayout => {
                 self.state.layout.push(self.state.column);
                 self.state.lex_state = LexState::Common;
-                TokenData::VBegin
+                TokenData::Begin
             }
         };
         self.spanned(Token {
@@ -349,6 +382,14 @@ impl<'a> Lexer<'a> {
             kind,
             data: self.input[self.state.start..self.state.index].into(),
         })
+    }
+}
+
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Spanned<Token<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(self.lex())
     }
 }
 
@@ -362,7 +403,7 @@ mod tests {
             "
             let x = do
             1
-             2
+             2 ATA
             3 4 (do 3 42
                     5
                     6) 
@@ -374,8 +415,9 @@ mod tests {
         let mut token = lexer.lex();
 
         while token.data.kind != TokenData::Eof {
-            println!("{:?} ~ {:?}", token.data.kind, token.data.data);
+            print!("{:?} ", token.data.kind);
             token = lexer.lex();
         }
+        println!()
     }
 }

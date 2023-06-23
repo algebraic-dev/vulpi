@@ -11,4 +11,12 @@ name = "vulpi-parser"
 version = "0.1.0"
 dependencies = [
  "vulpi-location",
+ "vulpi-syntax",
+]
+
+[[package]]
+name = "vulpi-syntax"
+version = "0.1.0"
+dependencies = [
+ "vulpi-location",
 ]
