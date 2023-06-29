@@ -415,9 +415,8 @@ mod tests {
         let mut token = lexer.lex();
 
         while token.data.kind != TokenData::Eof {
-            print!("{:?} ", token.data.kind);
             token = lexer.lex();
+            assert!(token.data.kind != TokenData::Error);
         }
-        println!()
     }
 }

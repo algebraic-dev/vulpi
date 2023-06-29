@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 
 vulpi-location = { path = "../vulpi-location" }
+vulpi-macros = { path = "../vulpi-macros" }

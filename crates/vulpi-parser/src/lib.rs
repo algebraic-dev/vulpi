@@ -29,9 +29,8 @@ impl<'a> TreeBuilder<'a> {
             .push((LabelOrKind::Kind(kind), self.children.len()));
     }
 
-    pub fn label(&mut self, label: &'static str) {
-        self.parents
-            .push((LabelOrKind::Label(label), self.children.len()));
+    pub fn label<T: Into<LabelOrKind>>(&mut self, label: T) {
+        self.parents.push((label.into(), self.children.len()));
     }
 
     pub fn close(&mut self) {
@@ -132,8 +131,8 @@ impl<'a> Parser<'a> {
         self.builder.checkpoint()
     }
 
-    fn labeled(&mut self, label: &'static str, fun: impl FnOnce(&mut Self)) {
-        self.label(label);
+    fn labeled<T: Into<LabelOrKind>>(&mut self, label: T, fun: impl FnOnce(&mut Self)) {
+        self.builder.label(label);
         fun(self);
         self.close()
     }
@@ -337,8 +336,8 @@ impl Parser<'_> {
 
     pub fn typ_atom(&mut self) {
         match self.peek() {
-            LowerIdent => self.advance(),
-            UpperIdent => self.advance(),
+            LowerIdent => self.labeled(TreeKind::TypePoly, Self::advance),
+            UpperIdent => self.labeled(TreeKind::TypeId, Self::advance),
             LPar => {
                 self.open(TreeKind::Parenthesis);
                 self.advance();
@@ -355,17 +354,30 @@ impl Parser<'_> {
         }
     }
 
+    pub fn typ_wrap(&mut self, f: fn(&mut Self)) {
+        self.open(TreeKind::Type);
+        f(self);
+        self.close();
+    }
+
     pub fn typ_application(&mut self) {
         let checkpoint = self.checkpoint();
-        self.typ_atom();
-        if self.at(LPar) {
-            self.rollback(checkpoint, TreeKind::TypeApplication);
-            while self.at(LPar) {
-                self.advance();
-                self.typ();
-                self.expect(RPar);
+        self.typ_wrap(Self::typ_atom);
+        let mut first = false;
+
+        while !self.at_any(&[TokenData::RPar, TokenData::RightArrow, TokenData::Eof]) {
+            if !first {
+                self.rollback(checkpoint, TreeKind::Type);
             }
+
+            self.rollback(checkpoint, TreeKind::TypeApplication);
+            self.typ_wrap(Self::typ_atom);
             self.close();
+
+            if !first {
+                self.close();
+                first = true;
+            }
         }
     }
 
@@ -373,9 +385,13 @@ impl Parser<'_> {
         let checkpoint = self.checkpoint();
         self.typ_application();
         if self.at(RightArrow) {
+            self.rollback(checkpoint, TreeKind::Type);
+            self.close();
+            self.rollback(checkpoint, "left");
+            self.close();
             self.rollback(checkpoint, TreeKind::TypeArrow);
             self.advance();
-            self.typ();
+            self.labeled("right", Self::typ);
             self.close();
         }
     }
@@ -394,11 +410,13 @@ impl Parser<'_> {
     }
 
     pub fn typ(&mut self) {
+        self.open(TreeKind::Type);
         if self.at(Forall) {
             self.typ_forall()
         } else {
             self.typ_arrow()
         }
+        self.close()
     }
 
     pub fn field(&mut self) {
@@ -527,7 +545,7 @@ impl Parser<'_> {
 
     pub fn root(&mut self) {
         self.open(TreeKind::Program);
-        self.import_decl();
+        self.typ();
         self.expect(Eof);
         self.close();
     }
@@ -536,15 +554,19 @@ impl Parser<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vulpi_syntax::concrete::TypeNode;
 
     #[test]
     fn test_parser() {
         let mut parser = Parser::new(
             "
-            use A.B.C as D (D as E, f as g, g, h)
+                a b c
         ",
         );
         parser.root();
-        println!("{}", parser.builder.finish())
+
+        let root = parser.builder.finish();
+
+        assert!(root.children[0].to::<TypeNode>().is_some());
     }
 }

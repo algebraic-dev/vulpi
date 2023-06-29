@@ -3,6 +3,8 @@
 members = [
     "crates/vulpi-parser",
     "crates/vulpi-location",
+    "crates/vulpi-macros",
+    "crates/vulpi-syntax",
 ]
 
 resolver = "1"
