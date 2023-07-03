@@ -13,33 +13,40 @@ use crate::token::{Token, TokenData};
 pub enum TreeKind {
     Error,
     Program,
-    Import,
+    Exposed,
+    Exposes,
     ImportModifier,
     ImportDependencies,
+    TypeDeclType,
     TypeDecl,
     TypeSynonym,
     TypeProduct,
     TypeSum,
     LetDecl,
+    Binder,
     LetPattern,
+    Use,
+    PipeExpr,
     LetBody,
     Literal,
     Lambda,
     Application,
     Lower,
     Upper,
+    Identifier,
     Field,
     RecordCreation,
     RecordUpdate,
     BinaryOperation,
     If,
-    Match,
     Annotation,
     Block,
     Let,
     LetDo,
+    When,
     Do,
     Case,
+    Expr,
     Cases,
 
     PatWild,
@@ -50,9 +57,6 @@ pub enum TreeKind {
     PatOr,
     PatRecord,
     Pattern,
-
-    LiteralString,
-    LiteralInt,
 
     TypeId,
     TypePoly,
@@ -68,7 +72,13 @@ pub enum TreeKind {
 
     Path,
     PathEnd,
+
+    DataConstructor,
 }
+
+pub struct LowerId(pub String);
+
+pub struct UpperId(pub String);
 
 /// Leaf of a tree that can be either a token or a node.
 pub enum TokenOrNode<T, N> {
@@ -125,9 +135,21 @@ impl<'a> Display for Node<'a> {
 }
 
 impl<'a> Tree<'a> {
+    pub fn at(&self, place: usize) -> Option<&Node<'a>> {
+        self.children.get(place)
+    }
+
+    pub fn fst<T: Specialized<'a>>(&'a self) -> Option<T> {
+        T::try_as(self.children.get(0)?)
+    }
+
     /// Traverses the tree and applies a function to each node. It returns a vector of the results.
-    pub fn traverse<T>(&self, f: impl FnMut(&Node<'a>) -> Option<T>) -> Option<Vec<T>> {
+    pub fn traverse<T>(&'a self, f: impl FnMut(&'a Node<'a>) -> Option<T>) -> Option<Vec<T>> {
         self.children.iter().map(f).collect()
+    }
+
+    pub fn filter<T>(&'a self, f: impl FnMut(&'a Node<'a>) -> Option<T>) -> Vec<T> {
+        self.children.iter().filter_map(f).collect()
     }
 
     /// Finds a node in the tree by its label.
@@ -207,7 +229,11 @@ where
 
     fn make(node: &'a Tree<'a>) -> Self;
 
-    fn try_as_tree(tree: &'a Tree<'a>) -> Option<Self> {
+    fn fst<T: Specialized<'a>>(&'a self) -> Option<T> {
+        self.tree().fst()
+    }
+
+    fn try_as_tree<'b: 'a>(tree: &'b Tree<'a>) -> Option<Self> {
         if tree.kind == LabelOrKind::Kind(Self::KIND) {
             Some(Self::make(tree))
         } else {
@@ -223,8 +249,12 @@ where
         }
     }
 
-    fn find(&'a self, label: &str) -> Option<&Tree<'a>> {
+    fn find(&self, label: &str) -> Option<&Tree<'a>> {
         self.tree().find(label)
+    }
+
+    fn filter<T>(&'a self, f: impl FnMut(&'a Node<'a>) -> Option<T>) -> Vec<T> {
+        self.tree().filter(f)
     }
 
     fn at(&'a self, index: usize) -> Option<&Node<'a>> {
@@ -245,6 +275,30 @@ impl<'a> Node<'a> {
         }
     }
 
+    pub fn fst<T: Specialized<'a>>(&'a self) -> Option<T> {
+        if let Node::Node(tree) = self {
+            tree.fst()
+        } else {
+            None
+        }
+    }
+
+    pub fn traverse<T>(&'a self, f: impl FnMut(&'a Node<'a>) -> Option<T>) -> Option<Vec<T>> {
+        if let Node::Node(tree) = self {
+            tree.traverse(f)
+        } else {
+            None
+        }
+    }
+
+    pub fn filter<T>(&'a self, f: impl FnMut(&'a Node<'a>) -> Option<T>) -> Vec<T> {
+        if let Node::Node(tree) = self {
+            tree.filter(f)
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn children(&'a self) -> Option<&'a Vec<Node<'a>>> {
         if let Node::Node(tree) = self {
             Some(&tree.children)
@@ -253,10 +307,63 @@ impl<'a> Node<'a> {
         }
     }
 
-    pub fn lower_id(&'a self) -> Option<String> {
+    pub fn token<T>(&'a self, fun: fn(&Token) -> Option<T>) -> Option<T> {
         if let Node::Token(token) = self {
-            if let TokenData::LowerIdent = token.data.kind {
+            fun(&token.data)
+        } else {
+            None
+        }
+    }
+
+    pub fn lower_id(&'a self) -> Option<LowerId> {
+        self.token(|token| match token.kind {
+            TokenData::LowerIdent => Some(LowerId(token.data.to_string())),
+            _ => None,
+        })
+    }
+
+    pub fn upper_id(&'a self) -> Option<UpperId> {
+        self.token(|token| match token.kind {
+            TokenData::UpperIdent => Some(UpperId(token.data.to_string())),
+            _ => None,
+        })
+    }
+
+    pub fn ident(&'a self) -> Option<String> {
+        self.token(|token| match token.kind {
+            TokenData::LowerIdent | TokenData::UpperIdent => Some(token.data.to_string()),
+            _ => None,
+        })
+    }
+
+    pub fn string(&'a self) -> Option<String> {
+        if let Node::Token(token) = self {
+            if let TokenData::String = token.data.kind {
                 Some(token.data.data.to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn int(&'a self) -> Option<i64> {
+        if let Node::Token(token) = self {
+            if let TokenData::Int = token.data.kind {
+                Some(token.data.data.parse::<i64>().unwrap())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn float(&'a self) -> Option<f64> {
+        if let Node::Token(token) = self {
+            if let TokenData::Float = token.data.kind {
+                Some(token.data.data.parse::<f64>().unwrap())
             } else {
                 None
             }
@@ -282,7 +389,7 @@ impl<'a> Node<'a> {
 }
 
 impl<'a> Tree<'a> {
-    pub fn to<T: Specialized<'a>>(&'a self) -> Option<T> {
+    pub fn to<'b: 'a, T: Specialized<'a>>(&'b self) -> Option<T> {
         T::try_as_tree(self)
     }
 }

@@ -71,7 +71,7 @@ pub enum TokenData {
     Begin, // Virtual token for beginning of a block
     End,   // Virtual token for end of a block
     Sep,   // Virtual token for a semicolon
-
+    
     Error,
     Eof,
 }

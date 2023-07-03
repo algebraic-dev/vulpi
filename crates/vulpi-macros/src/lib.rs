@@ -1,10 +1,10 @@
 extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::ItemStruct;
+use syn::{parse_quote, ItemImpl, ItemStruct};
 
 #[proc_macro_attribute]
-pub fn newtype(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn new_type(attr: TokenStream, item: TokenStream) -> TokenStream {
     let parsed: syn::Expr = syn::parse(attr).unwrap();
 
     let item = syn::parse_macro_input!(item as ItemStruct);
@@ -12,6 +12,7 @@ pub fn newtype(attr: TokenStream, item: TokenStream) -> TokenStream {
     let name = &item.ident;
 
     quote! {
+       #[derive(Debug)]
        #item
 
        impl<'a> crate::tree::Specialized<'a> for #name<'a> {
