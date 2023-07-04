@@ -13,17 +13,23 @@ pub fn new_type(attr: TokenStream, item: TokenStream) -> TokenStream {
        #[derive(Debug)]
        #item
 
-       impl crate::tree::Specialized for #name<'_> {
+       impl<'a> crate::tree::Specialized<'a> for #name<'a> {
            const KIND: crate::tree::TreeKind = #parsed;
 
-           fn tree(&self) -> &Tree {
+           fn tree(&mut self) -> &mut Tree {
                self.0
            }
 
-           fn make(node: &Tree) -> Self {
+           fn make(node: &'a mut Tree) -> Self {
                Self(node)
            }
        }
+
+       impl<'a> std::fmt::Display for #name<'a> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
     }
     .into()
 }

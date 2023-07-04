@@ -10,83 +10,72 @@ use vulpi_location::Spanned;
 use vulpi_macros::new_type;
 use vulpi_storage::interner::Symbol;
 
-#[derive(Debug)]
-pub struct PathNode<'a>(pub &'a Tree);
-
-impl<'a> crate::tree::Specialized<'a> for PathNode<'a> {
-    const KIND: crate::tree::TreeKind = Path;
-    fn tree(&'a self) -> &'a Tree {
-        self.0
-    }
-    fn make(node: &'a Tree) -> Self {
-        Self(node)
-    }
-}
+#[new_type(Path)]
+pub struct PathNode<'a>(pub &'a mut Tree);
 
 impl<'a> PathNode<'a> {
-    pub fn segments(&'a self) -> Option<Vec<LowerId>> {
+    pub fn segments(&'a mut self) -> Option<Vec<LowerId>> {
         self.0.traverse(|seg| seg.lower_id())
     }
 }
 
-/*
 #[new_type(TypeForall)]
-pub struct ForallNode<'a>(pub &'a Tree);
+pub struct ForallNode<'a>(pub &'a mut Tree);
 
 impl<'a> ForallNode<'a> {
-    pub fn args(&'a self) -> Option<Vec<LowerId>> {
+    pub fn args(&'a mut self) -> Option<Vec<LowerId>> {
         self.find("args")?.traverse(|arg| arg.lower_id())
     }
 
-    pub fn body(&'a self) -> Option<TypeNode<'a>> {
+    pub fn body(&'a mut self) -> Option<TypeNode<'a>> {
         self.find("body")?.to()
     }
 }
 
 #[new_type(TypeArrow)]
-pub struct TypeArrowNode<'a>(pub &'a Tree);
+pub struct TypeArrowNode<'a>(pub &'a mut Tree);
 
 impl<'a> TypeArrowNode<'a> {
-    pub fn left(&'a self) -> Option<TypeNode<'a>> {
+    pub fn left(&'a mut self) -> Option<TypeNode<'a>> {
         self.find("left")?.to()
     }
 
-    pub fn right(&'a self) -> Option<TypeNode<'a>> {
+    pub fn right(&'a mut self) -> Option<TypeNode<'a>> {
         self.find("right")?.to()
     }
 }
 
 #[new_type(TypeApplication)]
-pub struct TypeApplicationNode<'a>(pub &'a Tree);
+pub struct TypeApplicationNode<'a>(pub &'a mut Tree);
 
 impl<'a> TypeApplicationNode<'a> {
-    pub fn left(&'a self) -> Option<TypeNode<'a>> {
+    pub fn left(&'a mut self) -> Option<TypeNode<'a>> {
         self.fst()
     }
 
-    pub fn right(&'a self) -> Option<TypeNode<'a>> {
+    pub fn right(&'a mut self) -> Option<TypeNode<'a>> {
         self.at(1)?.to()
     }
 }
 
 #[new_type(TypeId)]
-pub struct TypeIdNode<'a>(pub &'a Tree);
+pub struct TypeIdNode<'a>(pub &'a mut Tree);
 
 impl<'a> TypeIdNode<'a> {
-    pub fn id(&'a self) -> Option<LowerId> {
+    pub fn id(&'a mut self) -> Option<LowerId> {
         self.at(0)?.lower_id()
     }
 }
 
 #[new_type(TypePoly)]
-pub struct TypePolyNode<'a>(pub &'a Tree);
+pub struct TypePolyNode<'a>(pub &'a mut Tree);
 
 impl<'a> TypePolyNode<'a> {
-    pub fn id(&'a self) -> Option<LowerId> {
+    pub fn id(&'a mut self) -> Option<LowerId> {
         self.at(0)?.lower_id()
     }
 
-    pub fn body(&'a self) -> Option<TypeNode<'a>> {
+    pub fn body(&'a mut self) -> Option<TypeNode<'a>> {
         self.at(1)?.to()
     }
 }
@@ -100,46 +89,46 @@ pub enum TypeEnum<'a> {
 }
 
 #[new_type(Type)]
-pub struct TypeNode<'a>(pub &'a Tree);
+pub struct TypeNode<'a>(pub &'a mut Tree);
 
 impl<'a> TypeNode<'a> {
-    pub fn forall(&'a self) -> Option<ForallNode<'a>> {
+    pub fn forall(&'a mut self) -> Option<ForallNode<'a>> {
         self.fst()
     }
 
-    pub fn type_application(&'a self) -> Option<TypeApplicationNode<'a>> {
+    pub fn type_application(&'a mut self) -> Option<TypeApplicationNode<'a>> {
         self.fst()
     }
 
-    pub fn type_arrow(&'a self) -> Option<TypeArrowNode<'a>> {
+    pub fn type_arrow(&'a mut self) -> Option<TypeArrowNode<'a>> {
         self.fst()
     }
 
-    pub fn type_id(&'a self) -> Option<TypeIdNode<'a>> {
+    pub fn type_id(&'a mut self) -> Option<TypeIdNode<'a>> {
         self.fst()
     }
 
-    pub fn type_poly(&'a self) -> Option<TypePolyNode<'a>> {
+    pub fn type_poly(&'a mut self) -> Option<TypePolyNode<'a>> {
         self.fst()
     }
 
-    pub fn to_enum(&'a self) -> Option<TypeEnum<'a>> {
-        match self.at(0)?.kind()? {
-            TypeId => self.type_id().map(TypeEnum::Id),
-            TypePoly => self.type_poly().map(TypeEnum::Poly),
-            TypeApplication => self.type_application().map(TypeEnum::Application),
-            TypeArrow => self.type_arrow().map(TypeEnum::Arrow),
-            TypeForall => self.forall().map(TypeEnum::Forall),
+    pub fn to_enum(&'a mut self) -> Option<TypeEnum<'a>> {
+        let fst = self.at(0)?;
+        match fst.kind()? {
+            TypeId => fst.to().map(TypeEnum::Id),
+            TypePoly => fst.to().map(TypeEnum::Poly),
+            TypeApplication => fst.to().map(TypeEnum::Application),
+            TypeArrow => fst.to().map(TypeEnum::Arrow),
+            TypeForall => fst.to().map(TypeEnum::Forall),
             _ => None,
         }
     }
 }
-unwrap()
-unwrap()
+
 pub struct StringNode<'a>(pub &'a Spanned<Token>);
 
 impl<'a> StringNode<'a> {
-    pub fn string(&'a self) -> Option<Symbol> {
+    pub fn string(&'a mut self) -> Option<Symbol> {
         Some(self.0.data.data.clone())
     }
 }
@@ -147,7 +136,7 @@ impl<'a> StringNode<'a> {
 pub struct IntNode<'a>(pub &'a Spanned<Token>);
 
 impl<'a> IntNode<'a> {
-    pub fn int(&'a self) -> Option<i64> {
+    pub fn int(&'a mut self) -> Option<i64> {
         self.0.data.data.get().parse().ok()
     }
 }
@@ -155,7 +144,7 @@ impl<'a> IntNode<'a> {
 pub struct FloatNode<'a>(pub &'a Spanned<Token>);
 
 impl<'a> FloatNode<'a> {
-    pub fn float(&'a self) -> Option<f64> {
+    pub fn float(&'a mut self) -> Option<f64> {
         self.0.data.data.get().parse().ok()
     }
 }
@@ -167,10 +156,10 @@ pub enum LiteralEnum<'a> {
 }
 
 #[new_type(Literal)]
-pub struct LiteralNode<'a>(pub &'a Tree);
+pub struct LiteralNode<'a>(pub &'a mut Tree);
 
 impl<'a> LiteralNode<'a> {
-    pub fn to_enum(&'a self) -> Option<LiteralEnum<'a>> {
+    pub fn to_enum(&'a mut self) -> Option<LiteralEnum<'a>> {
         match self.at(0)? {
             TokenOrNode::Token(token) => match token.data.kind {
                 TokenData::String => Some(LiteralEnum::String(StringNode(token))),
@@ -184,60 +173,60 @@ impl<'a> LiteralNode<'a> {
 }
 
 #[new_type(PatWild)]
-pub struct PatWildNode<'a>(pub &'a Tree);
+pub struct PatWildNode<'a>(pub &'a mut Tree);
 
 #[new_type(Identifier)]
-pub struct PatIdNode<'a>(pub &'a Tree);
+pub struct PatIdNode<'a>(pub &'a mut Tree);
 
-impl PatIdNode<'_> {
-    pub fn id(&self) -> Option<LowerId> {
+impl<'a> PatIdNode<'a> {
+    pub fn id(&'a mut self) -> Option<LowerId> {
         self.at(0)?.lower_id()
     }
 }
 
 #[new_type(PatLiteral)]
-pub struct PatLiteralNode<'a>(pub &'a Tree);
+pub struct PatLiteralNode<'a>(pub &'a mut Tree);
 
-impl PatLiteralNode<'_> {
-    pub fn literal(&self) -> Option<LiteralNode<'_>> {
+impl<'a> PatLiteralNode<'a> {
+    pub fn literal(&'a mut self) -> Option<LiteralNode<'a>> {
         self.fst()
     }
 }
 #[new_type(PatConstructor)]
-pub struct PatConstructorNode<'a>(pub &'a Tree);
+pub struct PatConstructorNode<'a>(pub &'a mut Tree);
 
-impl PatConstructorNode<'_> {
-    pub fn name(&self) -> Option<PathNode> {
+impl<'a> PatConstructorNode<'a> {
+    pub fn name(&'a mut self) -> Option<PathNode> {
         self.find("path")?.to()
     }
 
-    pub fn args(&self) -> Vec<PatNode> {
-        self.filter(|arg| arg.to())
+    pub fn args(&'a mut self) -> Vec<PatNode> {
+        self.filter(Node::to)
     }
 }
 
 #[new_type(PatAnnotation)]
-pub struct PatAnnotationNode<'a>(pub &'a Tree);
+pub struct PatAnnotationNode<'a>(pub &'a mut Tree);
 
-impl PatAnnotationNode<'_> {
-    pub fn pat(&self) -> Option<PatNode<'_>> {
+impl<'a> PatAnnotationNode<'a> {
+    pub fn pat(&'a mut self) -> Option<PatNode<'a>> {
         self.fst()
     }
 
-    pub fn typ(&self) -> Option<TypeNode<'_>> {
+    pub fn typ(&'a mut self) -> Option<TypeNode<'a>> {
         self.at(1)?.to()
     }
 }
 
 #[new_type(PatOr)]
-pub struct PatOrNode<'a>(pub &'a Tree);
+pub struct PatOrNode<'a>(pub &'a mut Tree);
 
-impl PatOrNode<'_> {
-    pub fn left(&self) -> Option<PatNode<'_>> {
+impl<'a> PatOrNode<'a> {
+    pub fn left(&'a mut self) -> Option<PatNode<'a>> {
         self.fst()
     }
 
-    pub fn right(&self) -> Option<PatNode<'_>> {
+    pub fn right(&'a mut self) -> Option<PatNode<'a>> {
         self.at(1)?.to()
     }
 }
@@ -252,148 +241,149 @@ pub enum PatEnum<'a> {
 }
 
 #[new_type(Pattern)]
-pub struct PatNode<'a>(pub &'a Tree);
+pub struct PatNode<'a>(pub &'a mut Tree);
 
 impl<'a> PatNode<'a> {
-    pub fn to_enum(&'a self) -> Option<PatEnum<'a>> {
-        match self.at(0)?.kind()? {
-            PatWild => self.fst().map(PatEnum::Wild),
-            Identifier => self.fst().map(PatEnum::Id),
-            PatLiteral => self.fst().map(PatEnum::Literal),
-            PatConstructor => self.fst().map(PatEnum::Constructor),
-            PatAnnotation => self.fst().map(PatEnum::Annotation),
-            PatOr => self.fst().map(PatEnum::Or),
+    pub fn to_enum(&'a mut self) -> Option<PatEnum<'a>> {
+        let fst = self.at(0)?;
+        match fst.kind()? {
+            PatWild => fst.to().map(PatEnum::Wild),
+            Identifier => fst.to().map(PatEnum::Id),
+            PatLiteral => fst.to().map(PatEnum::Literal),
+            PatConstructor => fst.to().map(PatEnum::Constructor),
+            PatAnnotation => fst.to().map(PatEnum::Annotation),
+            PatOr => fst.to().map(PatEnum::Or),
             _ => None,
         }
     }
 }
 
 #[new_type(Annotation)]
-pub struct AnnotationNode<'a>(pub &'a Tree);
+pub struct AnnotationNode<'a>(pub &'a mut Tree);
 
 impl<'a> AnnotationNode<'a> {
-    pub fn expr(&'a self) -> Option<ExprNode<'a>> {
+    pub fn expr(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("expr")?.to()
     }
 
-    pub fn typ(&'a self) -> Option<TypeNode<'a>> {
+    pub fn typ(&'a mut self) -> Option<TypeNode<'a>> {
         self.find("type")?.to()
     }
 }
 
 #[new_type(PipeExpr)]
-pub struct PipeRight<'a>(pub &'a Tree);
+pub struct PipeRight<'a>(pub &'a mut Tree);
 
 impl<'a> PipeRight<'a> {
-    pub fn left(&'a self) -> Option<ExprNode<'a>> {
+    pub fn left(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("left")?.to()
     }
 
-    pub fn right(&'a self) -> Option<ExprNode<'a>> {
+    pub fn right(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("right")?.to()
     }
 }
 
 #[new_type(If)]
-pub struct IfNode<'a>(pub &'a Tree);
+pub struct IfNode<'a>(pub &'a mut Tree);
 
 impl<'a> IfNode<'a> {
-    pub fn cond(&'a self) -> Option<ExprNode<'a>> {
+    pub fn cond(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("cond")?.to()
     }
 
-    pub fn then(&'a self) -> Option<ExprNode<'a>> {
+    pub fn then(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("then")?.to()
     }
 
-    pub fn else_(&'a self) -> Option<ExprNode<'a>> {
+    pub fn else_(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("else")?.to()
     }
 }
 
 #[new_type(Let)]
-pub struct LetNode<'a>(pub &'a Tree);
+pub struct LetNode<'a>(pub &'a mut Tree);
 
 impl<'a> LetNode<'a> {
-    pub fn pat(&'a self) -> Option<PatNode<'a>> {
+    pub fn pat(&'a mut self) -> Option<PatNode<'a>> {
         self.find("pattern")?.to()
     }
 
-    pub fn value(&'a self) -> Option<ExprNode<'a>> {
+    pub fn value(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("value")?.to()
     }
 
-    pub fn body(&'a self) -> Option<ExprNode<'a>> {
+    pub fn body(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("body")?.to()
     }
 }
 
 #[new_type(Case)]
-pub struct CaseNode<'a>(pub &'a Tree);
+pub struct CaseNode<'a>(pub &'a mut Tree);
 
 impl<'a> CaseNode<'a> {
-    pub fn pat(&'a self) -> Option<PatNode<'a>> {
+    pub fn pat(&'a mut self) -> Option<PatNode<'a>> {
         self.find("pat")?.fst()
     }
 
-    pub fn body(&'a self) -> Option<ExprNode<'a>> {
+    pub fn body(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("body")?.fst()
     }
 }
 
 #[new_type(When)]
-pub struct WhenNode<'a>(pub &'a Tree);
+pub struct WhenNode<'a>(pub &'a mut Tree);
 
 impl<'a> WhenNode<'a> {
-    pub fn cond(&'a self) -> Option<ExprNode<'a>> {
+    pub fn cond(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("scrutineer")?.to()
     }
 
-    pub fn cases(&'a self) -> Option<Vec<CaseNode<'a>>> {
+    pub fn cases(&'a mut self) -> Option<Vec<CaseNode<'a>>> {
         Some(self.find("cases")?.filter(Node::to))
     }
 }
 
 #[new_type(Do)]
-pub struct DoNode<'a>(pub &'a Tree);
+pub struct DoNode<'a>(pub &'a mut Tree);
 
 impl<'a> DoNode<'a> {
-    pub fn block(&'a self) -> Option<&Node> {
+    pub fn block(&'a mut self) -> Option<&mut Node> {
         self.find("block")?.at(0)
     }
 }
 
 #[new_type(Lambda)]
-pub struct LambdaNode<'a>(pub &'a Tree);
+pub struct LambdaNode<'a>(pub &'a mut Tree);
 
 impl<'a> LambdaNode<'a> {
-    pub fn pattern(&'a self) -> Option<PatNode<'a>> {
+    pub fn pattern(&'a mut self) -> Option<PatNode<'a>> {
         self.find("pattern").and_then(|p| p.to())
     }
 
-    pub fn body(&'a self) -> Option<ExprNode<'a>> {
+    pub fn body(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("body")?.to()
     }
 }
 
 #[new_type(Application)]
-pub struct ApplicationNode<'a>(pub &'a Tree);
+pub struct ApplicationNode<'a>(pub &'a mut Tree);
 
 impl<'a> ApplicationNode<'a> {
-    pub fn func(&self) -> Option<ExprNode<'_>> {
+    pub fn func(&'a mut self) -> Option<ExprNode<'a>> {
         self.find("func")?.to()
     }
 
-    pub fn args(&self) -> Option<&Node> {
+    pub fn args(&'a mut self) -> Option<&mut Node> {
         self.find("args")?.at(0)
     }
 }
 
 #[new_type(Upper)]
-pub struct UpperNode<'a>(pub &'a Tree);
+pub struct UpperNode<'a>(pub &'a mut Tree);
 
 impl<'a> UpperNode<'a> {
-    pub fn name(&'a self) -> Option<PathNode<'a>> {
+    pub fn name(&'a mut self) -> Option<PathNode<'a>> {
         self.fst()
     }
 }
@@ -412,116 +402,119 @@ pub enum ExprEnum<'a> {
 }
 
 #[new_type(Expr)]
-pub struct ExprNode<'a>(pub &'a Tree);
+pub struct ExprNode<'a>(pub &'a mut Tree);
 
-impl ExprNode<'_> {
-    pub fn to_enum(&self) -> Option<ExprEnum<'_>> {
-        match self.at(0)?.kind()? {
-            Literal => self.fst().map(ExprEnum::Literal),
-            Upper => self.fst().map(ExprEnum::Upper),
-            Annotation => self.fst().map(ExprEnum::Annotation),
-            PipeExpr => self.fst().map(ExprEnum::PipeRight),
-            If => self.fst().map(ExprEnum::If),
-            Let => self.fst().map(ExprEnum::Let),
-            When => self.fst().map(ExprEnum::When),
-            Do => self.fst().map(ExprEnum::Do),
-            Lambda => self.fst().map(ExprEnum::Lambda),
-            Application => self.fst().map(ExprEnum::Application),
+impl<'a> ExprNode<'a> {
+    pub fn to_enum(&'a mut self) -> Option<ExprEnum<'a>> {
+        let fst = self.at(0)?;
+        let kind = fst.kind()?;
+        match kind {
+            Literal => fst.to().map(ExprEnum::Literal),
+            Upper => fst.to().map(ExprEnum::Upper),
+            Annotation => fst.to().map(ExprEnum::Annotation),
+            PipeExpr => fst.to().map(ExprEnum::PipeRight),
+            If => fst.to().map(ExprEnum::If),
+            Let => fst.to().map(ExprEnum::Let),
+            When => fst.to().map(ExprEnum::When),
+            Do => fst.to().map(ExprEnum::Do),
+            Lambda => fst.to().map(ExprEnum::Lambda),
+            Application => fst.to().map(ExprEnum::Application),
             _ => None,
         }
     }
 }
 
 #[new_type(Binder)]
-pub struct BinderNode<'a>(pub &'a Tree);
+pub struct BinderNode<'a>(pub &'a mut Tree);
 
-impl BinderNode<'_> {
-    pub fn name(&self) -> Option<LowerId> {
+impl<'a> BinderNode<'a> {
+    pub fn name(&'a mut self) -> Option<LowerId> {
         self.find("name")?.at(0)?.lower_id()
     }
 
-    pub fn typ(&self) -> Option<TypeNode<'_>> {
+    pub fn typ(&'a mut self) -> Option<TypeNode<'a>> {
         self.find("type")?.to()
     }
 }
 
 #[new_type(LetDecl)]
-pub struct LetDeclNode<'a>(pub &'a Tree);
+pub struct LetDeclNode<'a>(pub &'a mut Tree);
 
-impl LetDeclNode<'_> {
-    pub fn name(&self) -> Option<LowerId> {
-        self.at(1)?.lower_id()
+impl<'a> LetDeclNode<'a> {
+    pub fn name(&mut self) -> Option<LowerId> {
+        let sim: &mut Self = unsafe { std::mem::transmute(self) };
+        sim.at(0)?.lower_id()
     }
 
-    pub fn args(&self) -> Option<Vec<BinderNode<'_>>> {
-        self.find("args")?.traverse(Node::to)
+    pub fn args(&'a mut self) -> Option<Vec<BinderNode<'a>>> {
+        Some(self.find("args")?.filter(Node::to))
     }
 
-    pub fn type_(&self) -> Option<TypeNode<'_>> {
+    pub fn type_(&'a mut self) -> Option<TypeNode<'a>> {
         self.find("type")?.to()
     }
 
-    pub fn body(&self) -> Option<ExprNode<'_>> {
+    pub fn body(&'a mut self) -> Option<ExprNode<'a>> {
         let res = self.find("body")?.at(0)?;
         res.to()
     }
 }
 #[new_type(Exposed)]
-pub struct ExposedNode<'a>(pub &'a Tree);
+pub struct ExposedNode<'a>(pub &'a mut Tree);
 
 #[new_type(Use)]
-pub struct UseNode<'a>(pub &'a Tree);
+pub struct UseNode<'a>(pub &'a mut Tree);
 
-impl UseNode<'_> {
-    pub fn path(&self) -> Option<PathNode<'_>> {
+impl<'a> UseNode<'a> {
+    pub fn path(&'a mut self) -> Option<PathNode<'a>> {
         self.find("path")?.fst()
     }
 
-    pub fn alias(&self) -> Option<PathNode<'_>> {
+    pub fn alias(&'a mut self) -> Option<PathNode<'a>> {
         self.find("alias")?.fst()
     }
 
-    pub fn exposing(&self) -> Option<Vec<ExposedNode>> {
+    pub fn exposing(&'a mut self) -> Option<Vec<ExposedNode>> {
         Some(self.find("exposing")?.filter(Node::to))
     }
 }
 
 #[new_type(DataConstructor)]
-pub struct DataConstructorNode<'a>(pub &'a Tree);
+pub struct DataConstructorNode<'a>(pub &'a mut Tree);
 
-impl DataConstructorNode<'_> {
-    pub fn name(&self) -> Option<UpperId> {
+impl<'a> DataConstructorNode<'a> {
+    pub fn name(&'a mut self) -> Option<UpperId> {
         self.find("name")?.at(0)?.upper_id()
     }
 
-    pub fn args(&self) -> Option<Vec<TypeNode<'_>>> {
+    pub fn args(&'a mut self) -> Option<Vec<TypeNode<'a>>> {
         self.find("args")?.traverse(Node::to)
     }
 }
 
 #[new_type(TypeSum)]
-pub struct TypeSumNode<'a>(pub &'a Tree);
+pub struct TypeSumNode<'a>(pub &'a mut Tree);
 
-impl TypeSumNode<'_> {
-    pub fn constructors(&self) -> Vec<DataConstructorNode<'_>> {
+impl<'a> TypeSumNode<'a> {
+    pub fn constructors(&'a mut self) -> Vec<DataConstructorNode<'a>> {
         self.filter(Node::to)
     }
 }
 
 #[new_type(TypeProduct)]
-pub struct TypeProductNode<'a>(pub &'a Tree);
+pub struct TypeProductNode<'a>(pub &'a mut Tree);
 
-impl TypeProductNode<'_> {
-    pub fn fields(&self) -> Option<Vec<TypeNode<'_>>> {
+impl<'a> TypeProductNode<'a> {
+    pub fn fields(&'a mut self) -> Option<Vec<TypeNode<'a>>> {
         todo!()
     }
 }
 
 #[new_type(TypeSynonym)]
-pub struct TypeSynonymNode<'a>(pub &'a Tree);
+pub struct TypeSynonymNode<'a>(pub &'a mut Tree);
 
-impl TypeSynonymNode<'_> {
-    pub fn type_(&self) -> Option<TypeNode<'_>> {
+impl<'a> TypeSynonymNode<'a> {
+    pub fn type_(&'a mut self) -> Option<TypeNode<'a>> {
         self.fst()
     }
 }
@@ -534,18 +527,18 @@ pub enum TypeDeclEnum<'a> {
 }
 
 #[new_type(TypeDecl)]
-pub struct TypeDeclNode<'a>(pub &'a Tree);
+pub struct TypeDeclNode<'a>(pub &'a mut Tree);
 
-impl TypeDeclNode<'_> {
-    pub fn name(&self) -> Option<UpperId> {
+impl<'a> TypeDeclNode<'a> {
+    pub fn name(&'a mut self) -> Option<UpperId> {
         self.find("name")?.at(0)?.upper_id()
     }
 
-    pub fn args(&self) -> Option<Vec<LowerId>> {
+    pub fn args(&'a mut self) -> Option<Vec<LowerId>> {
         self.find("args")?.traverse(Node::lower_id)
     }
 
-    pub fn decl_type(&self) -> Option<TypeDeclEnum<'_>> {
+    pub fn decl_type(&'a mut self) -> Option<TypeDeclEnum<'a>> {
         let place = self.find("type")?.at(0)?;
         match place.kind()? {
             TypeSynonym => place.to().map(TypeDeclEnum::Synonym),
@@ -555,4 +548,45 @@ impl TypeDeclNode<'_> {
         }
     }
 }
-*/
+
+#[new_type(TopLevel)]
+pub struct TopLevelNode<'a>(pub &'a mut Tree);
+
+pub enum TopLevelEnum<'a> {
+    Use(UseNode<'a>),
+    Let(LetDeclNode<'a>),
+    Type(TypeDeclNode<'a>),
+}
+
+impl<'a> TopLevelNode<'a> {
+    pub fn use_decl(&'a mut self) -> Option<UseNode<'a>> {
+        self.at(0)?.to()
+    }
+
+    pub fn let_decl(&'a mut self) -> Option<LetDeclNode<'a>> {
+        self.at(0)?.to()
+    }
+
+    pub fn type_decl(&'a mut self) -> Option<TypeDeclNode<'a>> {
+        self.at(0)?.to()
+    }
+
+    pub fn to_enum(&'a mut self) -> Option<TopLevelEnum> {
+        let node = self.at(0)?;
+        match node.kind()? {
+            LetDecl => node.to().map(TopLevelEnum::Let),
+            TypeDecl => node.to().map(TopLevelEnum::Type),
+            Use => node.to().map(TopLevelEnum::Use),
+            _ => None,
+        }
+    }
+}
+
+#[new_type(Program)]
+pub struct ProgramNode<'a>(pub &'a mut Tree);
+
+impl<'a> ProgramNode<'a> {
+    pub fn top_levels(&'a mut self) -> Vec<TopLevelNode<'a>> {
+        self.filter(Node::to)
+    }
+}

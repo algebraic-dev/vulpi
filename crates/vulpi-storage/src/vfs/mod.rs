@@ -21,7 +21,7 @@ pub trait FileSystem<Path, Content> {
     fn unload(&mut self, id: Id<File>) -> Result<(), Error>;
 
     fn store(&mut self, id: Id<File>, content: String) -> Result<(), Error>;
-    fn read<'a>(&'a self, id: Id<File>) -> Result<&'a Content, Error>;
+    fn read(&self, id: Id<File>) -> Result<&Content, Error>;
 
     fn create(&mut self, path: Path) -> Result<Id<File>, Error>;
     fn write(&mut self, id: Id<File>) -> Result<(), Error>;

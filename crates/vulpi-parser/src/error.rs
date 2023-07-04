@@ -16,7 +16,7 @@ impl IntoDiagnostic for ParserError {
 
     fn markers(&self) -> Vec<vulpi_report::Marker> {
         match self {
-            ParserError::UnexpectedToken(_, range, file) => {
+            ParserError::UnexpectedToken(_, _, _) => {
                 vec![Marker {
                     position: self.location(),
                     subtitle: None,

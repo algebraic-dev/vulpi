@@ -1,19 +1,15 @@
 //! Structures for compiling a [Crate] of [Source]s into a [Module]. The [Compiler] is the main
 //! entry point for this library and it's used to keep that of the compilation process.
 
-use std::path::PathBuf;
-
 use vulpi_report::Reporter;
 use vulpi_storage::{
     id::{File, Id},
     vfs::FileSystem,
 };
+use vulpi_syntax::concrete::{ProgramNode, TopLevelEnum};
 
 pub mod error;
 pub mod module;
-
-/// A source file that can be compiled into a [Module]. It's the main input of the [Compiler]
-pub struct Source(Id<File>);
 
 pub struct Config {}
 
@@ -35,7 +31,6 @@ impl<P> Instance<P> {
 
     pub fn compile(&mut self, source: P) -> Result<Id<File>, vulpi_storage::vfs::Error> {
         let id = self.file_system.load(source)?;
-
         let content = self.file_system.read(id)?;
 
         let str = std::str::from_utf8(content).unwrap();
@@ -44,6 +39,8 @@ impl<P> Instance<P> {
         parser.root();
 
         let parsed = parser.finish();
+
+        println!("{}", parsed);
 
         Ok(id)
     }
