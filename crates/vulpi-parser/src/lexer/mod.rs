@@ -42,6 +42,7 @@
 use std::{iter::Peekable, str::Chars};
 
 use vulpi_location::Spanned;
+use vulpi_storage::interner::Symbol;
 use vulpi_syntax::token::{Comment, Token, TokenData};
 
 /// Checks if a char is a valid identifier part.
@@ -117,6 +118,14 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    pub fn from(state: State, input: &'a str) -> Self {
+        Self {
+            peekable: input[state.index..].chars().peekable(),
+            input,
+            state,
+        }
+    }
+
     /// Advances one char modifying the storable [State].
     fn advance(&mut self) -> Option<char> {
         let char = self.peekable.next()?;
@@ -153,17 +162,18 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_whitespace(&mut self) -> Spanned<&'a str> {
+    fn lex_whitespace(&mut self) -> Spanned<Symbol> {
         self.save();
 
         self.accumulate(is_whitespace_or_line_break);
 
         let whitespace = &self.input[self.state.start..self.state.index];
+        let whitespace = Symbol::intern(whitespace);
 
         self.spanned(whitespace)
     }
 
-    fn lex_comment(&mut self) -> Either<Comment<'a>, Spanned<&'a str>> {
+    fn lex_comment(&mut self) -> Either<Comment, Spanned<Symbol>> {
         let whitespace = self.lex_whitespace();
 
         self.save();
@@ -173,7 +183,8 @@ impl<'a> Lexer<'a> {
 
         if let Some(('-', '-')) = self.peekable.peek().zip(cloned.peek()) {
             self.accumulate(|char| *char != '\n');
-            let comment = self.spanned(&self.input[self.state.start..self.state.index]);
+            let symbol = Symbol::intern(&self.input[self.state.start..self.state.index]);
+            let comment = self.spanned(symbol);
 
             Either::Left(Comment {
                 comment,
@@ -184,7 +195,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_comments(&mut self) -> (Vec<Comment<'a>>, Spanned<&'a str>) {
+    fn lex_comments(&mut self) -> (Vec<Comment>, Spanned<Symbol>) {
         let mut comments = vec![];
 
         loop {
@@ -361,7 +372,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Lexes a single token from the input.
-    pub fn lex(&mut self) -> Spanned<Token<'a>> {
+    pub fn lex(&mut self) -> Spanned<Token> {
         let line = self.state.line;
 
         let (comments, whitespace) = self.lex_comments();
@@ -380,13 +391,13 @@ impl<'a> Lexer<'a> {
             comments,
             whitespace,
             kind,
-            data: self.input[self.state.start..self.state.index].into(),
+            data: Symbol::intern(&self.input[self.state.start..self.state.index]),
         })
     }
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Spanned<Token<'a>>;
+    type Item = Spanned<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(self.lex())

@@ -1,9 +1,12 @@
 //! This is the parser of the vulpi language. It takes a stream of tokens and produces a tree of
 //! nodes. It's based on https://matklad.github.io/2023/05/21/resilient-ll-parsing-tutorial.html.
 
+use error::ParserError;
 use lexer::Lexer;
 
 use vulpi_location::Spanned;
+use vulpi_report::Reporter;
+use vulpi_storage::id::{File, Id};
 use vulpi_syntax::token::{Token, TokenData};
 use vulpi_syntax::tree::{LabelOrKind, Node, TokenOrNode, Tree, TreeKind};
 
@@ -12,15 +15,16 @@ use TokenData::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Checkpoint(usize);
 
+pub mod error;
 pub mod lexer;
 
-pub struct TreeBuilder<'a> {
+pub struct TreeBuilder {
     parents: Vec<(LabelOrKind, usize)>,
-    children: Vec<Node<'a>>,
+    children: Vec<Node>,
 }
 
-impl<'a> TreeBuilder<'a> {
-    pub fn token(&mut self, token: Spanned<Token<'a>>) {
+impl TreeBuilder {
+    pub fn token(&mut self, token: Spanned<Token>) {
         self.children.push(Node::Token(token));
     }
 
@@ -47,7 +51,7 @@ impl<'a> TreeBuilder<'a> {
         self.parents.push((kind.into(), checkpoint.0))
     }
 
-    pub fn finish(mut self) -> Tree<'a> {
+    pub fn finish(mut self) -> Tree {
         match self.children.pop().unwrap() {
             TokenOrNode::Token(_) => panic!("should be a tree"),
             TokenOrNode::Node(tree) => tree,
@@ -56,21 +60,27 @@ impl<'a> TreeBuilder<'a> {
 }
 
 pub struct Parser<'a> {
-    builder: TreeBuilder<'a>,
+    reporter: &'a mut dyn Reporter,
+    builder: TreeBuilder,
+    file: Id<File>,
     lexer: Lexer<'a>,
-    peek: Spanned<Token<'a>>,
+    peek: Spanned<Token>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(input: &'a str) -> Self {
+    pub fn new(input: &'a str, file: Id<File>, reporter: &'a mut dyn Reporter) -> Self {
         let mut lexer = Lexer::new(input);
 
+        let builder = TreeBuilder {
+            parents: Vec::new(),
+            children: Vec::new(),
+        };
+
         Self {
-            builder: TreeBuilder {
-                parents: Vec::new(),
-                children: Vec::new(),
-            },
+            reporter,
+            builder,
             peek: lexer.lex(),
+            file,
             lexer,
         }
     }
@@ -82,6 +92,13 @@ impl<'a> Parser<'a> {
     }
 
     fn error(&mut self) {
+        let err = ParserError::UnexpectedToken(
+            self.peek.data.data.clone(),
+            self.peek.range.clone(),
+            self.file,
+        );
+
+        self.reporter.report(Box::new(err));
         self.builder.open(TreeKind::Error);
         self.advance();
         self.builder.close();
@@ -151,7 +168,7 @@ impl<'a> Parser<'a> {
         self.builder.rollback(checkpoint, kind);
     }
 
-    pub fn finish(self) -> Tree<'a> {
+    pub fn finish(self) -> Tree {
         self.builder.finish()
     }
 }
@@ -693,7 +710,13 @@ impl Parser<'_> {
 
     pub fn root(&mut self) {
         self.open(TreeKind::Program);
-        self.top_level();
+
+        while !self.at(TokenData::Eof) {
+            self.open(TreeKind::TopLevel);
+            self.top_level();
+            self.close();
+        }
+
         self.expect(Eof);
         self.close();
     }

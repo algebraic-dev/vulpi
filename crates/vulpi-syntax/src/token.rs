@@ -4,6 +4,7 @@
 use std::fmt::Display;
 
 use vulpi_location::Spanned;
+use vulpi_storage::interner::Symbol;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenData {
@@ -71,34 +72,34 @@ pub enum TokenData {
     Begin, // Virtual token for beginning of a block
     End,   // Virtual token for end of a block
     Sep,   // Virtual token for a semicolon
-    
+
     Error,
     Eof,
 }
 
 #[derive(Debug)]
-pub struct Comment<'a> {
-    pub whitespace: Spanned<&'a str>,
-    pub comment: Spanned<&'a str>,
+pub struct Comment {
+    pub whitespace: Spanned<Symbol>,
+    pub comment: Spanned<Symbol>,
 }
 
-pub struct Token<'a> {
-    pub comments: Vec<Comment<'a>>,
-    pub whitespace: Spanned<&'a str>,
+pub struct Token {
+    pub comments: Vec<Comment>,
+    pub whitespace: Spanned<Symbol>,
     pub kind: TokenData,
-    pub data: &'a str,
+    pub data: Symbol,
 }
 
-impl<'a> Display for Token<'a> {
+impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use TokenData::*;
 
         let data = match self.kind {
-            String => format!("\"{}\"", self.data),
-            Int => format!("{}", self.data),
-            Float => format!("{}", self.data),
-            LowerIdent => format!("{}", self.data),
-            UpperIdent => format!("{}", self.data),
+            String => format!("\"{}\"", self.data.get()),
+            Int => format!("{}", self.data.get()),
+            Float => format!("{}", self.data.get()),
+            LowerIdent => format!("{}", self.data.get()),
+            UpperIdent => format!("{}", self.data.get()),
             Colon => ":".to_string(),
             Semicolon => ";".to_string(),
             Comma => ",".to_string(),

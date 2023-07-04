@@ -8,9 +8,20 @@ use crate::{
 
 use vulpi_location::Spanned;
 use vulpi_macros::new_type;
+use vulpi_storage::interner::Symbol;
 
-#[new_type(Path)]
-pub struct PathNode<'a>(pub &'a Tree<'a>);
+#[derive(Debug)]
+pub struct PathNode<'a>(pub &'a Tree);
+
+impl<'a> crate::tree::Specialized<'a> for PathNode<'a> {
+    const KIND: crate::tree::TreeKind = Path;
+    fn tree(&'a self) -> &'a Tree {
+        self.0
+    }
+    fn make(node: &'a Tree) -> Self {
+        Self(node)
+    }
+}
 
 impl<'a> PathNode<'a> {
     pub fn segments(&'a self) -> Option<Vec<LowerId>> {
@@ -18,8 +29,9 @@ impl<'a> PathNode<'a> {
     }
 }
 
+/*
 #[new_type(TypeForall)]
-pub struct ForallNode<'a>(pub &'a Tree<'a>);
+pub struct ForallNode<'a>(pub &'a Tree);
 
 impl<'a> ForallNode<'a> {
     pub fn args(&'a self) -> Option<Vec<LowerId>> {
@@ -32,7 +44,7 @@ impl<'a> ForallNode<'a> {
 }
 
 #[new_type(TypeArrow)]
-pub struct TypeArrowNode<'a>(pub &'a Tree<'a>);
+pub struct TypeArrowNode<'a>(pub &'a Tree);
 
 impl<'a> TypeArrowNode<'a> {
     pub fn left(&'a self) -> Option<TypeNode<'a>> {
@@ -45,7 +57,7 @@ impl<'a> TypeArrowNode<'a> {
 }
 
 #[new_type(TypeApplication)]
-pub struct TypeApplicationNode<'a>(pub &'a Tree<'a>);
+pub struct TypeApplicationNode<'a>(pub &'a Tree);
 
 impl<'a> TypeApplicationNode<'a> {
     pub fn left(&'a self) -> Option<TypeNode<'a>> {
@@ -58,7 +70,7 @@ impl<'a> TypeApplicationNode<'a> {
 }
 
 #[new_type(TypeId)]
-pub struct TypeIdNode<'a>(pub &'a Tree<'a>);
+pub struct TypeIdNode<'a>(pub &'a Tree);
 
 impl<'a> TypeIdNode<'a> {
     pub fn id(&'a self) -> Option<LowerId> {
@@ -67,7 +79,7 @@ impl<'a> TypeIdNode<'a> {
 }
 
 #[new_type(TypePoly)]
-pub struct TypePolyNode<'a>(pub &'a Tree<'a>);
+pub struct TypePolyNode<'a>(pub &'a Tree);
 
 impl<'a> TypePolyNode<'a> {
     pub fn id(&'a self) -> Option<LowerId> {
@@ -88,7 +100,7 @@ pub enum TypeEnum<'a> {
 }
 
 #[new_type(Type)]
-pub struct TypeNode<'a>(pub &'a Tree<'a>);
+pub struct TypeNode<'a>(pub &'a Tree);
 
 impl<'a> TypeNode<'a> {
     pub fn forall(&'a self) -> Option<ForallNode<'a>> {
@@ -122,28 +134,29 @@ impl<'a> TypeNode<'a> {
         }
     }
 }
-
-pub struct StringNode<'a>(pub &'a Spanned<Token<'a>>);
+unwrap()
+unwrap()
+pub struct StringNode<'a>(pub &'a Spanned<Token>);
 
 impl<'a> StringNode<'a> {
-    pub fn string(&'a self) -> Option<String> {
-        Some(self.0.data.data.to_string())
+    pub fn string(&'a self) -> Option<Symbol> {
+        Some(self.0.data.data.clone())
     }
 }
 
-pub struct IntNode<'a>(pub &'a Spanned<Token<'a>>);
+pub struct IntNode<'a>(pub &'a Spanned<Token>);
 
 impl<'a> IntNode<'a> {
     pub fn int(&'a self) -> Option<i64> {
-        self.0.data.data.parse().ok()
+        self.0.data.data.get().parse().ok()
     }
 }
 
-pub struct FloatNode<'a>(pub &'a Spanned<Token<'a>>);
+pub struct FloatNode<'a>(pub &'a Spanned<Token>);
 
 impl<'a> FloatNode<'a> {
     pub fn float(&'a self) -> Option<f64> {
-        self.0.data.data.parse().ok()
+        self.0.data.data.get().parse().ok()
     }
 }
 
@@ -154,7 +167,7 @@ pub enum LiteralEnum<'a> {
 }
 
 #[new_type(Literal)]
-pub struct LiteralNode<'a>(pub &'a Tree<'a>);
+pub struct LiteralNode<'a>(pub &'a Tree);
 
 impl<'a> LiteralNode<'a> {
     pub fn to_enum(&'a self) -> Option<LiteralEnum<'a>> {
@@ -171,10 +184,10 @@ impl<'a> LiteralNode<'a> {
 }
 
 #[new_type(PatWild)]
-pub struct PatWildNode<'a>(pub &'a Tree<'a>);
+pub struct PatWildNode<'a>(pub &'a Tree);
 
 #[new_type(Identifier)]
-pub struct PatIdNode<'a>(pub &'a Tree<'a>);
+pub struct PatIdNode<'a>(pub &'a Tree);
 
 impl PatIdNode<'_> {
     pub fn id(&self) -> Option<LowerId> {
@@ -183,7 +196,7 @@ impl PatIdNode<'_> {
 }
 
 #[new_type(PatLiteral)]
-pub struct PatLiteralNode<'a>(pub &'a Tree<'a>);
+pub struct PatLiteralNode<'a>(pub &'a Tree);
 
 impl PatLiteralNode<'_> {
     pub fn literal(&self) -> Option<LiteralNode<'_>> {
@@ -191,7 +204,7 @@ impl PatLiteralNode<'_> {
     }
 }
 #[new_type(PatConstructor)]
-pub struct PatConstructorNode<'a>(pub &'a Tree<'a>);
+pub struct PatConstructorNode<'a>(pub &'a Tree);
 
 impl PatConstructorNode<'_> {
     pub fn name(&self) -> Option<PathNode> {
@@ -204,7 +217,7 @@ impl PatConstructorNode<'_> {
 }
 
 #[new_type(PatAnnotation)]
-pub struct PatAnnotationNode<'a>(pub &'a Tree<'a>);
+pub struct PatAnnotationNode<'a>(pub &'a Tree);
 
 impl PatAnnotationNode<'_> {
     pub fn pat(&self) -> Option<PatNode<'_>> {
@@ -217,7 +230,7 @@ impl PatAnnotationNode<'_> {
 }
 
 #[new_type(PatOr)]
-pub struct PatOrNode<'a>(pub &'a Tree<'a>);
+pub struct PatOrNode<'a>(pub &'a Tree);
 
 impl PatOrNode<'_> {
     pub fn left(&self) -> Option<PatNode<'_>> {
@@ -239,7 +252,7 @@ pub enum PatEnum<'a> {
 }
 
 #[new_type(Pattern)]
-pub struct PatNode<'a>(pub &'a Tree<'a>);
+pub struct PatNode<'a>(pub &'a Tree);
 
 impl<'a> PatNode<'a> {
     pub fn to_enum(&'a self) -> Option<PatEnum<'a>> {
@@ -256,7 +269,7 @@ impl<'a> PatNode<'a> {
 }
 
 #[new_type(Annotation)]
-pub struct AnnotationNode<'a>(pub &'a Tree<'a>);
+pub struct AnnotationNode<'a>(pub &'a Tree);
 
 impl<'a> AnnotationNode<'a> {
     pub fn expr(&'a self) -> Option<ExprNode<'a>> {
@@ -269,7 +282,7 @@ impl<'a> AnnotationNode<'a> {
 }
 
 #[new_type(PipeExpr)]
-pub struct PipeRight<'a>(pub &'a Tree<'a>);
+pub struct PipeRight<'a>(pub &'a Tree);
 
 impl<'a> PipeRight<'a> {
     pub fn left(&'a self) -> Option<ExprNode<'a>> {
@@ -282,7 +295,7 @@ impl<'a> PipeRight<'a> {
 }
 
 #[new_type(If)]
-pub struct IfNode<'a>(pub &'a Tree<'a>);
+pub struct IfNode<'a>(pub &'a Tree);
 
 impl<'a> IfNode<'a> {
     pub fn cond(&'a self) -> Option<ExprNode<'a>> {
@@ -299,7 +312,7 @@ impl<'a> IfNode<'a> {
 }
 
 #[new_type(Let)]
-pub struct LetNode<'a>(pub &'a Tree<'a>);
+pub struct LetNode<'a>(pub &'a Tree);
 
 impl<'a> LetNode<'a> {
     pub fn pat(&'a self) -> Option<PatNode<'a>> {
@@ -316,7 +329,7 @@ impl<'a> LetNode<'a> {
 }
 
 #[new_type(Case)]
-pub struct CaseNode<'a>(pub &'a Tree<'a>);
+pub struct CaseNode<'a>(pub &'a Tree);
 
 impl<'a> CaseNode<'a> {
     pub fn pat(&'a self) -> Option<PatNode<'a>> {
@@ -329,7 +342,7 @@ impl<'a> CaseNode<'a> {
 }
 
 #[new_type(When)]
-pub struct WhenNode<'a>(pub &'a Tree<'a>);
+pub struct WhenNode<'a>(pub &'a Tree);
 
 impl<'a> WhenNode<'a> {
     pub fn cond(&'a self) -> Option<ExprNode<'a>> {
@@ -342,16 +355,16 @@ impl<'a> WhenNode<'a> {
 }
 
 #[new_type(Do)]
-pub struct DoNode<'a>(pub &'a Tree<'a>);
+pub struct DoNode<'a>(pub &'a Tree);
 
 impl<'a> DoNode<'a> {
-    pub fn block(&'a self) -> Option<&Node<'a>> {
+    pub fn block(&'a self) -> Option<&Node> {
         self.find("block")?.at(0)
     }
 }
 
 #[new_type(Lambda)]
-pub struct LambdaNode<'a>(pub &'a Tree<'a>);
+pub struct LambdaNode<'a>(pub &'a Tree);
 
 impl<'a> LambdaNode<'a> {
     pub fn pattern(&'a self) -> Option<PatNode<'a>> {
@@ -364,20 +377,20 @@ impl<'a> LambdaNode<'a> {
 }
 
 #[new_type(Application)]
-pub struct ApplicationNode<'a>(pub &'a Tree<'a>);
+pub struct ApplicationNode<'a>(pub &'a Tree);
 
 impl<'a> ApplicationNode<'a> {
     pub fn func(&self) -> Option<ExprNode<'_>> {
         self.find("func")?.to()
     }
 
-    pub fn args(&self) -> Option<&Node<'_>> {
+    pub fn args(&self) -> Option<&Node> {
         self.find("args")?.at(0)
     }
 }
 
 #[new_type(Upper)]
-pub struct UpperNode<'a>(pub &'a Tree<'a>);
+pub struct UpperNode<'a>(pub &'a Tree);
 
 impl<'a> UpperNode<'a> {
     pub fn name(&'a self) -> Option<PathNode<'a>> {
@@ -399,7 +412,7 @@ pub enum ExprEnum<'a> {
 }
 
 #[new_type(Expr)]
-pub struct ExprNode<'a>(pub &'a Tree<'a>);
+pub struct ExprNode<'a>(pub &'a Tree);
 
 impl ExprNode<'_> {
     pub fn to_enum(&self) -> Option<ExprEnum<'_>> {
@@ -420,7 +433,7 @@ impl ExprNode<'_> {
 }
 
 #[new_type(Binder)]
-pub struct BinderNode<'a>(pub &'a Tree<'a>);
+pub struct BinderNode<'a>(pub &'a Tree);
 
 impl BinderNode<'_> {
     pub fn name(&self) -> Option<LowerId> {
@@ -433,7 +446,7 @@ impl BinderNode<'_> {
 }
 
 #[new_type(LetDecl)]
-pub struct LetDeclNode<'a>(pub &'a Tree<'a>);
+pub struct LetDeclNode<'a>(pub &'a Tree);
 
 impl LetDeclNode<'_> {
     pub fn name(&self) -> Option<LowerId> {
@@ -454,10 +467,10 @@ impl LetDeclNode<'_> {
     }
 }
 #[new_type(Exposed)]
-pub struct ExposedNode<'a>(pub &'a Tree<'a>);
+pub struct ExposedNode<'a>(pub &'a Tree);
 
 #[new_type(Use)]
-pub struct UseNode<'a>(pub &'a Tree<'a>);
+pub struct UseNode<'a>(pub &'a Tree);
 
 impl UseNode<'_> {
     pub fn path(&self) -> Option<PathNode<'_>> {
@@ -474,7 +487,7 @@ impl UseNode<'_> {
 }
 
 #[new_type(DataConstructor)]
-pub struct DataConstructorNode<'a>(pub &'a Tree<'a>);
+pub struct DataConstructorNode<'a>(pub &'a Tree);
 
 impl DataConstructorNode<'_> {
     pub fn name(&self) -> Option<UpperId> {
@@ -487,7 +500,7 @@ impl DataConstructorNode<'_> {
 }
 
 #[new_type(TypeSum)]
-pub struct TypeSumNode<'a>(pub &'a Tree<'a>);
+pub struct TypeSumNode<'a>(pub &'a Tree);
 
 impl TypeSumNode<'_> {
     pub fn constructors(&self) -> Vec<DataConstructorNode<'_>> {
@@ -496,7 +509,7 @@ impl TypeSumNode<'_> {
 }
 
 #[new_type(TypeProduct)]
-pub struct TypeProductNode<'a>(pub &'a Tree<'a>);
+pub struct TypeProductNode<'a>(pub &'a Tree);
 
 impl TypeProductNode<'_> {
     pub fn fields(&self) -> Option<Vec<TypeNode<'_>>> {
@@ -505,7 +518,7 @@ impl TypeProductNode<'_> {
 }
 
 #[new_type(TypeSynonym)]
-pub struct TypeSynonymNode<'a>(pub &'a Tree<'a>);
+pub struct TypeSynonymNode<'a>(pub &'a Tree);
 
 impl TypeSynonymNode<'_> {
     pub fn type_(&self) -> Option<TypeNode<'_>> {
@@ -521,7 +534,7 @@ pub enum TypeDeclEnum<'a> {
 }
 
 #[new_type(TypeDecl)]
-pub struct TypeDeclNode<'a>(pub &'a Tree<'a>);
+pub struct TypeDeclNode<'a>(pub &'a Tree);
 
 impl TypeDeclNode<'_> {
     pub fn name(&self) -> Option<UpperId> {
@@ -542,3 +555,4 @@ impl TypeDeclNode<'_> {
         }
     }
 }
+*/

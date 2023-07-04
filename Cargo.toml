@@ -5,6 +5,10 @@ members = [
     "crates/vulpi-location",
     "crates/vulpi-macros",
     "crates/vulpi-syntax",
+    "crates/vulpi-build",
+    "crates/vulpi-report",
+    "crates/vulpi-storage",
+    "crates/vulpi-cli",
 ]
 
 resolver = "1"

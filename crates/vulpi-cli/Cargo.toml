@@ -1,5 +1,5 @@
 [package]
-name = "vulpi-parser"
+name = "vulpi-cli"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,7 +7,8 @@ edition = "2021"
 
 [dependencies]
 
-vulpi-location = { path = "../vulpi-location" }
-vulpi-syntax = { path = "../vulpi-syntax" }
-vulpi-report = { path = "../vulpi-report" }
+clap = { version = "4.3.10", features = ["derive"] }
+
+vulpi-build = { path = "../vulpi-build" }
 vulpi-storage = { path = "../vulpi-storage" }
+vulpi-report = { path = "../vulpi-report" }

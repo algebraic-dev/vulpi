@@ -1,5 +1,5 @@
 [package]
-name = "vulpi-syntax"
+name = "vulpi-report"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,5 +8,4 @@ edition = "2021"
 [dependencies]
 
 vulpi-location = { path = "../vulpi-location" }
-vulpi-macros = { path = "../vulpi-macros" }
 vulpi-storage = { path = "../vulpi-storage" }
