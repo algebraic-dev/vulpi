@@ -1,1 +1,1 @@
-let a : Int = 2
+let a : Int = 1 + 1 * 2

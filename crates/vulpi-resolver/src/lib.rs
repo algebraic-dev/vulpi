@@ -7,7 +7,6 @@ use scope::Kaleidoscope;
 
 use vulpi_report::{IntoDiagnostic, Reporter};
 use vulpi_storage::namespace::{Name, Namespace, Namespaces, Path};
-use vulpi_syntax::concrete::*;
 
 pub type Loader = dyn FnMut(Path) -> Result<()>;
 
@@ -64,37 +63,4 @@ impl<'a> Context<'a> {
 
 pub trait Resolvable<'a> {
     fn declare(&'a mut self, ctx: &mut Context);
-}
-
-// Resolver for the tree
-
-impl<'a> Resolvable<'a> for ProgramNode<'a> {
-    fn declare(&mut self, ctx: &mut Context) {
-        let mut top_levels = self.top_levels();
-        for top_level in top_levels.iter_mut() {
-            top_level.declare(ctx);
-        }
-    }
-}
-
-impl<'a> Resolvable<'a> for TopLevelNode<'a> {
-    fn declare(&'a mut self, ctx: &mut Context) {
-        if let Some(ref mut declaration) = self.to_enum() {
-            match declaration {
-                TopLevelEnum::Let(ref mut letdecl) => letdecl.declare(ctx),
-                TopLevelEnum::Use(_) => (),
-                TopLevelEnum::Type(_) => (),
-            }
-        }
-    }
-}
-
-fn pao(decl: &mut LetDeclNode) {
-    decl.name();
-    decl.name();
-    decl.name();
-}
-
-impl<'a> Resolvable<'a> for LetDeclNode<'a> {
-    fn declare(&'a mut self, ctx: &mut Context) {}
 }

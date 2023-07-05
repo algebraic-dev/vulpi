@@ -5,6 +5,7 @@ use std::fmt::Display;
 
 use vulpi_location::Spanned;
 use vulpi_storage::interner::Symbol;
+use vulpi_tree::{Show, TreeDisplay};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenData {
@@ -26,6 +27,7 @@ pub enum TokenData {
     String, // String literal
     Int,    // Integer literal
     Float,  // Float Literal
+    Char,   // Char literal
 
     LBrace,     // '{'
     RBrace,     // '}'
@@ -36,9 +38,11 @@ pub enum TokenData {
     LeftArrow,  // '<-'
     RightArrow, // '->'
     FatArrow,   // '=>'
+    Unit,
 
     LowerIdent, // Identifier
     UpperIdent, // Identifier
+    Wildcard,
 
     Colon,       // ':'
     Semicolon,   // ';'
@@ -77,17 +81,30 @@ pub enum TokenData {
     Eof,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Comment {
     pub whitespace: Spanned<Symbol>,
     pub comment: Spanned<Symbol>,
 }
 
+#[derive(Clone)]
 pub struct Token {
     pub comments: Vec<Comment>,
     pub whitespace: Spanned<Symbol>,
     pub kind: TokenData,
     pub data: Symbol,
+}
+
+impl Show for Token {
+    fn show(&self) -> TreeDisplay {
+        TreeDisplay::label(&format!("{:?}: {}", self.kind, self.data.get()))
+    }
+}
+
+impl std::fmt::Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Token").field(&self.kind).finish()
+    }
 }
 
 impl Display for Token {
@@ -153,6 +170,9 @@ impl Display for Token {
             Forall => "forall".to_string(),
             BackSlash => "\\".to_string(),
             PipeRight => "|>".to_string(),
+            Char => format!("'{}'", self.data.get()),
+            Unit => "()".to_string(),
+            Wildcard => "_".to_string(),
         };
 
         write!(f, "{}", data)

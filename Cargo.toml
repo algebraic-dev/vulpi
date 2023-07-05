@@ -8,6 +8,7 @@ members = [
     "crates/vulpi-build",
     "crates/vulpi-report",
     "crates/vulpi-storage",
+    "crates/vulpi-resolver",
     "crates/vulpi-cli",
 ]
 

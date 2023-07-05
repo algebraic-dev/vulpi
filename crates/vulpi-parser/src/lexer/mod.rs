@@ -229,6 +229,7 @@ impl<'a> Lexer<'a> {
                 TokenData::Do
             }
             "forall" => TokenData::Forall,
+            "_" => TokenData::Wildcard,
             _ => TokenData::LowerIdent,
         }
     }
@@ -253,7 +254,14 @@ impl<'a> Lexer<'a> {
             match char {
                 '{' => TokenData::LBrace,
                 '}' => TokenData::RBrace,
-                '(' => TokenData::LPar,
+                '(' => {
+                    if let Some(')') = self.peekable.peek() {
+                        self.advance();
+                        TokenData::Unit
+                    } else {
+                        TokenData::LPar
+                    }
+                }
                 ')' => TokenData::RPar,
                 '[' => TokenData::LBracket,
                 ']' => TokenData::RBracket,
@@ -372,7 +380,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Lexes a single token from the input.
-    pub fn lex(&mut self) -> Spanned<Token> {
+    pub fn bump(&mut self) -> Spanned<Token> {
         let line = self.state.line;
 
         let (comments, whitespace) = self.lex_comments();
@@ -400,7 +408,7 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Spanned<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(self.lex())
+        Some(self.bump())
     }
 }
 
@@ -423,10 +431,10 @@ mod tests {
             ",
         );
 
-        let mut token = lexer.lex();
+        let mut token = lexer.bump();
 
         while token.data.kind != TokenData::Eof {
-            token = lexer.lex();
+            token = lexer.bump();
             assert!(token.data.kind != TokenData::Error);
         }
     }

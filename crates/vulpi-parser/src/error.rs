@@ -3,10 +3,11 @@ use std::ops::Range;
 use vulpi_location::{Byte, Location};
 use vulpi_report::{IntoDiagnostic, Marker};
 use vulpi_storage::id::{File, Id};
-use vulpi_storage::interner::Symbol;
+use vulpi_syntax::token::Token;
 
+#[derive(Debug)]
 pub enum ParserError {
-    UnexpectedToken(Symbol, Range<Byte>, Id<File>),
+    UnexpectedToken(Token, Range<Byte>, Id<File>),
 }
 
 impl IntoDiagnostic for ParserError {

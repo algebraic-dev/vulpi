@@ -4,16 +4,29 @@
 use std::ops::Range;
 
 use vulpi_storage::id::{File, Id};
+use vulpi_tree::{Show, TreeDisplay};
 
 /// A new-type for a usize. It's used to locate a byte inside a source code.
 #[derive(Debug, Clone)]
-pub struct Byte(usize);
+pub struct Byte(pub usize);
 
 /// A span that locates a piece of data inside a source code.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Spanned<T> {
     pub data: T,
     pub range: Range<Byte>,
+}
+
+impl<T: Show> Show for Spanned<T> {
+    fn show(&self) -> TreeDisplay {
+        self.data.show()
+    }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Spanned<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Spanned").field(&self.data).finish()
+    }
 }
 
 impl<T> Spanned<T> {

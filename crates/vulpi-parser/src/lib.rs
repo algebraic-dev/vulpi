@@ -1,723 +1,782 @@
 //! This is the parser of the vulpi language. It takes a stream of tokens and produces a tree of
-//! nodes. It's based on https://matklad.github.io/2023/05/21/resilient-ll-parsing-tutorial.html.
+//! nodes. It's a classical LL(1) parser with a recursive descent and pratt parsing.
 
-use error::ParserError;
-use lexer::Lexer;
+use std::ops::Range;
 
-use vulpi_location::Spanned;
-use vulpi_report::Reporter;
-use vulpi_storage::id::{File, Id};
+use vulpi_location::{Byte, Spanned};
+use vulpi_storage::id::{self, Id};
+use vulpi_syntax::concrete::*;
 use vulpi_syntax::token::{Token, TokenData};
-use vulpi_syntax::tree::{LabelOrKind, Node, TokenOrNode, Tree, TreeKind};
 
-use TokenData::*;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Checkpoint(usize);
+pub use lexer::Lexer;
 
 pub mod error;
 pub mod lexer;
 
-pub struct TreeBuilder {
-    parents: Vec<(LabelOrKind, usize)>,
-    children: Vec<Node>,
-}
-
-impl TreeBuilder {
-    pub fn token(&mut self, token: Spanned<Token>) {
-        self.children.push(Node::Token(token));
-    }
-
-    pub fn open(&mut self, kind: TreeKind) {
-        self.parents
-            .push((LabelOrKind::Kind(kind), self.children.len()));
-    }
-
-    pub fn label<T: Into<LabelOrKind>>(&mut self, label: T) {
-        self.parents.push((label.into(), self.children.len()));
-    }
-
-    pub fn close(&mut self) {
-        let (kind, size) = self.parents.pop().unwrap();
-        let children = self.children.drain(size..).collect();
-        self.children.push(Node::Node(Tree { kind, children }));
-    }
-
-    pub fn checkpoint(&mut self) -> Checkpoint {
-        Checkpoint(self.children.len())
-    }
-
-    pub fn rollback<T: Into<LabelOrKind>>(&mut self, checkpoint: Checkpoint, kind: T) {
-        self.parents.push((kind.into(), checkpoint.0))
-    }
-
-    pub fn finish(mut self) -> Tree {
-        match self.children.pop().unwrap() {
-            TokenOrNode::Token(_) => panic!("should be a tree"),
-            TokenOrNode::Node(tree) => tree,
-        }
-    }
-}
+pub type Result<T> = std::result::Result<T, error::ParserError>;
 
 pub struct Parser<'a> {
-    reporter: &'a mut dyn Reporter,
-    builder: TreeBuilder,
-    file: Id<File>,
-    lexer: Lexer<'a>,
-    peek: Spanned<Token>,
+    pub lexer: Lexer<'a>,
+
+    pub last_pos: Range<Byte>,
+
+    pub current: Spanned<Token>,
+    pub next: Spanned<Token>,
+
+    pub eaten: bool,
+    pub file: Id<id::File>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(input: &'a str, file: Id<File>, reporter: &'a mut dyn Reporter) -> Self {
-        let mut lexer = Lexer::new(input);
-
-        let builder = TreeBuilder {
-            parents: Vec::new(),
-            children: Vec::new(),
-        };
+    pub fn new(mut lexer: Lexer<'a>, file: Id<id::File>) -> Self {
+        let current = lexer.bump();
+        let next = lexer.bump();
 
         Self {
-            reporter,
-            builder,
-            peek: lexer.lex(),
-            file,
             lexer,
+            current,
+            next,
+            last_pos: Byte(0)..Byte(0),
+            eaten: false,
+            file,
         }
     }
 
-    fn advance(&mut self) {
-        let mut next = self.lexer.next().unwrap();
-        std::mem::swap(&mut self.peek, &mut next);
-        self.builder.token(next);
+    pub fn bump(&mut self) -> Spanned<Token> {
+        self.eaten = true;
+
+        let mut ret = self.lexer.bump();
+        std::mem::swap(&mut self.current, &mut self.next);
+        std::mem::swap(&mut ret, &mut self.next);
+
+        self.last_pos = ret.range.clone();
+
+        ret
     }
 
-    fn error(&mut self) {
-        let err = ParserError::UnexpectedToken(
-            self.peek.data.data.clone(),
-            self.peek.range.clone(),
-            self.file,
-        );
-
-        self.reporter.report(Box::new(err));
-        self.builder.open(TreeKind::Error);
-        self.advance();
-        self.builder.close();
+    pub fn peek(&self) -> &Spanned<Token> {
+        &self.current
     }
 
-    fn expect(&mut self, kind: TokenData) {
-        if self.peek() == kind {
-            self.advance();
+    pub fn expect(&mut self, token: TokenData) -> Result<Spanned<Token>> {
+        if self.peek().data.kind == token {
+            Ok(self.bump())
         } else {
-            self.error();
+            self.unexpected()
         }
     }
 
-    fn eat(&mut self, kind: TokenData) -> bool {
-        if self.peek() == kind {
-            self.advance();
-            true
-        } else {
-            self.error();
-            false
-        }
-    }
-
-    fn expect_or_close_layout(&mut self, kind: TokenData) {
-        if self.peek() == kind {
-            self.advance();
+    pub fn expect_or_bump(&mut self, token: TokenData) -> Result<()> {
+        if self.peek().data.kind == token {
+            self.bump();
         } else {
             self.lexer.pop_layout();
         }
+        Ok(())
     }
 
-    fn at(&mut self, kind: TokenData) -> bool {
-        self.peek() == kind
+    fn unexpected<T>(&mut self) -> Result<T> {
+        Err(error::ParserError::UnexpectedToken(
+            self.peek().data.clone(),
+            self.peek().range.clone(),
+            self.file,
+        ))
     }
 
-    fn at_any(&mut self, kinds: &[TokenData]) -> bool {
-        kinds.iter().any(|kind| self.at(*kind))
+    pub fn at(&self, token: TokenData) -> bool {
+        self.peek().data.kind == token
     }
 
-    fn peek(&mut self) -> TokenData {
-        self.peek.data.kind
+    pub fn then(&self, token: TokenData) -> bool {
+        self.next.data.kind == token
     }
 
-    fn open(&mut self, kind: TreeKind) {
-        self.builder.open(kind);
+    pub fn at_any(&self, tokens: &[TokenData]) -> bool {
+        tokens.iter().any(|token| self.at(*token))
     }
 
-    fn label(&mut self, label: &'static str) {
-        self.builder.label(label);
+    pub fn recover(&mut self, tokens: &[TokenData]) {
+        while !self.at_any(tokens) {
+            self.bump();
+        }
     }
 
-    fn close(&mut self) {
-        self.builder.close();
+    pub fn test<T>(&mut self, fun: impl FnOnce(&mut Self) -> Result<T>) -> Result<Option<T>> {
+        self.eaten = false;
+        let result = fun(self);
+
+        match result {
+            Ok(value) => Ok(Some(value)),
+            Err(error) if self.eaten => Err(error),
+            Err(_) => Ok(None),
+        }
     }
 
-    fn checkpoint(&mut self) -> Checkpoint {
-        self.builder.checkpoint()
+    pub fn span(&self) -> Range<Byte> {
+        self.peek().range.clone()
     }
 
-    fn labeled<T: Into<LabelOrKind>>(&mut self, label: T, fun: impl FnOnce(&mut Self)) {
-        self.builder.label(label);
-        fun(self);
-        self.close()
+    pub fn kind(&self) -> TokenData {
+        self.peek().data.kind
     }
 
-    fn rollback<T: Into<LabelOrKind>>(&mut self, checkpoint: Checkpoint, kind: T) {
-        self.builder.rollback(checkpoint, kind);
+    pub fn spanned<T>(&mut self, fun: impl FnOnce(&mut Self) -> Result<T>) -> Result<Spanned<T>> {
+        let start = self.span();
+        let value = fun(self)?;
+        let end = self.last_pos.clone();
+
+        Ok(Spanned::new(value, start.start.0, end.end.0))
     }
 
-    pub fn finish(self) -> Tree {
-        self.builder.finish()
+    pub fn sep_by<T>(
+        &mut self,
+        sep: TokenData,
+        mut fun: impl FnMut(&mut Self) -> Result<T>,
+    ) -> Result<Vec<(T, Option<Spanned<Token>>)>> {
+        let mut values = Vec::new();
+
+        while let Some(res) = self.test(&mut fun)? {
+            let sep = if self.at(sep) {
+                Some(self.bump())
+            } else {
+                None
+            };
+
+            let at_end = sep.is_none();
+
+            values.push((res, sep));
+
+            if at_end {
+                break;
+            }
+        }
+
+        if self.at(sep) && !values.is_empty() {
+            values.last_mut().unwrap().1 = Some(self.bump());
+        }
+
+        Ok(values)
+    }
+
+    pub fn multiple<T>(&mut self, mut fun: impl FnMut(&mut Self) -> Result<T>) -> Result<Vec<T>> {
+        let mut values = Vec::new();
+
+        while let Some(result) = self.test(&mut fun)? {
+            values.push(result);
+        }
+
+        Ok(values)
+    }
+
+    pub fn with_span(&mut self, start: Range<Byte>) -> Range<Byte> {
+        let end = self.last_pos.clone();
+        start.start..end.end
     }
 }
 
 impl Parser<'_> {
-    const PRIMARY_FIRST: &[TokenData] = &[Int, LowerIdent, UpperIdent, Float, String, LPar];
+    pub fn path<T>(&mut self, parse: impl Fn(&mut Self) -> Result<T>) -> Result<Path<T>> {
+        let start = self.span();
+        let mut segments = Vec::new();
 
-    pub fn path_part(&mut self, checkpoint: Checkpoint, end: fn(&mut Self)) {
-        self.rollback(checkpoint, TreeKind::Path);
-        while self.at(Dot) {
-            self.advance();
-            match self.peek() {
-                UpperIdent => self.advance(),
-                _ => {
-                    end(self);
-                    break;
-                }
-            }
+        while self.at(TokenData::UpperIdent) && self.then(TokenData::Dot) {
+            let ident = self.bump();
+            let dot = self.bump();
+            segments.push((Upper(ident), dot));
         }
-        self.close()
+
+        let last = parse(self)?;
+
+        Ok(Path {
+            segments,
+            last,
+            span: self.with_span(start),
+        })
     }
 
-    pub fn pattern_path_end(&mut self) {
-        self.error()
+    pub fn path_upper(&mut self) -> Result<Path<Upper>> {
+        self.path(|parser| parser.upper())
     }
 
-    pub fn expr_path_end(&mut self) {
-        self.expect(LowerIdent)
+    pub fn path_lower(&mut self) -> Result<Path<Lower>> {
+        self.path(|parser| parser.lower())
     }
 
-    pub fn primary(&mut self, atom: fn(&mut Self), path_end: fn(&mut Self)) {
-        match self.peek() {
-            LowerIdent => self.labeled(TreeKind::Lower, Self::advance),
-            UpperIdent => {
-                let checkpoint = self.checkpoint();
-                self.labeled(TreeKind::Upper, |this| {
-                    this.advance();
-                    this.path_part(checkpoint, path_end);
-                });
-            }
-            Int => self.labeled(TreeKind::Literal, Self::advance),
-            Float => self.labeled(TreeKind::Literal, Self::advance),
-            String => self.labeled(TreeKind::Literal, Self::advance),
-            LPar => {
-                self.open(TreeKind::Parenthesis);
-                self.advance();
-                atom(self);
-                match self.peek() {
-                    RPar => {
-                        self.advance();
-                    }
-                    _ => self.error(),
-                }
-                self.close();
-            }
-            _ => self.error(),
+    pub fn lower(&mut self) -> Result<Lower> {
+        // TODO: Handle case error
+        let ident = self.expect(TokenData::LowerIdent)?;
+        Ok(Lower(ident))
+    }
+
+    pub fn upper(&mut self) -> Result<Upper> {
+        // TODO: Handle case error
+        let ident = self.expect(TokenData::UpperIdent)?;
+        Ok(Upper(ident))
+    }
+
+    pub fn parenthesis<T>(
+        &mut self,
+        parse: impl Fn(&mut Self) -> Result<T>,
+    ) -> Result<Parenthesis<T>> {
+        let left = self.expect(TokenData::LPar)?;
+        let data = parse(self)?;
+        let right = self.expect(TokenData::RPar)?;
+
+        Ok(Parenthesis { left, data, right })
+    }
+
+    pub fn type_variable(&mut self) -> Result<Lower> {
+        let ident = self.expect(TokenData::LowerIdent)?;
+        Ok(Lower(ident))
+    }
+
+    pub fn type_application(&mut self) -> Result<Box<Type>> {
+        let mut left = self.type_atom()?;
+
+        while let Some(right) = self.test(Self::type_atom)? {
+            left = Box::new(Spanned {
+                range: left.range.start.clone()..right.range.end.clone(),
+                data: TypeKind::Application(TypeApplication { left, right }),
+            });
+        }
+
+        Ok(left)
+    }
+
+    pub fn type_arrow(&mut self) -> Result<Box<Type>> {
+        let left = self.type_application()?;
+
+        if self.at(TokenData::RightArrow) {
+            let arrow = self.bump();
+
+            let effects = if self.at(TokenData::LBrace) {
+                Some(self.type_effects()?)
+            } else {
+                None
+            };
+
+            let right = self.type_arrow()?;
+
+            Ok(Box::new(Spanned {
+                range: left.range.start.clone()..right.range.end.clone(),
+                data: TypeKind::Arrow(TypeArrow {
+                    left,
+                    arrow,
+                    effects,
+                    right,
+                }),
+            }))
+        } else {
+            Ok(left)
         }
     }
 
-    pub fn sep1<T: Into<LabelOrKind>>(&mut self, kind: T, sep: TokenData, expr: fn(&mut Self)) {
-        let checkpoint = self.checkpoint();
-        expr(self);
-        if self.at(sep) {
-            self.rollback(checkpoint, kind.into());
-            while self.at(sep) {
-                self.advance();
-                expr(self);
+    pub fn type_atom_raw(&mut self) -> Result<TypeKind> {
+        match self.kind() {
+            TokenData::LowerIdent => self.type_variable().map(TypeKind::Lower),
+            TokenData::UpperIdent => self.path(Self::upper).map(TypeKind::Upper),
+            TokenData::Unit => Ok(TypeKind::Unit(self.bump())),
+            TokenData::LPar => self.parenthesis(Self::typ).map(TypeKind::Parenthesis),
+            _ => self.unexpected(),
+        }
+    }
+
+    pub fn type_atom(&mut self) -> Result<Box<Type>> {
+        self.spanned(Self::type_atom_raw).map(Box::new)
+    }
+
+    pub fn type_forall(&mut self) -> Result<TypeForall> {
+        let forall = self.expect(TokenData::Forall)?;
+        let left = self.multiple(Self::type_variable)?;
+        let dot = self.expect(TokenData::Dot)?;
+        let right = self.typ()?;
+
+        Ok(TypeForall {
+            forall,
+            left,
+            dot,
+            right,
+        })
+    }
+
+    pub fn type_effects(&mut self) -> Result<Effects> {
+        let left_brace = self.expect(TokenData::LBrace)?;
+
+        let effects = self.sep_by(TokenData::Comma, Self::typ)?;
+
+        let right_brace = self.expect(TokenData::RBrace)?;
+
+        Ok(Effects {
+            left_brace,
+            right_brace,
+            effects,
+        })
+    }
+
+    pub fn typ(&mut self) -> Result<Box<Type>> {
+        match self.kind() {
+            TokenData::Forall => self
+                .spanned(|x| x.type_forall().map(TypeKind::Forall))
+                .map(Box::new),
+            _ => self.type_arrow(),
+        }
+    }
+
+    pub fn literal_kind(&mut self) -> Result<LiteralKind> {
+        match self.kind() {
+            TokenData::Int => {
+                let int = self.bump();
+                Ok(LiteralKind::Integer(int))
             }
-            self.close();
+            TokenData::Float => {
+                let float = self.bump();
+                Ok(LiteralKind::Float(float))
+            }
+            TokenData::String => {
+                let string = self.bump();
+                Ok(LiteralKind::String(string))
+            }
+            TokenData::Char => {
+                let char = self.bump();
+                Ok(LiteralKind::Char(char))
+            }
+            TokenData::Unit => {
+                let unit = self.bump();
+                Ok(LiteralKind::Unit(unit))
+            }
+            _ => self.unexpected(),
         }
     }
 
-    pub fn pattern(&mut self) {
-        self.open(TreeKind::Pattern);
-        let checkpoint = self.checkpoint();
-
-        self.pattern_cons();
-
-        while self.peek() == Bar {
-            self.rollback(checkpoint, TreeKind::PatOr);
-            self.advance();
-            self.pattern_cons();
-            self.close();
-        }
-        self.close()
+    pub fn literal(&mut self) -> Result<Literal> {
+        self.spanned(Self::literal_kind)
     }
 
-    pub fn pattern_cons(&mut self) {
+    pub fn pattern_atom_kind(&mut self) -> Result<PatternKind> {
+        match self.kind() {
+            TokenData::Wildcard => Ok(PatternKind::Wildcard(self.bump())),
+            TokenData::LowerIdent => self.path_lower().map(PatternKind::Lower),
+            TokenData::UpperIdent => self.path_upper().map(PatternKind::Upper),
+            TokenData::LPar => self
+                .parenthesis(Self::pattern)
+                .map(PatternKind::Parenthesis),
+            _ => self.literal().map(PatternKind::Literal),
+        }
+    }
+
+    pub fn pattern_atom(&mut self) -> Result<Box<Pattern>> {
+        self.spanned(Self::pattern_atom_kind).map(Box::new)
+    }
+
+    pub fn pattern_application_kind(&mut self) -> Result<PatApplication> {
+        let func = self.path_upper()?;
+        let args = self.multiple(Self::pattern_atom)?;
+        Ok(PatApplication { func, args })
+    }
+
+    pub fn pattern_application(&mut self) -> Result<Box<Pattern>> {
         if self.at(TokenData::UpperIdent) {
-            self.open(TreeKind::PatConstructor);
-            self.label("path");
-            self.upper_path();
-            self.close();
-
-            self.label("tags");
-            while self.at_any(Self::PRIMARY_FIRST) {
-                self.pattern();
-            }
-
-            self.close();
-            self.close();
+            self.spanned(|this| {
+                this.pattern_application_kind()
+                    .map(PatternKind::Application)
+            })
+            .map(Box::new)
         } else {
             self.pattern_atom()
         }
     }
 
-    pub fn binary(&mut self, kind: TreeKind, fun: fn(&mut Self), at: &[TokenData]) {
-        let checkpoint = self.checkpoint();
-        fun(self);
-        while self.at_any(at) {
-            self.rollback(checkpoint, kind);
-            self.advance();
-            fun(self);
-            self.close();
+    pub fn pattern_annotation(&mut self) -> Result<Box<Pattern>> {
+        let left = self.pattern_application()?;
+        if self.at(TokenData::Colon) {
+            let colon = self.bump();
+            let right = self.typ()?;
+            Ok(Box::new(Spanned {
+                range: left.range.start.clone()..right.range.end.clone(),
+                data: PatternKind::Annotation(PatAnnotation { left, colon, right }),
+            }))
+        } else {
+            Ok(left)
         }
     }
 
-    pub fn infix_binding_power(&mut self) -> Option<(u8, u8)> {
-        match self.peek() {
-            And | Or => Some((3, 4)),
-            GreaterEqual | LessEqual | Greater | Less | DoubleEqual | NotEqual => Some((5, 6)),
-            Plus | Minus => Some((7, 8)),
-            Star | Slash => Some((9, 10)),
+    pub fn pattern(&mut self) -> Result<Box<Pattern>> {
+        let left = self.pattern_annotation()?;
+        if self.at(TokenData::Bar) {
+            let pipe = self.bump();
+            let right = self.pattern()?;
+            Ok(Box::new(Spanned {
+                range: left.range.start.clone()..right.range.end.clone(),
+                data: PatternKind::Or(PatOr { left, pipe, right }),
+            }))
+        } else {
+            Ok(left)
+        }
+    }
+
+    // Expressions
+
+    pub fn let_sttm(&mut self) -> Result<LetSttm> {
+        let let_ = self.expect(TokenData::Let)?;
+        let pattern = self.pattern()?;
+        let eq = self.expect(TokenData::Equal)?;
+        let expr = self.expr()?;
+        Ok(LetSttm {
+            let_,
+            pattern,
+            eq,
+            expr,
+        })
+    }
+
+    pub fn statement_kind(&mut self) -> Result<Statement> {
+        match self.kind() {
+            TokenData::Let => self.let_sttm().map(Statement::Let),
+            _ => self.expr().map(Statement::Expr),
+        }
+    }
+
+    pub fn block(&mut self) -> Result<Block> {
+        self.expect(TokenData::Begin)?;
+        let statements = self.sep_by(TokenData::Sep, Self::statement_kind)?;
+        self.expect_or_bump(TokenData::End)?;
+        Ok(Block { statements })
+    }
+
+    pub fn expr_atom_kind(&mut self) -> Result<ExprKind> {
+        match self.kind() {
+            TokenData::LowerIdent => self.path_lower().map(ExprKind::Lower),
+            TokenData::UpperIdent => self.path_upper().map(ExprKind::Upper),
+            TokenData::LPar => self.parenthesis(Self::expr).map(ExprKind::Parenthesis),
+            _ => self.literal().map(ExprKind::Literal),
+        }
+    }
+
+    pub fn expr_atom(&mut self) -> Result<Box<Expr>> {
+        self.spanned(Self::expr_atom_kind).map(Box::new)
+    }
+
+    pub fn expr_application(&mut self) -> Result<Box<Expr>> {
+        let func = self.acessor()?;
+        let args = self.multiple(Self::acessor)?;
+        if args.is_empty() {
+            Ok(func)
+        } else {
+            let range = func.range.start.clone()..args.last().unwrap().range.end.clone();
+            Ok(Box::new(Spanned {
+                range,
+                data: ExprKind::Application(ApplicationExpr { func, args }),
+            }))
+        }
+    }
+
+    pub fn expr_binary(&mut self, precedence: u8) -> Result<Box<Expr>> {
+        let mut left = self.expr_application()?;
+
+        while let Some((lower, upper, op)) = self.expr_precedence() {
+            if lower < precedence {
+                break;
+            }
+
+            self.bump();
+
+            let right = self.expr_binary(upper)?;
+
+            let range = left.range.start.clone()..right.range.end.clone();
+
+            left = Box::new(Spanned {
+                range,
+                data: ExprKind::Binary(BinaryExpr { left, op, right }),
+            });
+        }
+
+        Ok(left)
+    }
+
+    pub fn expr_precedence(&mut self) -> Option<(u8, u8, Operator)> {
+        match self.kind() {
+            TokenData::Plus => Some((1, 2, Operator::Add(self.peek().clone()))),
+            TokenData::Minus => Some((1, 2, Operator::Sub(self.peek().clone()))),
+            TokenData::Star => Some((3, 4, Operator::Mul(self.peek().clone()))),
+            TokenData::Slash => Some((3, 4, Operator::Div(self.peek().clone()))),
+            TokenData::Percent => Some((3, 4, Operator::Rem(self.peek().clone()))),
+            TokenData::DoubleEqual => Some((5, 6, Operator::Eq(self.peek().clone()))),
+            TokenData::NotEqual => Some((5, 6, Operator::Neq(self.peek().clone()))),
+            TokenData::Less => Some((7, 8, Operator::Lt(self.peek().clone()))),
+            TokenData::LessEqual => Some((7, 8, Operator::Le(self.peek().clone()))),
+            TokenData::Greater => Some((7, 8, Operator::Gt(self.peek().clone()))),
+            TokenData::GreaterEqual => Some((7, 8, Operator::Ge(self.peek().clone()))),
+            TokenData::Or => Some((9, 1, Operator::Or(self.peek().clone()))),
+            TokenData::And => Some((9, 1, Operator::And(self.peek().clone()))),
             _ => None,
         }
     }
 
-    pub fn expr_atom(&mut self) {
-        self.open(TreeKind::Expr);
-        self.primary(Self::expr, Self::expr_path_end);
-        self.close();
-    }
-
-    pub fn pattern_atom(&mut self) {
-        self.open(TreeKind::Pattern);
-        self.primary(Self::pattern, Self::pattern_path_end);
-        self.close();
-    }
-
-    pub fn plus(&mut self) {
-        self.binary(
-            TreeKind::BinaryOperation,
-            |this| this.expr_atom(),
-            &[Plus, Minus],
-        )
-    }
-
-    pub fn if_expr(&mut self) {
-        self.open(TreeKind::If);
-        self.expect(If);
-        self.labeled("condition", Self::expr);
-        self.expect(Then);
-        self.labeled("then", Self::expr);
-        self.expect(Else);
-        self.labeled("else", Self::closed_expr);
-        self.close();
-    }
-
-    pub fn let_expr(&mut self) {
-        self.open(TreeKind::Let);
-        self.expect(Let);
-        self.labeled("pattern", Self::pattern);
-        self.expect(Equal);
-        self.labeled("value", Self::expr);
-        self.expect(In);
-        self.labeled("body", Self::closed_expr);
-        self.close();
-    }
-
-    pub fn when_case(&mut self) {
-        self.open(TreeKind::Case);
-        self.labeled("pat", Self::pattern);
-        self.expect(FatArrow);
-        self.labeled("body", Self::expr);
-        self.close();
-    }
-
-    pub fn cases(&mut self) {
-        self.expect(TokenData::Begin);
-        self.sep1("cases", TokenData::Sep, Self::when_case);
-        self.expect_or_close_layout(TokenData::End);
-    }
-
-    pub fn when_expr(&mut self) {
-        self.open(TreeKind::When);
-        self.expect(When);
-        self.labeled("scrutineer", Self::expr);
-        self.expect(Is);
-        self.cases();
-        self.close();
-    }
-
-    pub fn var_expr(&mut self) {
-        if self.at(TokenData::Let) {
-            self.open(TreeKind::LetDo);
-            self.expect(Let);
-            self.labeled("pattern", Self::pattern);
-            self.expect(Equal);
-            self.labeled("value", Self::expr);
-            self.expect(In);
-            self.labeled("body", Self::expr);
+    pub fn expr_annotation(&mut self) -> Result<Box<Expr>> {
+        let left = self.expr_binary(0)?;
+        if self.at(TokenData::Colon) {
+            let colon = self.bump();
+            let right = self.typ()?;
+            Ok(Box::new(Spanned {
+                range: left.range.start.clone()..right.range.end.clone(),
+                data: ExprKind::Annotation(AnnotationExpr { left, colon, right }),
+            }))
         } else {
-            self.expr()
+            Ok(left)
         }
     }
 
-    pub fn do_expr(&mut self) {
-        self.open(TreeKind::Do);
-        self.expect(Do);
-        self.expect(Begin);
-        self.sep1("block", TokenData::Sep, |x| {
-            x.labeled("sttm", Self::var_expr)
-        });
-        self.expect_or_close_layout(TokenData::End);
-        self.close();
+    pub fn expr_do(&mut self) -> Result<Box<Expr>> {
+        let do_ = self.expect(TokenData::Do)?;
+        let block = self.block()?;
+        let range = self.with_span(do_.range.clone());
+        Ok(Box::new(Spanned {
+            range,
+            data: ExprKind::Do(DoExpr { do_, block }),
+        }))
     }
 
-    pub fn typ_atom(&mut self) {
-        self.open(TreeKind::Type);
-        match self.peek() {
-            LowerIdent => self.labeled(TreeKind::TypePoly, Self::advance),
-            UpperIdent => self.labeled(TreeKind::TypeId, Self::advance),
-            LPar => {
-                self.open(TreeKind::Parenthesis);
-                self.advance();
-                self.typ();
-                match self.peek() {
-                    RPar => {
-                        self.advance();
-                        self.close();
-                    }
-                    _ => self.error(),
-                }
-            }
-            _ => self.error(),
-        }
-        self.close();
+    pub fn lambda_expr(&mut self) -> Result<Box<Expr>> {
+        let lambda = self.expect(TokenData::BackSlash)?;
+        let pattern = self.pattern()?;
+        let arrow = self.expect(TokenData::FatArrow)?;
+        let expr = self.expr()?;
+        let range = self.with_span(lambda.range.clone());
+        Ok(Box::new(Spanned {
+            range,
+            data: ExprKind::Lambda(LambdaExpr {
+                lambda,
+                pattern,
+                arrow,
+                expr,
+            }),
+        }))
     }
 
-    pub fn typ_application(&mut self) {
-        let checkpoint = self.checkpoint();
-        self.typ_atom();
-        let mut first = true;
-
-        while !self.at_any(&[
-            TokenData::RPar,
-            TokenData::RightArrow,
-            TokenData::Eof,
-            TokenData::Equal,
-            TokenData::Comma,
-            TokenData::RBrace,
-            TokenData::Let,
-            TokenData::Type,
-        ]) {
-            if !first {
-                self.rollback(checkpoint, TreeKind::Type);
-            }
-
-            self.rollback(checkpoint, TreeKind::TypeApplication);
-            self.typ_atom();
-            self.close();
-
-            if !first {
-                self.close();
-            }
-
-            first = false;
-        }
-    }
-
-    pub fn typ_arrow(&mut self) {
-        let checkpoint = self.checkpoint();
-        self.typ_application();
-        if self.at(RightArrow) {
-            self.rollback(checkpoint, TreeKind::Type);
-            self.close();
-            self.rollback(checkpoint, "left");
-            self.close();
-            self.rollback(checkpoint, TreeKind::TypeArrow);
-            self.advance();
-            self.labeled("right", Self::typ);
-            self.close();
-        }
-    }
-
-    pub fn typ_forall(&mut self) {
-        self.open(TreeKind::TypeForall);
-        self.expect(Forall);
-        self.label("args");
-        while self.at(LowerIdent) {
-            self.advance()
-        }
-        self.close();
-        self.expect(Dot);
-        self.labeled("body", Self::typ);
-        self.close()
-    }
-
-    pub fn typ(&mut self) {
-        if self.at(Forall) {
-            self.typ_forall()
+    pub fn acessor(&mut self) -> Result<Box<Expr>> {
+        let left = self.expr_atom()?;
+        if self.at(TokenData::Dot) {
+            let dot = self.bump();
+            let field = self.lower()?;
+            let range = self.with_span(left.range.clone());
+            Ok(Box::new(Spanned {
+                range,
+                data: ExprKind::Acessor(AcessorExpr { left, dot, field }),
+            }))
         } else {
-            self.typ_arrow()
+            Ok(left)
         }
     }
 
-    pub fn field(&mut self) {
-        let checkpoint = self.checkpoint();
-        let checkpoint_field = self.checkpoint();
+    pub fn let_expr(&mut self) -> Result<Box<Expr>> {
+        let let_ = self.expect(TokenData::Let)?;
+        let pattern = self.pattern()?;
+        let eq = self.expect(TokenData::Equal)?;
+        let value = self.expr()?;
+        let in_ = self.expect(TokenData::In)?;
+        let body = self.expr()?;
 
-        self.expr_atom();
+        let range = self.with_span(let_.range.clone());
 
-        while self.peek() == Dot {
-            self.rollback(checkpoint_field, "expr");
-            self.close();
-            self.rollback(checkpoint, TreeKind::Field);
-            self.advance();
-            self.labeled("field", |this| this.expect(TokenData::LowerIdent));
-            self.close();
+        Ok(Box::new(Spanned {
+            range,
+            data: ExprKind::Let(LetExpr {
+                let_,
+                pattern,
+                eq,
+                value,
+                in_,
+                body,
+            }),
+        }))
+    }
+
+    pub fn when_case(&mut self) -> Result<WhenCase> {
+        let pattern = self.pattern()?;
+        let arrow = self.expect(TokenData::FatArrow)?;
+        let expr = self.expr()?;
+        Ok(WhenCase {
+            pattern,
+            arrow,
+            expr,
+        })
+    }
+
+    pub fn when_expr(&mut self) -> Result<Box<Expr>> {
+        let when = self.expect(TokenData::When)?;
+        let scrutinee = self.expr()?;
+        let is = self.expect(TokenData::Is)?;
+        let cases = self.multiple(Self::when_case)?;
+
+        let range = self.with_span(when.range.clone());
+
+        Ok(Box::new(Spanned {
+            range,
+            data: ExprKind::When(WhenExpr {
+                when,
+                scrutinee,
+                is,
+                cases,
+            }),
+        }))
+    }
+
+    pub fn if_expr(&mut self) -> Result<Box<Expr>> {
+        let if_ = self.expect(TokenData::If)?;
+        let cond = self.expr()?;
+        let then = self.expect(TokenData::Then)?;
+        let then_expr = self.expr()?;
+        let else_ = self.expect(TokenData::Else)?;
+        let else_expr = self.expr()?;
+
+        let range = self.with_span(if_.range.clone());
+
+        Ok(Box::new(Spanned {
+            range,
+            data: ExprKind::If(IfExpr {
+                if_,
+                cond,
+                then,
+                then_expr,
+                else_,
+                else_expr,
+            }),
+        }))
+    }
+
+    pub fn expr_part(&mut self) -> Result<Box<Expr>> {
+        match self.kind() {
+            TokenData::BackSlash => self.lambda_expr(),
+            TokenData::Let => self.let_expr(),
+            TokenData::Do => self.expr_do(),
+            TokenData::When => self.when_expr(),
+            TokenData::If => self.if_expr(),
+            _ => self.expr_annotation(),
         }
     }
 
-    pub fn call(&mut self) {
-        let checkpoint = self.checkpoint();
-        self.field();
-        while self.at_any(Self::PRIMARY_FIRST) {
-            self.rollback(checkpoint, TreeKind::Expr);
-            self.rollback(checkpoint, TreeKind::Application);
-            self.field();
-            self.close();
-            self.close();
-        }
-    }
-
-    pub fn annotation(&mut self, checkpoint: Checkpoint) {
-        self.rollback(checkpoint, "expr");
-        self.close();
-        self.rollback(checkpoint, TreeKind::Annotation);
-        self.advance();
-        self.labeled("type", Self::typ);
-        self.close();
-    }
-
-    pub fn pipe_right(&mut self, checkpoint: Checkpoint) {
-        self.rollback(checkpoint, "left");
-        self.close();
-        self.rollback(checkpoint, TreeKind::BinaryOperation);
-        self.advance();
-        self.labeled("right", Self::typ);
-        self.close();
-    }
-
-    pub fn lambda(&mut self) {
-        self.open(TreeKind::Lambda);
-        self.expect(TokenData::BackSlash);
-        self.labeled("pattern", Self::pattern);
-        self.expect(RightArrow);
-        self.labeled("body", Self::expr);
-        self.close()
-    }
-
-    pub fn closed_expr(&mut self) {
-        match self.peek() {
-            If => self.labeled(TreeKind::Expr, Self::if_expr),
-            Let => self.labeled(TreeKind::Expr, Self::let_expr),
-            When => self.labeled(TreeKind::Expr, Self::when_expr),
-            Do => self.labeled(TreeKind::Expr, Self::do_expr),
-            BackSlash => self.labeled(TreeKind::Expr, Self::lambda),
-            _ => self.call(),
-        }
-    }
-
-    pub fn expr(&mut self) {
-        let checkpoint = self.checkpoint();
-
-        self.closed_expr();
-
-        while self.at_any(&[PipeRight, Colon]) {
-            match self.peek() {
-                Colon => self.annotation(checkpoint),
-                PipeRight => self.pipe_right(checkpoint),
-                _ => self.error(),
-            };
-        }
-    }
-
-    pub fn upper_path(&mut self) {
-        let checkpoint = self.checkpoint();
-        self.expect(TokenData::UpperIdent);
-        self.path_part(checkpoint, |this| this.expect(TokenData::Star));
-    }
-
-    pub fn import_as(&mut self) {
-        if let As = self.peek() {
-            self.advance();
-            self.labeled("alias", Self::upper_path);
-        }
-    }
-
-    pub fn import_decl(&mut self) {
-        self.open(TreeKind::Use);
-        self.expect(Use);
-
-        self.labeled("path", Self::upper_path);
-
-        self.import_as();
-
-        if let LPar = self.peek() {
-            self.advance();
-            self.sep1("exposing", TokenData::Comma, |this| {
-                this.open(TreeKind::Exposed);
-                match this.peek() {
-                    UpperIdent => {
-                        this.upper_path();
-                    }
-                    LowerIdent => {
-                        this.expect(LowerIdent);
-                    }
-                    _ => this.error(),
-                }
-                this.close();
-                this.import_as();
-            });
-
-            self.expect(RPar);
-        }
-
-        self.close();
-    }
-
-    pub fn fn_decl(&mut self) {
-        self.open(TreeKind::LetDecl);
-        self.expect(Let);
-        self.expect(LowerIdent);
-
-        self.labeled("args", |this| {
-            while this.at(LPar) {
-                this.open(TreeKind::Binder);
-                this.advance();
-                this.labeled("name", |x| x.expect(LowerIdent));
-                if this.eat(Colon) {
-                    this.labeled("type", Self::typ);
-                }
-                this.expect(RPar);
-            }
-        });
-
-        if self.eat(Colon) {
-            self.labeled("type", Self::typ);
-        }
-
-        self.expect(Equal);
-
-        self.labeled("body", Self::expr);
-        self.close();
-    }
-
-    pub fn sum_constructor(&mut self) {
-        self.open(TreeKind::DataConstructor);
-        self.expect(Bar);
-        self.labeled("name", |this| this.expect(UpperIdent));
-
-        self.labeled("args", |this| {
-            while !this.at_any(&[
-                TokenData::Eof,
-                TokenData::Bar,
-                TokenData::Let,
-                TokenData::Type,
-                TokenData::Use,
-            ]) {
-                this.typ_atom()
-            }
-        });
-
-        self.close();
-    }
-
-    pub fn typ_decl(&mut self) {
-        self.open(TreeKind::TypeDecl);
-        self.expect(Type);
-        self.expect(UpperIdent);
-
-        self.labeled("args", |this| {
-            while this.at(LowerIdent) {
-                this.advance()
-            }
-        });
-
-        self.expect(Equal);
-
-        self.label("type");
-
-        if self.at(TokenData::Bar) {
-            self.labeled(TreeKind::TypeSum, |this| {
-                while this.at(Bar) {
-                    this.sum_constructor();
-                }
-            });
-        } else if self.at(TokenData::LBrace) {
-            self.advance();
-
-            self.labeled(TreeKind::TypeProduct, |this| {
-                while !this.at(RBrace) {
-                    this.labeled(TreeKind::Field, |this| {
-                        this.open(TreeKind::Field);
-                        this.expect(LowerIdent);
-                        this.expect(Colon);
-                        this.typ();
-                        this.close()
-                    });
-                    if this.at(TokenData::Comma) {
-                        this.advance();
-                    } else {
-                        break;
-                    }
-                }
-            });
-
-            self.expect(RBrace);
+    pub fn expr(&mut self) -> Result<Box<Expr>> {
+        let left = self.expr_part()?;
+        if self.at(TokenData::PipeRight) {
+            let pipe_right = self.bump();
+            let right = self.expr()?;
+            let range = self.with_span(left.range.clone());
+            Ok(Box::new(Spanned {
+                range,
+                data: ExprKind::Binary(BinaryExpr {
+                    left,
+                    op: Operator::Pipe(pipe_right),
+                    right,
+                }),
+            }))
         } else {
-            self.open(TreeKind::TypeSynonym);
-            self.typ();
-            self.close();
-        }
-
-        self.close();
-
-        self.close();
-    }
-
-    pub fn top_level(&mut self) {
-        match self.peek() {
-            TokenData::Use => self.import_decl(),
-            TokenData::Let => self.fn_decl(),
-            TokenData::Type => self.typ_decl(),
-            _ => self.expr(),
+            Ok(left)
         }
     }
 
-    pub fn root(&mut self) {
-        self.open(TreeKind::Program);
+    pub fn binder(&mut self) -> Result<Binder> {
+        let left_paren = self.expect(TokenData::LPar)?;
+        let pattern = self.pattern()?;
+        let colon = self.expect(TokenData::Colon)?;
+        let typ = self.typ()?;
+        let right_paren = self.expect(TokenData::RPar)?;
+        Ok(Binder {
+            left_paren,
+            pattern,
+            colon,
+            typ,
+            right_paren,
+        })
+    }
 
-        while !self.at(TokenData::Eof) {
-            self.open(TreeKind::TopLevel);
-            self.top_level();
-            self.close();
+    pub fn let_decl(&mut self) -> Result<LetDecl> {
+        let let_ = self.expect(TokenData::Let)?;
+        let name = self.lower()?;
+        let binders = self.multiple(Self::binder)?;
+        let colon = self.expect(TokenData::Colon)?;
+        let typ = self.typ()?;
+        let eq = self.expect(TokenData::Equal)?;
+        let expr = self.expr()?;
+
+        Ok(LetDecl {
+            let_,
+            name,
+            binders,
+            colon,
+            typ,
+            eq,
+            expr,
+        })
+    }
+
+    pub fn constructor_decl(&mut self) -> Result<Constructor> {
+        let pipe = self.expect(TokenData::Bar)?;
+        let name = self.upper()?;
+        let args = self.multiple(Self::type_atom)?;
+        Ok(Constructor { pipe, name, args })
+    }
+
+    pub fn sum_decl(&mut self) -> Result<SumDecl> {
+        let constructors = self.multiple(Self::constructor_decl)?;
+        Ok(SumDecl { constructors })
+    }
+
+    pub fn field(&mut self) -> Result<Field> {
+        let name = self.lower()?;
+        let colon = self.expect(TokenData::Colon)?;
+        let typ = self.typ()?;
+        Ok(Field { name, colon, typ })
+    }
+
+    pub fn record_decl(&mut self) -> Result<RecordDecl> {
+        let left_brace = self.expect(TokenData::LBrace)?;
+        let fields = self.multiple(Self::field)?;
+        let right_brace = self.expect(TokenData::RBrace)?;
+
+        Ok(RecordDecl {
+            left_brace,
+            fields,
+            right_brace,
+        })
+    }
+
+    pub fn type_def(&mut self) -> Result<TypeDef> {
+        match self.kind() {
+            TokenData::Bar => self.sum_decl().map(TypeDef::Sum),
+            TokenData::LBrace => self.record_decl().map(TypeDef::Record),
+            _ => self.type_atom().map(TypeDef::Synonym),
         }
+    }
 
-        self.expect(Eof);
-        self.close();
+    pub fn type_decl(&mut self) -> Result<TypeDecl> {
+        let type_ = self.expect(TokenData::Type)?;
+        let name = self.upper()?;
+        let binders = self.multiple(Self::lower)?;
+        let eq = self.expect(TokenData::Equal)?;
+        let def = self.type_def()?;
+
+        Ok(TypeDecl {
+            type_,
+            name,
+            binders,
+            eq,
+            def,
+        })
+    }
+
+    pub fn use_decl(&mut self) -> Result<UseDecl> {
+        let use_ = self.expect(TokenData::Use)?;
+        let path = self.path_upper()?;
+
+        Ok(UseDecl { use_, path })
+    }
+
+    pub fn top_level(&mut self) -> Result<TopLevel> {
+        match self.kind() {
+            TokenData::Let => self.let_decl().map(TopLevel::Let),
+            TokenData::Type => self.type_decl().map(TopLevel::Type),
+            TokenData::Use => self.use_decl().map(TopLevel::Use),
+            _ => self.unexpected(),
+        }
     }
 }

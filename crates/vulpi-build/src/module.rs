@@ -5,14 +5,14 @@ use vulpi_storage::id::{File, Id};
 use self::sealed::State;
 
 pub struct Module<T: State> {
-    source: Id<File>,
+    _source: Id<File>,
     phantom: PhantomData<T>,
 }
 
 impl Module<Loaded> {
-    pub fn new(source: Id<File>) -> Self {
+    pub fn new(_source: Id<File>) -> Self {
         Self {
-            source,
+            _source,
             phantom: PhantomData,
         }
     }

@@ -2,11 +2,9 @@
 //! entry point for this library and it's used to keep that of the compilation process.
 
 use vulpi_report::Reporter;
-use vulpi_storage::{
-    id::{File, Id},
-    vfs::FileSystem,
-};
-use vulpi_syntax::concrete::{ProgramNode, TopLevelEnum};
+use vulpi_storage::id::{File, Id};
+use vulpi_storage::vfs::FileSystem;
+use vulpi_tree::Show;
 
 pub mod error;
 pub mod module;
@@ -35,12 +33,13 @@ impl<P> Instance<P> {
 
         let str = std::str::from_utf8(content).unwrap();
 
-        let mut parser = vulpi_parser::Parser::new(str, id, &mut *self.reporter);
-        parser.root();
+        let lexer = vulpi_parser::Lexer::new(str);
+        let mut parser = vulpi_parser::Parser::new(lexer, id);
 
-        let parsed = parser.finish();
-
-        println!("{}", parsed);
+        match parser.top_level() {
+            Ok(x) => println!("{}", x.show()),
+            Err(e) => println!("error {:?}", e),
+        }
 
         Ok(id)
     }
