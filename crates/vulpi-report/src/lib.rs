@@ -4,6 +4,8 @@
 use vulpi_location::Location;
 use vulpi_storage::id::{File, Id};
 
+pub mod renderer;
+
 /// A type for representing the severity of a [Diagnostic].
 pub enum Severity {
     Error,
@@ -33,8 +35,8 @@ pub struct Word(Style, Color, String);
 /// A type for representing a text. It's used to generate error messages.
 pub enum Text {
     Phrase(Vec<Word>),
-    Styled(Style, Box<Text>),
-    Colored(Color, Box<Text>),
+    Styled(Style, String),
+    Colored(Color, String),
     Text(String),
     Break,
 }

@@ -1,6 +1,6 @@
 use clap::Parser;
 use std::path::PathBuf;
-use vulpi_build::{error::HashReporter, Instance};
+use vulpi_build::{error::HashReporter, Exit, Instance};
 use vulpi_storage::vfs::real::RealFileSystem;
 
 #[derive(Parser)]
@@ -18,8 +18,10 @@ fn main() {
 
     let mut instance = Instance::new(file_system, reporter);
 
-    match instance.compile(file) {
-        Ok(_) => println!("Success"),
-        Err(e) => println!("Error: {:?}", e),
+    let exit = instance.compile(file).unwrap();
+
+    match exit {
+        Exit::Ok => std::process::exit(0),
+        Exit::Err => std::process::exit(1),
     }
 }

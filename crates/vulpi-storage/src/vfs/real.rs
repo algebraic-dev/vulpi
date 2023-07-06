@@ -6,7 +6,7 @@ use super::{Error, FileSystem};
 
 pub struct RealFileSystem {
     root: PathBuf,
-    file_map: HashMap<Id<File>, (PathBuf, Vec<u8>)>,
+    file_map: HashMap<Id<File>, (PathBuf, String)>,
     path_map: HashMap<PathBuf, Id<File>>,
     counter: usize,
 }
@@ -28,7 +28,7 @@ impl RealFileSystem {
     }
 }
 
-impl FileSystem<PathBuf, Vec<u8>> for RealFileSystem {
+impl FileSystem<PathBuf, String> for RealFileSystem {
     fn load(&mut self, path: PathBuf) -> Result<Id<File>, Error> {
         let path = self.get_path(path)?;
 
@@ -42,7 +42,7 @@ impl FileSystem<PathBuf, Vec<u8>> for RealFileSystem {
         let id = Id::new(self.counter);
         self.counter += 1;
 
-        let content = (path.clone(), content.into_bytes());
+        let content = (path.clone(), content);
 
         self.file_map.insert(id, content);
         self.path_map.insert(path, id);
@@ -57,11 +57,11 @@ impl FileSystem<PathBuf, Vec<u8>> for RealFileSystem {
 
     fn store(&mut self, id: Id<File>, content: String) -> Result<(), Error> {
         let file = self.file_map.get_mut(&id).ok_or(Error::NotFoundId)?;
-        *file = (file.0.clone(), content.into_bytes());
+        *file = (file.0.clone(), content);
         Ok(())
     }
 
-    fn read(&self, id: Id<File>) -> Result<&Vec<u8>, Error> {
+    fn read(&self, id: Id<File>) -> Result<&String, Error> {
         let file = self.file_map.get(&id).ok_or(Error::NotFoundId)?;
         Ok(&file.1)
     }
@@ -76,7 +76,7 @@ impl FileSystem<PathBuf, Vec<u8>> for RealFileSystem {
         let id = Id::new(self.counter);
         self.counter += 1;
 
-        self.file_map.insert(id, (path.clone(), Vec::new()));
+        self.file_map.insert(id, (path.clone(), String::new()));
         self.path_map.insert(path, id);
 
         Ok(id)
@@ -98,5 +98,10 @@ impl FileSystem<PathBuf, Vec<u8>> for RealFileSystem {
         } else {
             Err(Error::NotFoundId)
         }
+    }
+
+    fn path(&self, id: Id<File>) -> Result<&PathBuf, Error> {
+        let file = self.file_map.get(&id).ok_or(Error::NotFoundId)?;
+        Ok(&file.0)
     }
 }

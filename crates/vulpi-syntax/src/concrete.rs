@@ -301,8 +301,7 @@ pub struct LetDecl {
     pub let_: Token,
     pub name: Lower,
     pub binders: Vec<Binder>,
-    pub colon: Token,
-    pub typ: Box<Type>,
+    pub typ: Option<(Token, Box<Type>)>,
     pub eq: Token,
     pub expr: Box<Expr>,
 }

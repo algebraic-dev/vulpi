@@ -1,3 +1,7 @@
+//! Module for module resolution and symbol resolution. It mutates the AST in order to resolve the
+//! symbols to a global namespace. It also checks for unbound names, name collision and non linear
+//! patterns.
+
 pub mod error;
 pub mod scope;
 
@@ -6,27 +10,24 @@ use error::Result;
 use scope::Kaleidoscope;
 
 use vulpi_report::{IntoDiagnostic, Reporter};
-use vulpi_storage::namespace::{Name, Namespace, Namespaces, Path};
+use vulpi_storage::namespace::{Name, Namespace, Path};
 
-pub type Loader = dyn FnMut(Path) -> Result<()>;
+pub type Loader<'a> = dyn FnMut(Path) -> Result<&'a Namespace<()>>;
 
 /// The resolver context. It store scopes and other things that are needed in order to resolve the
 /// symbols.
 pub struct Context<'a> {
     scope: &'a mut Kaleidoscope,
     reporter: &'a mut dyn Reporter,
-    load: &'a mut Loader,
-
+    load: &'a mut Loader<'a>,
     actual_namespace: Namespace<()>,
-    namespaces: &'a mut Namespaces<()>,
 }
 
 impl<'a> Context<'a> {
     pub fn new(
         scope: &'a mut Kaleidoscope,
         reporter: &'a mut dyn Reporter,
-        load: &'a mut Loader,
-        namespaces: &'a mut Namespaces<()>,
+        load: &'a mut Loader<'a>,
         path: Path,
     ) -> Self {
         Self {
@@ -34,7 +35,6 @@ impl<'a> Context<'a> {
             reporter,
             load,
             actual_namespace: Namespace::new(path),
-            namespaces,
         }
     }
 
@@ -48,7 +48,7 @@ impl<'a> Context<'a> {
         self.reporter.report(Box::new(error));
     }
 
-    pub fn load(&mut self, path: Path) -> Result<()> {
+    pub fn load(&mut self, path: Path) -> Result<&'a Namespace<()>> {
         (self.load)(path)
     }
 
@@ -64,3 +64,5 @@ impl<'a> Context<'a> {
 pub trait Resolvable<'a> {
     fn declare(&'a mut self, ctx: &mut Context);
 }
+
+

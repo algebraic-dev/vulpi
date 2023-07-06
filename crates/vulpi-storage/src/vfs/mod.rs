@@ -19,6 +19,7 @@ pub enum Error {
 pub trait FileSystem<Path, Content> {
     fn load(&mut self, path: Path) -> Result<Id<File>, Error>;
     fn unload(&mut self, id: Id<File>) -> Result<(), Error>;
+    fn path(&self, id: Id<File>) -> Result<&Path, Error>;
 
     fn store(&mut self, id: Id<File>, content: String) -> Result<(), Error>;
     fn read(&self, id: Id<File>) -> Result<&Content, Error>;

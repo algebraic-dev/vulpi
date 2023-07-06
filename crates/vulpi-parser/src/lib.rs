@@ -693,8 +693,15 @@ impl Parser<'_> {
         let let_ = self.expect(TokenData::Let)?;
         let name = self.lower()?;
         let binders = self.multiple(Self::binder)?;
-        let colon = self.expect(TokenData::Colon)?;
-        let typ = self.typ()?;
+
+        let typ = if self.at(TokenData::Colon) {
+            let colon = self.bump();
+            let typ = self.typ()?;
+            Some((colon, typ))
+        } else {
+            None
+        };
+
         let eq = self.expect(TokenData::Equal)?;
         let expr = self.expr()?;
 
@@ -702,7 +709,6 @@ impl Parser<'_> {
             let_,
             name,
             binders,
-            colon,
             typ,
             eq,
             expr,
@@ -778,5 +784,11 @@ impl Parser<'_> {
             TokenData::Use => self.use_decl().map(TopLevel::Use),
             _ => self.unexpected(),
         }
+    }
+
+    pub fn program(&mut self) -> Result<Vec<TopLevel>> {
+        let top_levels = self.multiple(Self::top_level)?;
+        self.expect(TokenData::Eof)?;
+        Ok(top_levels)
     }
 }
