@@ -235,6 +235,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "relative-path"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bf2521270932c3c7bed1a59151222bd7643c79310f2916f01925e1e16255698"
+
+[[package]]
 name = "rustix"
 version = "0.38.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -302,6 +308,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "vulpi-build"
 version = "0.1.0"
 dependencies = [
+ "vulpi-desugar",
  "vulpi-parser",
  "vulpi-report",
  "vulpi-storage",
@@ -317,6 +324,16 @@ dependencies = [
  "vulpi-build",
  "vulpi-report",
  "vulpi-storage",
+]
+
+[[package]]
+name = "vulpi-desugar"
+version = "0.1.0"
+dependencies = [
+ "vulpi-location",
+ "vulpi-report",
+ "vulpi-storage",
+ "vulpi-syntax",
 ]
 
 [[package]]
@@ -350,8 +367,10 @@ dependencies = [
 name = "vulpi-report"
 version = "0.1.0"
 dependencies = [
+ "relative-path",
  "vulpi-location",
  "vulpi-storage",
+ "yansi",
 ]
 
 [[package]]
@@ -451,3 +470,9 @@ name = "windows_x86_64_msvc"
 version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
+
+[[package]]
+name = "yansi"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"

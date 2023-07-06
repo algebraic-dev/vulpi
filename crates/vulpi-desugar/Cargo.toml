@@ -1,0 +1,12 @@
+[package]
+name = "vulpi-desugar"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+vulpi-syntax = { path = "../vulpi-syntax" }
+vulpi-storage = { path = "../vulpi-storage" }
+vulpi-location = { path = "../vulpi-location" }
+vulpi-report = { path = "../vulpi-report" }

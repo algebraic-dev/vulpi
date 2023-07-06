@@ -25,7 +25,7 @@ impl LineGuide {
         for (i, c) in content.char_indices() {
             if c == '\n' {
                 line_bytes.push((line_start, line_end));
-                line_start = i;
+                line_start = i + 1;
             }
 
             line_end = i;

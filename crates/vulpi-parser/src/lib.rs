@@ -4,7 +4,8 @@
 use std::ops::Range;
 
 use vulpi_location::{Byte, Spanned};
-use vulpi_storage::id::{self, Id};
+use vulpi_report::Reporter;
+use vulpi_storage::id::{self, File, Id};
 use vulpi_syntax::concrete::*;
 use vulpi_syntax::token::{Token, TokenData};
 
@@ -66,7 +67,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect_or_bump(&mut self, token: TokenData) -> Result<()> {
+    pub fn expect_or_pop_layout(&mut self, token: TokenData) -> Result<()> {
         if self.peek().data.kind == token {
             self.bump();
         } else {
@@ -194,12 +195,15 @@ impl Parser<'_> {
         })
     }
 
-    pub fn path_upper(&mut self) -> Result<Path<Upper>> {
-        self.path(|parser| parser.upper())
+    pub fn path_ident(&mut self) -> Result<Path<Ident>> {
+        self.path(|parser| match parser.peek().data.kind {
+            TokenData::UpperIdent | TokenData::LowerIdent => Ok(Ident(parser.bump())),
+            _ => parser.unexpected(),
+        })
     }
 
-    pub fn path_lower(&mut self) -> Result<Path<Lower>> {
-        self.path(|parser| parser.lower())
+    pub fn path_upper(&mut self) -> Result<Path<Upper>> {
+        self.path(|parser| parser.upper())
     }
 
     pub fn lower(&mut self) -> Result<Lower> {
@@ -231,16 +235,25 @@ impl Parser<'_> {
     }
 
     pub fn type_application(&mut self) -> Result<Box<Type>> {
-        let mut left = self.type_atom()?;
+        let func = self.type_atom()?;
+
+        let mut args = vec![];
 
         while let Some(right) = self.test(Self::type_atom)? {
-            left = Box::new(Spanned {
-                range: left.range.start.clone()..right.range.end.clone(),
-                data: TypeKind::Application(TypeApplication { left, right }),
-            });
+            args.push(right);
         }
 
-        Ok(left)
+        if args.is_empty() {
+            Ok(func)
+        } else {
+            let start = func.range.start.clone();
+            let end = args.last().unwrap().range.end.clone();
+
+            Ok(Box::new(Spanned {
+                range: start..end,
+                data: TypeKind::Application(TypeApplication { func, args }),
+            }))
+        }
     }
 
     pub fn type_arrow(&mut self) -> Result<Box<Type>> {
@@ -293,9 +306,9 @@ impl Parser<'_> {
 
         Ok(TypeForall {
             forall,
-            left,
+            params: left,
             dot,
-            right,
+            body: right,
         })
     }
 
@@ -355,7 +368,7 @@ impl Parser<'_> {
     pub fn pattern_atom_kind(&mut self) -> Result<PatternKind> {
         match self.kind() {
             TokenData::Wildcard => Ok(PatternKind::Wildcard(self.bump())),
-            TokenData::LowerIdent => self.path_lower().map(PatternKind::Lower),
+            TokenData::LowerIdent => self.lower().map(PatternKind::Lower),
             TokenData::UpperIdent => self.path_upper().map(PatternKind::Upper),
             TokenData::LPar => self
                 .parenthesis(Self::pattern)
@@ -386,22 +399,8 @@ impl Parser<'_> {
         }
     }
 
-    pub fn pattern_annotation(&mut self) -> Result<Box<Pattern>> {
-        let left = self.pattern_application()?;
-        if self.at(TokenData::Colon) {
-            let colon = self.bump();
-            let right = self.typ()?;
-            Ok(Box::new(Spanned {
-                range: left.range.start.clone()..right.range.end.clone(),
-                data: PatternKind::Annotation(PatAnnotation { left, colon, right }),
-            }))
-        } else {
-            Ok(left)
-        }
-    }
-
     pub fn pattern(&mut self) -> Result<Box<Pattern>> {
-        let left = self.pattern_annotation()?;
+        let left = self.pattern_application()?;
         if self.at(TokenData::Bar) {
             let pipe = self.bump();
             let right = self.pattern()?;
@@ -439,14 +438,13 @@ impl Parser<'_> {
     pub fn block(&mut self) -> Result<Block> {
         self.expect(TokenData::Begin)?;
         let statements = self.sep_by(TokenData::Sep, Self::statement_kind)?;
-        self.expect_or_bump(TokenData::End)?;
+        self.expect_or_pop_layout(TokenData::End)?;
         Ok(Block { statements })
     }
 
     pub fn expr_atom_kind(&mut self) -> Result<ExprKind> {
         match self.kind() {
-            TokenData::LowerIdent => self.path_lower().map(ExprKind::Lower),
-            TokenData::UpperIdent => self.path_upper().map(ExprKind::Upper),
+            TokenData::UpperIdent => self.path_ident().map(ExprKind::Ident),
             TokenData::LPar => self.parenthesis(Self::expr).map(ExprKind::Parenthesis),
             _ => self.literal().map(ExprKind::Literal),
         }
@@ -478,6 +476,7 @@ impl Parser<'_> {
                 break;
             }
 
+            // Cloned peek inside the expr_precedence
             self.bump();
 
             let right = self.expr_binary(upper)?;
@@ -519,7 +518,11 @@ impl Parser<'_> {
             let right = self.typ()?;
             Ok(Box::new(Spanned {
                 range: left.range.start.clone()..right.range.end.clone(),
-                data: ExprKind::Annotation(AnnotationExpr { left, colon, right }),
+                data: ExprKind::Annotation(AnnotationExpr {
+                    expr: left,
+                    colon,
+                    ty: right,
+                }),
             }))
         } else {
             Ok(left)
@@ -538,7 +541,7 @@ impl Parser<'_> {
 
     pub fn lambda_expr(&mut self) -> Result<Box<Expr>> {
         let lambda = self.expect(TokenData::BackSlash)?;
-        let pattern = self.pattern()?;
+        let pattern = self.multiple(Self::pattern)?;
         let arrow = self.expect(TokenData::FatArrow)?;
         let expr = self.expr()?;
         let range = self.with_span(lambda.range.clone());
@@ -546,7 +549,7 @@ impl Parser<'_> {
             range,
             data: ExprKind::Lambda(LambdaExpr {
                 lambda,
-                pattern,
+                patterns: pattern,
                 arrow,
                 expr,
             }),
@@ -561,7 +564,11 @@ impl Parser<'_> {
             let range = self.with_span(left.range.clone());
             Ok(Box::new(Spanned {
                 range,
-                data: ExprKind::Acessor(AcessorExpr { left, dot, field }),
+                data: ExprKind::Acessor(AcessorExpr {
+                    expr: left,
+                    dot,
+                    field,
+                }),
             }))
         } else {
             Ok(left)
@@ -584,18 +591,18 @@ impl Parser<'_> {
                 let_,
                 pattern,
                 eq,
-                value,
+                body: value,
                 in_,
-                body,
+                value: body,
             }),
         }))
     }
 
-    pub fn when_case(&mut self) -> Result<WhenCase> {
+    pub fn when_case(&mut self) -> Result<WhenArm> {
         let pattern = self.pattern()?;
         let arrow = self.expect(TokenData::FatArrow)?;
         let expr = self.expr()?;
-        Ok(WhenCase {
+        Ok(WhenArm {
             pattern,
             arrow,
             expr,
@@ -616,7 +623,7 @@ impl Parser<'_> {
                 when,
                 scrutinee,
                 is,
-                cases,
+                arms: cases,
             }),
         }))
     }
@@ -731,7 +738,11 @@ impl Parser<'_> {
         let name = self.lower()?;
         let colon = self.expect(TokenData::Colon)?;
         let typ = self.typ()?;
-        Ok(Field { name, colon, typ })
+        Ok(Field {
+            name,
+            colon,
+            ty: typ,
+        })
     }
 
     pub fn record_decl(&mut self) -> Result<RecordDecl> {
@@ -770,25 +781,53 @@ impl Parser<'_> {
         })
     }
 
+    pub fn use_alias(&mut self) -> Result<UseAlias> {
+        let as_ = self.expect(TokenData::As)?;
+        let alias = self.path_upper()?;
+        Ok(UseAlias { as_, alias })
+    }
+
     pub fn use_decl(&mut self) -> Result<UseDecl> {
         let use_ = self.expect(TokenData::Use)?;
         let path = self.path_upper()?;
 
-        Ok(UseDecl { use_, path })
+        let alias = if self.at(TokenData::As) {
+            Some(self.use_alias()?)
+        } else {
+            None
+        };
+
+        Ok(UseDecl { use_, path, alias })
     }
 
     pub fn top_level(&mut self) -> Result<TopLevel> {
         match self.kind() {
-            TokenData::Let => self.let_decl().map(TopLevel::Let),
-            TokenData::Type => self.type_decl().map(TopLevel::Type),
-            TokenData::Use => self.use_decl().map(TopLevel::Use),
+            TokenData::Let => self.let_decl().map(Box::new).map(TopLevel::Let),
+            TokenData::Type => self.type_decl().map(Box::new).map(TopLevel::Type),
+            TokenData::Use => self.use_decl().map(Box::new).map(TopLevel::Use),
             _ => self.unexpected(),
         }
     }
 
-    pub fn program(&mut self) -> Result<Vec<TopLevel>> {
+    pub fn program(&mut self) -> Result<Program> {
         let top_levels = self.multiple(Self::top_level)?;
-        self.expect(TokenData::Eof)?;
-        Ok(top_levels)
+        let eof = self.expect(TokenData::Eof)?;
+        Ok(Program { top_levels, eof })
+    }
+}
+
+pub fn parse(
+    lexer: Lexer<'_>,
+    file: Id<File>,
+    reporter: &mut (dyn Reporter + 'static),
+) -> Option<Program> {
+    let result = Parser::new(lexer, file).program();
+
+    match result {
+        Ok(program) => Some(program),
+        Err(err) => {
+            reporter.report(Box::new(err));
+            None
+        }
     }
 }

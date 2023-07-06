@@ -38,7 +38,14 @@ impl<T> Spanned<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct Location {
     pub file: Id<File>,
     pub range: Range<Byte>,
+}
+
+impl Location {
+    pub fn new(file: Id<File>, range: Range<Byte>) -> Self {
+        Self { file, range }
+    }
 }

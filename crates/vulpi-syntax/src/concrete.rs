@@ -53,16 +53,16 @@ pub struct TypeArrow {
 
 #[derive(Debug, Tree)]
 pub struct TypeApplication {
-    pub left: Box<Type>,
-    pub right: Box<Type>,
+    pub func: Box<Type>,
+    pub args: Vec<Box<Type>>,
 }
 
 #[derive(Debug, Tree)]
 pub struct TypeForall {
     pub forall: Token,
-    pub left: Vec<Lower>,
+    pub params: Vec<Lower>,
     pub dot: Token,
-    pub right: Box<Type>,
+    pub body: Box<Type>,
 }
 
 #[derive(Debug, Tree)]
@@ -135,7 +135,7 @@ pub struct PatApplication {
 pub enum PatternKind {
     Wildcard(Token),
     Upper(Path<Upper>),
-    Lower(Path<Lower>),
+    Lower(Lower),
     Literal(Literal),
     Annotation(PatAnnotation),
     Or(PatOr),
@@ -199,7 +199,7 @@ pub enum Operator {
 #[derive(Debug, Tree)]
 pub struct LambdaExpr {
     pub lambda: Token,
-    pub pattern: Box<Pattern>,
+    pub patterns: Vec<Box<Pattern>>,
     pub arrow: Token,
     pub expr: Box<Expr>,
 }
@@ -212,7 +212,7 @@ pub struct ApplicationExpr {
 
 #[derive(Debug, Tree)]
 pub struct AcessorExpr {
-    pub left: Box<Expr>,
+    pub expr: Box<Expr>,
     pub dot: Token,
     pub field: Lower,
 }
@@ -235,7 +235,7 @@ pub struct IfExpr {
 }
 
 #[derive(Debug, Tree)]
-pub struct WhenCase {
+pub struct WhenArm {
     pub pattern: Box<Pattern>,
     pub arrow: Token,
     pub expr: Box<Expr>,
@@ -246,14 +246,14 @@ pub struct WhenExpr {
     pub when: Token,
     pub scrutinee: Box<Expr>,
     pub is: Token,
-    pub cases: Vec<WhenCase>,
+    pub arms: Vec<WhenArm>,
 }
 
 #[derive(Debug, Tree)]
 pub struct AnnotationExpr {
-    pub left: Box<Expr>,
+    pub expr: Box<Expr>,
     pub colon: Token,
-    pub right: Box<Type>,
+    pub ty: Box<Type>,
 }
 
 #[derive(Debug, Tree)]
@@ -261,17 +261,16 @@ pub struct LetExpr {
     pub let_: Token,
     pub pattern: Box<Pattern>,
     pub eq: Token,
-    pub value: Box<Expr>,
-    pub in_: Token,
     pub body: Box<Expr>,
+    pub in_: Token,
+    pub value: Box<Expr>,
 }
 
 #[derive(Debug, Tree)]
 pub enum ExprKind {
     Lambda(LambdaExpr),
     Application(ApplicationExpr),
-    Lower(Path<Lower>),
-    Upper(Path<Upper>),
+    Ident(Path<Ident>),
     Acessor(AcessorExpr),
     Binary(BinaryExpr),
     Let(LetExpr),
@@ -322,7 +321,7 @@ pub struct SumDecl {
 pub struct Field {
     pub name: Lower,
     pub colon: Token,
-    pub typ: Box<Type>,
+    pub ty: Box<Type>,
 }
 
 #[derive(Debug, Tree)]
@@ -349,14 +348,27 @@ pub struct TypeDecl {
 }
 
 #[derive(Debug, Tree)]
+pub struct UseAlias {
+    pub as_: Token,
+    pub alias: Path<Upper>,
+}
+
+#[derive(Debug, Tree)]
 pub struct UseDecl {
     pub use_: Token,
     pub path: Path<Upper>,
+    pub alias: Option<UseAlias>,
 }
 
 #[derive(Debug, Tree)]
 pub enum TopLevel {
-    Let(LetDecl),
-    Type(TypeDecl),
-    Use(UseDecl),
+    Let(Box<LetDecl>),
+    Type(Box<TypeDecl>),
+    Use(Box<UseDecl>),
+}
+
+#[derive(Debug, Tree)]
+pub struct Program {
+    pub top_levels: Vec<TopLevel>,
+    pub eof: Token,
 }

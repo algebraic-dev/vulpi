@@ -4,8 +4,11 @@
 use std::io::stderr;
 use std::path::PathBuf;
 
+use vulpi_desugar::desugar;
+use vulpi_parser::parse;
 use vulpi_report::renderer::{Classic, Renderer};
-use vulpi_report::{Diagnostic, Reporter};
+use vulpi_report::Reporter;
+use vulpi_storage::id::{File, Id};
 use vulpi_storage::vfs::FileSystem;
 use vulpi_tree::Show;
 
@@ -35,29 +38,35 @@ impl Instance<PathBuf> {
         }
     }
 
-    pub fn compile(&mut self, source: PathBuf) -> Result<Exit, vulpi_storage::vfs::Error> {
+    pub fn render_errors(&mut self, file: Id<File>) {
+        let classic_renderer = Classic::new(&*self.file_system, std::env::current_dir().unwrap());
+        let diagnostics = self.reporter.diagnostics(file);
+        for diagnostic in diagnostics {
+            diagnostic
+                .render(&classic_renderer, &mut stderr().lock())
+                .unwrap();
+        }
+    }
+
+    pub fn compile(&mut self, source: PathBuf) -> Result<(), vulpi_storage::vfs::Error> {
         let id = self.file_system.load(source)?;
         let str = self.file_system.read(id)?;
 
         let lexer = vulpi_parser::Lexer::new(str);
-        let mut parser = vulpi_parser::Parser::new(lexer, id);
 
-        match parser.program() {
-            Ok(x) => {
-                println!("{}", x.show());
-                Ok(Exit::Ok)
-            }
-            Err(e) => {
-                let classic_renderer =
-                    Classic::new(&*self.file_system, std::env::current_dir().unwrap());
+        let Some(program) = parse(lexer, id, &mut *self.reporter) else {
+            self.render_errors(id);
+            return Ok(())
+        };
 
-                let diagnostic: Diagnostic = Box::new(e);
+        let resolved = desugar(program, &mut *self.reporter, id);
 
-                diagnostic
-                    .render(&classic_renderer, &mut stderr().lock())
-                    .unwrap();
-                Ok(Exit::Err)
-            }
+        println!("{}", resolved.show());
+
+        if !self.reporter.diagnostics(id).is_empty() {
+            self.render_errors(id);
         }
+
+        Ok(())
     }
 }
