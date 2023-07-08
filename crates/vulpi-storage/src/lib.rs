@@ -3,10 +3,9 @@ use std::{collections::HashMap, marker::PhantomData};
 use id::{Id, Identifier};
 use std::hash::Hash;
 
+pub mod file_system;
 pub mod id;
 pub mod interner;
-pub mod namespace;
-pub mod vfs;
 
 pub struct Bag<U: Identifier, T> {
     pub map: Vec<T>,

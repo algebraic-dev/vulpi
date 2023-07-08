@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use vulpi_location::Byte;
-use vulpi_storage::vfs::FileSystem;
+use vulpi_storage::file_system::FileSystem;
 use yansi::Paint;
 
 use crate::{Color, Diagnostic, Style, Text, Word};

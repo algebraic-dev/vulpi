@@ -19,6 +19,9 @@ pub enum Mono {
 
     /// A function type that takes a type and returns a type `A -> B`.
     Function(Type, Type),
+
+    /// Error type :)
+    Error,
 }
 
 /// A scheme is a type that is polymorphic and binds variables.
@@ -96,6 +99,7 @@ impl Types for Mono {
                 let right = right.free_vars();
                 left.union(right)
             }
+            Mono::Error => Default::default(),
         }
     }
 }

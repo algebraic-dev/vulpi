@@ -12,3 +12,4 @@ vulpi-macros = { path = "../vulpi-macros" }
 
 lazy_static = "1.4.0"
 petgraph = "0.6.3"
+im-rc = "15.1.0"
