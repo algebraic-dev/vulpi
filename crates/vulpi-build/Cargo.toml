@@ -13,3 +13,4 @@ vulpi-parser = { path = "../vulpi-parser" }
 vulpi-syntax = { path = "../vulpi-syntax" }
 vulpi-tree = { path = "../vulpi-tree" }
 vulpi-desugar = { path = "../vulpi-desugar" }
+vulpi-resolver = { path = "../vulpi-resolver" }

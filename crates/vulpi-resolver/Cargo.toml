@@ -10,5 +10,10 @@ vulpi-syntax = { path = "../vulpi-syntax" }
 vulpi-storage = { path = "../vulpi-storage" }
 vulpi-location = { path = "../vulpi-location" }
 vulpi-report = { path = "../vulpi-report" }
+vulpi-parser = { path = "../vulpi-parser" }
+vulpi-desugar = { path = "../vulpi-desugar" }
+vulpi-tree = { path = "../vulpi-tree" }
+
 im-rc = "15.1.0"
+petgraph = "0.6.3"
 

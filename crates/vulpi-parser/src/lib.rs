@@ -3,8 +3,9 @@
 
 use std::ops::Range;
 
+use error::ParserError;
 use vulpi_location::{Byte, Spanned};
-use vulpi_report::Reporter;
+use vulpi_report::{Diagnostic, Report};
 use vulpi_storage::id::{self, File, Id};
 use vulpi_syntax::concrete::*;
 use vulpi_syntax::token::{Token, TokenData};
@@ -26,10 +27,12 @@ pub struct Parser<'a> {
 
     pub eaten: bool,
     pub file: Id<id::File>,
+
+    pub reporter: Report,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(mut lexer: Lexer<'a>, file: Id<id::File>) -> Self {
+    pub fn new(mut lexer: Lexer<'a>, file: Id<id::File>, report: Report) -> Self {
         let current = lexer.bump();
         let next = lexer.bump();
 
@@ -40,6 +43,7 @@ impl<'a> Parser<'a> {
             last_pos: Byte(0)..Byte(0),
             eaten: false,
             file,
+            reporter: report,
         }
     }
 
@@ -67,6 +71,14 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn expect_recover(&mut self, token: TokenData) -> Spanned<Token> {
+        if self.peek().data.kind != token {
+            let unexpected_err = self.unexpected_err();
+            self.report(unexpected_err);
+        }
+        self.bump()
+    }
+
     pub fn expect_or_pop_layout(&mut self, token: TokenData) -> Result<()> {
         if self.peek().data.kind == token {
             self.bump();
@@ -77,11 +89,15 @@ impl<'a> Parser<'a> {
     }
 
     fn unexpected<T>(&mut self) -> Result<T> {
-        Err(error::ParserError::UnexpectedToken(
+        Err(self.unexpected_err())
+    }
+
+    fn unexpected_err(&mut self) -> ParserError {
+        error::ParserError::UnexpectedToken(
             self.peek().data.clone(),
             self.peek().range.clone(),
             self.file,
-        ))
+        )
     }
 
     pub fn at(&self, token: TokenData) -> bool {
@@ -96,10 +112,14 @@ impl<'a> Parser<'a> {
         tokens.iter().any(|token| self.at(*token))
     }
 
-    pub fn recover(&mut self, tokens: &[TokenData]) {
-        while !self.at_any(tokens) {
-            self.bump();
+    pub fn recover(&mut self, at_any: &[TokenData]) -> Vec<Spanned<Token>> {
+        let mut tokens = Vec::new();
+
+        while !self.at_any(at_any) && !self.at(TokenData::Eof) {
+            tokens.push(self.bump());
         }
+
+        tokens
     }
 
     pub fn test<T>(&mut self, fun: impl FnOnce(&mut Self) -> Result<T>) -> Result<Option<T>> {
@@ -435,6 +455,17 @@ impl Parser<'_> {
         }
     }
 
+    pub fn statement(&mut self) -> Statement {
+        match self.statement_kind() {
+            Ok(ok) => ok,
+            Err(err) => {
+                self.report(err);
+                let tkns = self.recover(&[TokenData::Sep, TokenData::End]);
+                Statement::Error(tkns)
+            }
+        }
+    }
+
     pub fn block(&mut self) -> Result<Block> {
         self.expect(TokenData::Begin)?;
         let statements = self.sep_by(TokenData::Sep, Self::statement_kind)?;
@@ -444,7 +475,7 @@ impl Parser<'_> {
 
     pub fn expr_atom_kind(&mut self) -> Result<ExprKind> {
         match self.kind() {
-            TokenData::UpperIdent => self.path_ident().map(ExprKind::Ident),
+            TokenData::UpperIdent | TokenData::LowerIdent => self.path_ident().map(ExprKind::Ident),
             TokenData::LPar => self.parenthesis(Self::expr).map(ExprKind::Parenthesis),
             _ => self.literal().map(ExprKind::Literal),
         }
@@ -611,9 +642,18 @@ impl Parser<'_> {
 
     pub fn when_expr(&mut self) -> Result<Box<Expr>> {
         let when = self.expect(TokenData::When)?;
-        let scrutinee = self.expr()?;
+        let scrutinee = self.expr_atom()?;
         let is = self.expect(TokenData::Is)?;
-        let cases = self.multiple(Self::when_case)?;
+
+        self.expect(TokenData::Begin)?;
+
+        let cases = self
+            .sep_by(TokenData::Sep, Self::when_case)?
+            .into_iter()
+            .map(|x| x.0)
+            .collect();
+
+        self.expect(TokenData::End)?;
 
         let range = self.with_span(when.range.clone());
 
@@ -809,25 +849,32 @@ impl Parser<'_> {
         }
     }
 
-    pub fn program(&mut self) -> Result<Program> {
-        let top_levels = self.multiple(Self::top_level)?;
-        let eof = self.expect(TokenData::Eof)?;
-        Ok(Program { top_levels, eof })
+    pub fn report(&mut self, err: ParserError) {
+        self.reporter.report(Diagnostic::new(err));
+        self.bump();
+    }
+
+    pub fn program(&mut self) -> Program {
+        let mut top_levels = vec![];
+
+        while !self.at(TokenData::Eof) {
+            match self.top_level() {
+                Ok(top_level) => top_levels.push(top_level),
+                Err(err) => {
+                    self.report(err);
+                    let errs = self.recover(&[TokenData::Let, TokenData::Type, TokenData::Use]);
+                    top_levels.push(TopLevel::Error(errs))
+                }
+            }
+        }
+
+        let eof = self.expect_recover(TokenData::Eof);
+        Program { top_levels, eof }
     }
 }
 
-pub fn parse(
-    lexer: Lexer<'_>,
-    file: Id<File>,
-    reporter: &mut (dyn Reporter + 'static),
-) -> Option<Program> {
-    let result = Parser::new(lexer, file).program();
+pub fn parse(lexer: Lexer<'_>, file: Id<File>, reporter: Report) -> Program {
+    let result = Parser::new(lexer, file, reporter).program();
 
-    match result {
-        Ok(program) => Some(program),
-        Err(err) => {
-            reporter.report(Box::new(err));
-            None
-        }
-    }
+    result
 }

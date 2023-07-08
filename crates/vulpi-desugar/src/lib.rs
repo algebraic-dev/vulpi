@@ -1,25 +1,26 @@
 use std::{collections::HashMap, ops::Range};
 
 use vulpi_location::{Byte, Location, Spanned};
-use vulpi_report::Reporter;
+use vulpi_report::{Diagnostic, Report};
 use vulpi_storage::id::{File, Id};
 use vulpi_storage::interner::Symbol;
 use vulpi_syntax::{concrete, r#abstract as abs};
 
 pub mod error;
 
-pub struct DesugarCtx<'a> {
+pub struct DesugarCtx {
     program: abs::Program,
     right_now: Option<Symbol>,
     let_decls: HashMap<Symbol, Vec<abs::LetCase>>,
-    reporter: &'a mut dyn Reporter,
+    reporter: Report,
     id: Id<File>,
 }
 
-impl<'a> DesugarCtx<'a> {
-    pub fn new(reporter: &'a mut dyn Reporter, file: Id<File>) -> Self {
+impl DesugarCtx {
+    pub fn new(reporter: Report, file: Id<File>) -> Self {
         Self {
             program: abs::Program {
+                id: None,
                 uses: Default::default(),
                 types: Default::default(),
                 lets: Default::default(),
@@ -32,7 +33,7 @@ impl<'a> DesugarCtx<'a> {
     }
 
     pub fn report_error(&mut self, error_kind: error::ErrorKind, range: Range<Byte>) {
-        self.reporter.report(Box::new(error::Error {
+        self.reporter.report(Diagnostic::new(error::Error {
             kind: error_kind,
             location: Location::new(self.id, range),
         }));
@@ -83,7 +84,7 @@ impl Desugar for concrete::Ident {
     type Output = abs::Ident;
 
     fn desugar(&self, _: &mut DesugarCtx) -> Self::Output {
-        abs::Ident(self.0.data.data.clone())
+        abs::Ident(self.0.data.data.clone(), self.0.range.clone())
     }
 }
 
@@ -91,7 +92,7 @@ impl Desugar for concrete::Upper {
     type Output = abs::Ident;
 
     fn desugar(&self, _: &mut DesugarCtx) -> Self::Output {
-        abs::Ident(self.0.data.data.clone())
+        abs::Ident(self.0.data.data.clone(), self.0.range.clone())
     }
 }
 
@@ -99,7 +100,7 @@ impl Desugar for concrete::Lower {
     type Output = abs::Ident;
 
     fn desugar(&self, _: &mut DesugarCtx) -> Self::Output {
-        abs::Ident(self.0.data.data.clone())
+        abs::Ident(self.0.data.data.clone(), self.0.range.clone())
     }
 }
 
@@ -174,23 +175,31 @@ impl Desugar for concrete::LiteralKind {
         use concrete::LiteralKind as ConcreteLit;
 
         match self {
-            ConcreteLit::String(s) => AbstractLit::String(abs::Ident(s.data.data.clone())),
-            ConcreteLit::Integer(s) => AbstractLit::Integer(abs::Ident(s.data.data.clone())),
-            ConcreteLit::Float(s) => AbstractLit::Float(abs::Ident(s.data.data.clone())),
-            ConcreteLit::Char(s) => AbstractLit::Char(abs::Ident(s.data.data.clone())),
+            ConcreteLit::String(s) => {
+                AbstractLit::String(abs::Ident(s.data.data.clone(), s.range.clone()))
+            }
+            ConcreteLit::Integer(s) => {
+                AbstractLit::Integer(abs::Ident(s.data.data.clone(), s.range.clone()))
+            }
+            ConcreteLit::Float(s) => {
+                AbstractLit::Float(abs::Ident(s.data.data.clone(), s.range.clone()))
+            }
+            ConcreteLit::Char(s) => {
+                AbstractLit::Char(abs::Ident(s.data.data.clone(), s.range.clone()))
+            }
             ConcreteLit::Unit(_) => AbstractLit::Unit,
         }
     }
 }
 
 impl<T: Desugar<Output = abs::Ident>> Desugar for concrete::Path<T> {
-    type Output = abs::Path;
+    type Output = abs::Qualified;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        abs::Path {
+        abs::Qualified {
             segments: self.segments.iter().map(|x| x.0.desugar(ctx)).collect(),
             last: self.last.desugar(ctx),
-            span: self.span.clone(),
+            range: self.span.clone(),
         }
     }
 }
@@ -412,6 +421,7 @@ impl Desugar for concrete::Statement {
         match self {
             ConcreteStatement::Let(d) => AbstractStatement::Let(d.desugar(ctx)),
             ConcreteStatement::Expr(d) => AbstractStatement::Expr(d.desugar(ctx)),
+            ConcreteStatement::Error(_) => AbstractStatement::Error,
         }
     }
 }
@@ -466,13 +476,14 @@ impl Desugar for concrete::LetDecl {
         let is_const = patterns.is_empty();
 
         let case = abs::LetCase {
+            name_range: self.name.0.range.clone(),
             patterns,
             body: Box::new(self.expr.desugar(ctx)),
         };
 
         if let Some(exists) = ctx.let_decls.get_mut(&name) {
             if is_const {
-                ctx.reporter.report(Box::new(error::Error {
+                ctx.reporter.report(Diagnostic::new(error::Error {
                     kind: error::ErrorKind::Redeclaration(name.clone()),
                     location: Location::new(ctx.id, self.name.0.range.clone()),
                 }))
@@ -481,7 +492,7 @@ impl Desugar for concrete::LetDecl {
             if Some(name.clone()) == ctx.right_now {
                 exists.push(case);
             } else {
-                ctx.reporter.report(Box::new(error::Error {
+                ctx.reporter.report(Diagnostic::new(error::Error {
                     kind: error::ErrorKind::OutOfOrderDefinition(name.clone()),
                     location: Location::new(ctx.id, self.name.0.range.clone()),
                 }))
@@ -506,10 +517,10 @@ impl Desugar for concrete::Constructor {
 }
 
 impl Desugar for concrete::SumDecl {
-    type Output = abs::SumDecl;
+    type Output = abs::EnumDecl;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        abs::SumDecl {
+        abs::EnumDecl {
             constructors: self.constructors.iter().map(|x| x.desugar(ctx)).collect(),
         }
     }
@@ -544,7 +555,7 @@ impl Desugar for concrete::TypeDef {
         use concrete::TypeDef as ConcreteTypeDef;
 
         match self {
-            ConcreteTypeDef::Sum(s) => AbstractTypeDef::Sum(s.desugar(ctx)),
+            ConcreteTypeDef::Sum(s) => AbstractTypeDef::Enum(s.desugar(ctx)),
             ConcreteTypeDef::Record(s) => AbstractTypeDef::Record(s.desugar(ctx)),
             ConcreteTypeDef::Synonym(s) => AbstractTypeDef::Synonym(s.desugar(ctx)),
         }
@@ -556,6 +567,7 @@ impl Desugar for concrete::TypeDecl {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::TypeDecl {
+            namespace: None,
             name: self.name.desugar(ctx),
             params: self.binders.iter().map(|x| x.desugar(ctx)).collect(),
             def: self.def.desugar(ctx),
@@ -564,7 +576,7 @@ impl Desugar for concrete::TypeDecl {
 }
 
 impl Desugar for concrete::UseAlias {
-    type Output = abs::Path;
+    type Output = abs::Qualified;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         self.alias.desugar(ctx)
@@ -597,16 +609,13 @@ impl Desugar for concrete::Program {
                     let desugared = use_.desugar(ctx);
                     ctx.program.uses.push(desugared);
                 }
+                _ => (),
             }
         }
     }
 }
 
-pub fn desugar(
-    concrete: concrete::Program,
-    reporter: &mut (dyn Reporter + 'static),
-    file: Id<File>,
-) -> abs::Program {
+pub fn desugar(concrete: concrete::Program, reporter: Report, file: Id<File>) -> abs::Program {
     let mut ctx = DesugarCtx::new(reporter, file);
     concrete.desugar(&mut ctx);
 
@@ -614,7 +623,7 @@ pub fn desugar(
         .let_decls
         .into_iter()
         .map(|(name, value)| abs::LetDecl {
-            name: abs::Ident(name),
+            name: abs::Ident(name, value[0].name_range.clone()),
             cases: value,
         })
         .collect();

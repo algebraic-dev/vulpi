@@ -4,22 +4,17 @@
 use std::io::stderr;
 use std::path::PathBuf;
 
-use vulpi_desugar::desugar;
-use vulpi_parser::parse;
 use vulpi_report::renderer::{Classic, Renderer};
-use vulpi_report::Reporter;
-use vulpi_storage::id::{File, Id};
+use vulpi_report::{Report, Reporter};
+use vulpi_resolver::context;
 use vulpi_storage::vfs::FileSystem;
-use vulpi_tree::Show;
 
 pub mod error;
 pub mod module;
 
-pub struct Config {}
-
-pub struct Instance<P> {
-    pub file_system: Box<dyn FileSystem<P, String>>,
-    pub reporter: Box<dyn Reporter>,
+pub struct Instance {
+    pub resolver: context::Context,
+    pub reporter: Report,
 }
 
 pub enum Exit {
@@ -27,21 +22,25 @@ pub enum Exit {
     Err,
 }
 
-impl Instance<PathBuf> {
+impl Instance {
     pub fn new(
         file_system: impl FileSystem<PathBuf, String> + 'static,
         reporter: impl Reporter + 'static,
     ) -> Self {
+        let reporter = Report::new(reporter);
         Self {
-            file_system: Box::new(file_system),
-            reporter: Box::new(reporter),
+            resolver: context::Context::new(file_system, reporter.clone()),
+            reporter,
         }
     }
 
-    pub fn render_errors(&mut self, file: Id<File>) {
-        let classic_renderer = Classic::new(&*self.file_system, std::env::current_dir().unwrap());
-        let diagnostics = self.reporter.diagnostics(file);
-        for diagnostic in diagnostics {
+    pub fn render_errors(&mut self) {
+        let classic_renderer = Classic::new(
+            &*self.resolver.file_system,
+            std::env::current_dir().unwrap(),
+        );
+
+        for diagnostic in self.reporter.all_diagnostics() {
             diagnostic
                 .render(&classic_renderer, &mut stderr().lock())
                 .unwrap();
@@ -49,22 +48,11 @@ impl Instance<PathBuf> {
     }
 
     pub fn compile(&mut self, source: PathBuf) -> Result<(), vulpi_storage::vfs::Error> {
-        let id = self.file_system.load(source)?;
-        let str = self.file_system.read(id)?;
+        let path = ["Main"].as_slice().into();
+        self.resolver.create_from_file(path, source)?;
 
-        let lexer = vulpi_parser::Lexer::new(str);
-
-        let Some(program) = parse(lexer, id, &mut *self.reporter) else {
-            self.render_errors(id);
-            return Ok(())
-        };
-
-        let resolved = desugar(program, &mut *self.reporter, id);
-
-        println!("{}", resolved.show());
-
-        if !self.reporter.diagnostics(id).is_empty() {
-            self.render_errors(id);
+        if self.reporter.has_errors() {
+            self.render_errors();
         }
 
         Ok(())

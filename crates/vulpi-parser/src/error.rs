@@ -12,7 +12,11 @@ pub enum ParserError {
 
 impl IntoDiagnostic for ParserError {
     fn message(&self) -> vulpi_report::Text {
-        "unexpected token".into()
+        match self {
+            ParserError::UnexpectedToken(token, _, _) => {
+                format!("unexpected token: {:?}", token.data).into()
+            }
+        }
     }
 
     fn markers(&self) -> Vec<vulpi_report::Marker> {

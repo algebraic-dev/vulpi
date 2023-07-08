@@ -2,11 +2,18 @@ use std::ops::Range;
 
 use vulpi_location::{Byte, Spanned};
 use vulpi_macros::Tree;
+use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 use vulpi_tree::{Show, TreeDisplay};
 
-#[derive(Debug)]
-pub struct Ident(pub Symbol);
+#[derive(Debug, Clone)]
+pub struct Ident(pub Symbol, pub Range<Byte>);
+
+impl Ident {
+    pub fn generate(symbol: Symbol) -> Self {
+        Self(symbol, Byte(0)..Byte(0))
+    }
+}
 
 impl Show for Ident {
     fn show(&self) -> vulpi_tree::TreeDisplay {
@@ -14,11 +21,11 @@ impl Show for Ident {
     }
 }
 
-#[derive(Debug, Tree)]
-pub struct Path {
+#[derive(Debug, Clone, Tree)]
+pub struct Qualified {
     pub segments: Vec<Ident>,
     pub last: Ident,
-    pub span: Range<Byte>,
+    pub range: Range<Byte>,
 }
 
 #[derive(Default, Tree, Debug)]
@@ -26,6 +33,7 @@ pub struct Effects {
     pub effects: Vec<Type>,
 }
 
+/// The arrow type `A -> B`
 #[derive(Tree, Debug)]
 pub struct TypeArrow {
     pub left: Box<Type>,
@@ -33,21 +41,24 @@ pub struct TypeArrow {
     pub right: Box<Type>,
 }
 
+/// The application type `A B`
 #[derive(Tree, Debug)]
 pub struct TypeApplication {
     pub left: Box<Type>,
     pub right: Vec<Type>,
 }
 
+/// The forall type `forall a b. A -> B`
 #[derive(Tree, Debug)]
 pub struct TypeForall {
     pub params: Vec<Ident>,
     pub body: Box<Type>,
 }
 
+/// The type kind `A`, `A -> B`, `forall a b. A -> B`
 #[derive(Tree, Debug)]
 pub enum TypeKind {
-    Upper(Path),
+    Upper(Qualified),
     Lower(Ident),
     Arrow(TypeArrow),
     Application(TypeApplication),
@@ -86,14 +97,14 @@ pub struct PatOr {
 
 #[derive(Tree, Debug)]
 pub struct PatApplication {
-    pub func: Path,
+    pub func: Qualified,
     pub args: Vec<Pattern>,
 }
 
 #[derive(Tree, Debug)]
 pub enum PatternKind {
     Wildcard,
-    Upper(Path),
+    Upper(Qualified),
     Lower(Ident),
     Literal(Literal),
     Annotation(PatAnnotation),
@@ -115,6 +126,7 @@ pub struct LetSttm {
 pub enum Statement {
     Let(LetSttm),
     Expr(Expr),
+    Error,
 }
 
 #[derive(Tree, Debug)]
@@ -205,7 +217,7 @@ pub struct LetExpr {
 pub enum ExprKind {
     Lambda(LambdaExpr),
     Application(ApplicationExpr),
-    Ident(Path),
+    Ident(Qualified),
     Acessor(AcessorExpr),
     Binary(BinaryExpr),
     Let(LetExpr),
@@ -222,6 +234,7 @@ pub type Expr = Spanned<ExprKind>;
 
 #[derive(Tree, Debug)]
 pub struct LetCase {
+    pub name_range: Range<Byte>,
     pub patterns: Vec<(Pattern, Type)>,
     pub body: Box<Expr>,
 }
@@ -239,7 +252,7 @@ pub struct Constructor {
 }
 
 #[derive(Tree, Debug)]
-pub struct SumDecl {
+pub struct EnumDecl {
     pub constructors: Vec<Constructor>,
 }
 
@@ -256,13 +269,14 @@ pub struct RecordDecl {
 
 #[derive(Tree, Debug)]
 pub enum TypeDef {
-    Sum(SumDecl),
+    Enum(EnumDecl),
     Record(RecordDecl),
     Synonym(Type),
 }
 
 #[derive(Tree, Debug)]
 pub struct TypeDecl {
+    pub namespace: Option<Id<id::Namespace>>,
     pub name: Ident,
     pub params: Vec<Ident>,
     pub def: TypeDef,
@@ -270,12 +284,13 @@ pub struct TypeDecl {
 
 #[derive(Tree, Debug)]
 pub struct UseDecl {
-    pub path: Path,
-    pub alias: Option<Path>,
+    pub path: Qualified,
+    pub alias: Option<Qualified>,
 }
 
 #[derive(Tree, Debug)]
 pub struct Program {
+    pub id: Option<Id<id::Namespace>>,
     pub uses: Vec<UseDecl>,
     pub types: Vec<TypeDecl>,
     pub lets: Vec<LetDecl>,

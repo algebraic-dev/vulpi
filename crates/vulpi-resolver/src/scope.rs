@@ -133,6 +133,7 @@ impl Scopeable for scopable::Module {
             &kaleidoscope.types,
             &kaleidoscope.functions,
             &kaleidoscope.constructors,
+            &kaleidoscope.type_variables,
         ])
     }
 
@@ -141,16 +142,17 @@ impl Scopeable for scopable::Module {
             &mut kaleidoscope.types,
             &mut kaleidoscope.functions,
             &mut kaleidoscope.constructors,
+            &mut kaleidoscope.type_variables,
         ])
     }
 }
 
 impl Kaleidoscope {
-    fn push<T: Scopeable>(&mut self) {
+    pub fn push<T: Scopeable>(&mut self) {
         T::scope_mut(self).push();
     }
 
-    fn pop<T: Scopeable>(&mut self) {
+    pub fn pop<T: Scopeable>(&mut self) {
         T::scope_mut(self).pop();
     }
 

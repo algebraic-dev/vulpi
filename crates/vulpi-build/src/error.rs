@@ -6,6 +6,7 @@ use vulpi_storage::id::{File, Id};
 #[derive(Default)]
 pub struct HashReporter {
     map: HashMap<Id<File>, Vec<Diagnostic>>,
+    errored: bool,
 }
 
 impl HashReporter {
@@ -16,6 +17,7 @@ impl HashReporter {
 
 impl Reporter for HashReporter {
     fn report(&mut self, diagnostic: Diagnostic) {
+        self.errored = true;
         self.map
             .entry(diagnostic.location().file)
             .or_default()
@@ -28,5 +30,13 @@ impl Reporter for HashReporter {
 
     fn clear(&mut self, file: Id<File>) {
         self.map.remove(&file);
+    }
+
+    fn all_diagnostics(&self) -> Vec<Diagnostic> {
+        self.map.values().flatten().cloned().collect()
+    }
+
+    fn has_errors(&self) -> bool {
+        self.errored
     }
 }

@@ -159,6 +159,7 @@ pub struct LetSttm {
 pub enum Statement {
     Let(LetSttm),
     Expr(Box<Expr>),
+    Error(Vec<Token>),
 }
 
 #[derive(Debug, Tree)]
@@ -365,6 +366,7 @@ pub enum TopLevel {
     Let(Box<LetDecl>),
     Type(Box<TypeDecl>),
     Use(Box<UseDecl>),
+    Error(Vec<Token>),
 }
 
 #[derive(Debug, Tree)]

@@ -6,4 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+
+vulpi-tree = { path = "../vulpi-tree" }
+vulpi-macros = { path = "../vulpi-macros" }
+
 lazy_static = "1.4.0"
+petgraph = "0.6.3"

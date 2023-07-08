@@ -3,8 +3,41 @@
 
 use std::marker::PhantomData;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+use petgraph::stable_graph::IndexType;
+use vulpi_macros::Tree;
+use vulpi_tree::{Show, TreeDisplay};
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Id<T: Identifier>(usize, PhantomData<T>);
+
+impl<T: Identifier> Show for Id<T> {
+    fn show(&self) -> vulpi_tree::TreeDisplay {
+        TreeDisplay::label(&format!("{}:{}", std::any::type_name::<T>(), self.0))
+    }
+}
+
+unsafe impl<
+        T: Identifier
+            + std::fmt::Debug
+            + std::cmp::Ord
+            + std::hash::Hash
+            + std::default::Default
+            + Copy
+            + 'static,
+    > IndexType for Id<T>
+{
+    fn new(x: usize) -> Self {
+        Self::new(x)
+    }
+
+    fn index(&self) -> usize {
+        self.0
+    }
+
+    fn max() -> Self {
+        Self::new(usize::max_value())
+    }
+}
 
 impl<T: Identifier> Id<T> {
     pub(crate) fn new(id: usize) -> Self {
@@ -12,14 +45,12 @@ impl<T: Identifier> Id<T> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Type {}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Namespace {}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum File {}
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Tree)]
+pub struct Type;
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Tree)]
+pub struct Namespace;
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Tree)]
+pub struct File;
 
 mod sealed {
     pub trait Identifier {}
