@@ -3,16 +3,37 @@
 
 use std::marker::PhantomData;
 
-use petgraph::stable_graph::IndexType;
+use petgraph::stable_graph::{self, IndexType};
 use vulpi_macros::Tree;
 use vulpi_tree::{Show, TreeDisplay};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Id<T: Identifier>(usize, PhantomData<T>);
 
+impl<T: Identifier> Id<T> {
+    pub fn index(&self) -> usize {
+        self.0
+    }
+}
+
 impl<T: Identifier> Show for Id<T> {
     fn show(&self) -> vulpi_tree::TreeDisplay {
         TreeDisplay::label(&format!("{}:{}", std::any::type_name::<T>(), self.0))
+    }
+}
+
+impl<
+        T: Identifier
+            + std::fmt::Debug
+            + std::cmp::Ord
+            + std::hash::Hash
+            + std::default::Default
+            + Copy
+            + 'static,
+    > From<stable_graph::NodeIndex<Id<T>>> for Id<T>
+{
+    fn from(val: stable_graph::NodeIndex<Id<T>>) -> Self {
+        Id(val.index(), PhantomData)
     }
 }
 
@@ -40,7 +61,7 @@ unsafe impl<
 }
 
 impl<T: Identifier> Id<T> {
-    pub(crate) fn new(id: usize) -> Self {
+    pub fn new(id: usize) -> Self {
         Self(id, PhantomData)
     }
 }

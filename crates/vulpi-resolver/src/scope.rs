@@ -1,11 +1,10 @@
-use vulpi_storage::namespace::Name;
-
 pub mod scopable {
     pub enum Type {}
     pub enum Function {}
     pub enum Constructor {}
     pub enum Variable {}
     pub enum TypeVariable {}
+    pub enum PatternVariable {}
     pub enum Module {}
 
     mod sealed {
@@ -14,7 +13,7 @@ pub mod scopable {
         impl Scopable for super::Function {}
         impl Scopable for super::Constructor {}
         impl Scopable for super::Variable {}
-        impl Scopable for super::TypeVariable {}
+        impl Scopable for super::PatternVariable {}
         impl Scopable for super::Module {}
     }
 
@@ -23,6 +22,8 @@ pub mod scopable {
 }
 
 pub use scopable::Scopable;
+
+use crate::Name;
 
 #[derive(Clone)]
 pub struct Scope {
@@ -65,6 +66,7 @@ pub struct Kaleidoscope {
     constructors: Scope,
     variables: Scope,
     type_variables: Scope,
+    pattern_variables: Scope,
 }
 
 pub trait Scoped {
@@ -124,6 +126,16 @@ impl Scopeable for scopable::TypeVariable {
 
     fn scope_mut(kaleidoscope: &mut Kaleidoscope) -> ScopesMut<'_> {
         ScopesMut(vec![&mut kaleidoscope.type_variables])
+    }
+}
+
+impl Scopeable for scopable::PatternVariable {
+    fn scope(kaleidoscope: &Kaleidoscope) -> Scopes<'_> {
+        Scopes(vec![&kaleidoscope.pattern_variables])
+    }
+
+    fn scope_mut(kaleidoscope: &mut Kaleidoscope) -> ScopesMut<'_> {
+        ScopesMut(vec![&mut kaleidoscope.pattern_variables])
     }
 }
 

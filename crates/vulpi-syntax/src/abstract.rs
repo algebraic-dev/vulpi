@@ -246,14 +246,14 @@ pub struct LetDecl {
 }
 
 #[derive(Tree, Debug)]
-pub struct Constructor {
+pub struct Variant {
     pub name: Ident,
     pub args: Vec<Type>,
 }
 
 #[derive(Tree, Debug)]
 pub struct EnumDecl {
-    pub constructors: Vec<Constructor>,
+    pub variants: Vec<Variant>,
 }
 
 #[derive(Tree, Debug)]
@@ -285,7 +285,7 @@ pub struct TypeDecl {
 #[derive(Tree, Debug)]
 pub struct UseDecl {
     pub path: Qualified,
-    pub alias: Option<Qualified>,
+    pub alias: Option<Ident>,
 }
 
 #[derive(Tree, Debug)]

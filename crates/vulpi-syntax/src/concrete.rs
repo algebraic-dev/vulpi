@@ -351,7 +351,7 @@ pub struct TypeDecl {
 #[derive(Debug, Tree)]
 pub struct UseAlias {
     pub as_: Token,
-    pub alias: Path<Upper>,
+    pub alias: Upper,
 }
 
 #[derive(Debug, Tree)]

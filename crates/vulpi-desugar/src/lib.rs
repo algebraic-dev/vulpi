@@ -506,10 +506,10 @@ impl Desugar for concrete::LetDecl {
 }
 
 impl Desugar for concrete::Constructor {
-    type Output = abs::Constructor;
+    type Output = abs::Variant;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        abs::Constructor {
+        abs::Variant {
             name: self.name.desugar(ctx),
             args: self.args.iter().map(|x| x.desugar(ctx)).collect(),
         }
@@ -521,7 +521,7 @@ impl Desugar for concrete::SumDecl {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::EnumDecl {
-            constructors: self.constructors.iter().map(|x| x.desugar(ctx)).collect(),
+            variants: self.constructors.iter().map(|x| x.desugar(ctx)).collect(),
         }
     }
 }
@@ -576,7 +576,7 @@ impl Desugar for concrete::TypeDecl {
 }
 
 impl Desugar for concrete::UseAlias {
-    type Output = abs::Qualified;
+    type Output = abs::Ident;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         self.alias.desugar(ctx)
@@ -615,7 +615,7 @@ impl Desugar for concrete::Program {
     }
 }
 
-pub fn desugar(concrete: concrete::Program, reporter: Report, file: Id<File>) -> abs::Program {
+pub fn desugar(concrete: concrete::Program, file: Id<File>, reporter: Report) -> abs::Program {
     let mut ctx = DesugarCtx::new(reporter, file);
     concrete.desugar(&mut ctx);
 

@@ -410,8 +410,12 @@ impl Parser<'_> {
     pub fn pattern_application(&mut self) -> Result<Box<Pattern>> {
         if self.at(TokenData::UpperIdent) {
             self.spanned(|this| {
-                this.pattern_application_kind()
-                    .map(PatternKind::Application)
+                let result = this.pattern_application_kind()?;
+                if result.args.is_empty() {
+                    Ok(PatternKind::Upper(result.func))
+                } else {
+                    Ok(PatternKind::Application(result))
+                }
             })
             .map(Box::new)
         } else {
@@ -823,7 +827,7 @@ impl Parser<'_> {
 
     pub fn use_alias(&mut self) -> Result<UseAlias> {
         let as_ = self.expect(TokenData::As)?;
-        let alias = self.path_upper()?;
+        let alias = self.upper()?;
         Ok(UseAlias { as_, alias })
     }
 

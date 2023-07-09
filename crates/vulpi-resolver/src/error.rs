@@ -1,15 +1,18 @@
 use vulpi_location::Location;
 use vulpi_report::IntoDiagnostic;
-use vulpi_storage::{
-    interner::Symbol,
-    namespace::{Path, Qualified},
-};
+use vulpi_storage::interner::Symbol;
+
+use crate::{Path, Qualified};
 
 pub enum ResolverErrorKind {
     CantFindModule(Path),
     DuplicatedTypeVariable(Symbol),
     TypeVariableNotInScope(Symbol),
     UnboundType(Qualified),
+    DuplicatePatternVariable(Symbol),
+    Ambiguity(Path),
+    CantFindType(Qualified),
+    CantFindValue(Qualified),
 }
 
 pub struct ResolverError {
@@ -29,7 +32,13 @@ impl IntoDiagnostic for ResolverError {
             ResolverErrorKind::TypeVariableNotInScope(name) => {
                 format!("type variable `{}` is not in scope", name.get()).into()
             }
+            ResolverErrorKind::DuplicatePatternVariable(name) => {
+                format!("duplicated pattern variable `{}`", name.get()).into()
+            }
+            ResolverErrorKind::CantFindType(name) => format!("can't find type `{}`", name).into(),
+            ResolverErrorKind::CantFindValue(name) => format!("can't find `{}`", name).into(),
             ResolverErrorKind::UnboundType(name) => format!("unbound type `{}`", name).into(),
+            ResolverErrorKind::Ambiguity(name) => format!("ambiguous name `{}`", name).into(),
         }
     }
 
