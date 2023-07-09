@@ -3,8 +3,3 @@ use Main
 type Result a b = 
     | Ok a 
     | Err b
-
-let a (Ok a : Result Int Int)  = a
-
-let a (Err a : Result Int Int) = a
-

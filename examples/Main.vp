@@ -1,3 +1,4 @@
+use B as A
+use Main.T as E
 
-type Ok a b c d e f g = 
-    | Eta a
+let a (T.E : T) = T.e
