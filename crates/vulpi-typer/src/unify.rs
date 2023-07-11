@@ -1,8 +1,13 @@
+//! The unifier: this is the part of the type checker that is responsible for making two types equal
+//! to each other. It is also responsible for detecting cycles in the type graph using the [occur]
+//! function that checks if a type occurs in another type and other things.
+
 use crate::{
     context::Env,
     types::{Hole, HoleInner, Mono, Type},
 };
 
+/// Unify two types together (make them equal).
 pub fn unify(env: Env, left: Type, right: Type) {
     match (&*left, &*right) {
         (Mono::Variable(x), Mono::Variable(y)) if x == y => (),
@@ -18,13 +23,13 @@ pub fn unify(env: Env, left: Type, right: Type) {
             unify(env, r.clone(), r1.clone());
         }
 
-        _ => panic!("type mismatch"),
+        _ => {}
     }
 }
 
 pub fn unify_hole(env: Env, hole: Hole, val: Type, flip: bool) {
     match hole.get() {
-        HoleInner::Unbound(_hole_level) => {
+        HoleInner::Unbound(_, _hole_level) => {
             if occur(hole.clone(), val.clone()) {
                 panic!("occur checking")
             } else {

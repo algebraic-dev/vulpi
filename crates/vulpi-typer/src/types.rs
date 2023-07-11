@@ -1,6 +1,10 @@
+use std::fmt::Display;
+use std::ops;
 use std::{cell::RefCell, rc::Rc};
 
 use vulpi_storage::interner::Symbol;
+
+use crate::context::Env;
 
 /// A mono type that is reference counted.
 pub type Type = Rc<Mono>;
@@ -12,7 +16,7 @@ pub enum Mono {
     Variable(Symbol),
 
     /// A type that is bound to some scheme. e.g. `a`
-    Generalized(Symbol),
+    Generalized(usize),
 
     /// A hole is a type that is open to unification.
     Hole(Hole),
@@ -20,10 +24,31 @@ pub enum Mono {
     /// A function type that takes a type and returns a type `A -> B`.
     Function(Type, Type),
 
-    /// Error type :)
+    /// Error type. It's a sentinel value that unifies with everything.
     Error,
 }
 
+impl Mono {
+    fn fmt_with_context(
+        &self,
+        ctx: &[Symbol],
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        match self {
+            Mono::Variable(symbol) => write!(f, "{}", symbol.get()),
+            Mono::Generalized(n) => write!(f, "{}", ctx[*n].get()),
+            Mono::Hole(hole) => hole.get().fmt_with_context(ctx, f),
+            Mono::Function(left, right) => write!(f, "({} -> {})", left, right),
+            Mono::Error => write!(f, "ERROR"),
+        }
+    }
+}
+
+impl Display for Mono {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt_with_context(&[], f)
+    }
+}
 /// A scheme is a type that is polymorphic and binds variables.
 #[derive(Debug, Clone)]
 pub struct Scheme {
@@ -34,15 +59,62 @@ pub struct Scheme {
     pub monotype: Type,
 }
 
+impl Scheme {
+    pub fn new(variables: Vec<Symbol>, monotype: Type) -> Self {
+        Self {
+            variables,
+            monotype,
+        }
+    }
+}
+
+impl Display for Scheme {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.monotype.fmt_with_context(&self.variables, f)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct Level(usize);
+pub struct Level(pub usize);
+
+impl Level {
+    pub fn inc(self) -> Self {
+        Self(self.0 + 1)
+    }
+
+    pub fn dec(self) -> Self {
+        Self(self.0 - 1)
+    }
+}
 
 /// The insides of a hole. When it is empty it carries the level that it was created at. When it is
 /// filled it carries the type that it was filled with.
 #[derive(Debug, Clone)]
 pub enum HoleInner {
-    Unbound(Level),
+    Unbound(Symbol, Level),
     Link(Type),
+}
+
+impl HoleInner {
+    pub fn fmt_with_context(
+        &self,
+        ctx: &[Symbol],
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        match self {
+            HoleInner::Unbound(n, l) => write!(f, "!{}~{}", n.get(), l.0),
+            HoleInner::Link(t) => {
+                write!(f, "^")?;
+                t.fmt_with_context(ctx, f)
+            }
+        }
+    }
+}
+
+impl Display for HoleInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt_with_context(&[], f)
+    }
 }
 
 /// A type that is open to unification
@@ -50,8 +122,8 @@ pub enum HoleInner {
 pub struct Hole(Rc<RefCell<HoleInner>>);
 
 impl Hole {
-    pub fn new(level: Level) -> Self {
-        Self(Rc::new(RefCell::new(HoleInner::Unbound(level))))
+    pub fn new(name: Symbol, level: Level) -> Self {
+        Self(Rc::new(RefCell::new(HoleInner::Unbound(name, level))))
     }
 
     pub fn get(&self) -> HoleInner {
@@ -60,6 +132,10 @@ impl Hole {
 
     pub fn get_mut(&self) -> std::cell::RefMut<'_, HoleInner> {
         self.0.borrow_mut()
+    }
+
+    pub fn fill(&self, t: Type) {
+        *self.0.borrow_mut() = HoleInner::Link(t);
     }
 }
 
@@ -78,7 +154,7 @@ pub trait Types {
 impl Types for Hole {
     fn free_vars(&self) -> im_rc::HashSet<Symbol> {
         match &*self.0.borrow_mut() {
-            HoleInner::Unbound(_) => Default::default(),
+            HoleInner::Unbound(_, _) => Default::default(),
             HoleInner::Link(t) => t.free_vars(),
         }
     }
@@ -110,15 +186,35 @@ impl Types for Scheme {
     }
 }
 
+impl Mono {
+    pub(crate) fn instantiate_with(self: Type, substitute: &[Type]) -> Type {
+        match &&*self {
+            Mono::Generalized(n) => substitute[*n].clone(),
+            Mono::Hole(hole) => match hole.get() {
+                HoleInner::Unbound(_, _) => self.clone(),
+                HoleInner::Link(f) => f.instantiate_with(substitute),
+            },
+            Mono::Function(l, r) => {
+                let l = l.clone().instantiate_with(substitute);
+                let r = r.clone().instantiate_with(substitute);
+                Type::new(Mono::Function(l, r))
+            }
+            Mono::Error => self.clone(),
+            Mono::Variable(_) => self.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn two_holes_are_the_same() {
         use super::*;
 
-        let hole1 = Hole::new(Level(0));
-        let hole2 = Hole::new(Level(0));
+        let hole1 = Hole::new(Symbol::intern("a"), Level(0));
+        let hole2 = Hole::new(Symbol::intern("a"), Level(0));
 
-        assert_eq!(hole1, hole2);
+        assert_eq!(hole1, hole1.clone());
+        assert_ne!(hole1, hole2);
     }
 }

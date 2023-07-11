@@ -7,5 +7,7 @@ edition = "2021"
 
 [dependencies]
 im-rc = "15.1.0"
+
 vulpi-storage = { path = "../vulpi-storage" }
 vulpi-report = { path = "../vulpi-report" }
+vulpi-location = { path = "../vulpi-location" }
