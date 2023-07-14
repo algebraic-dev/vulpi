@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 
 use petgraph::stable_graph::{self, IndexType};
 use vulpi_macros::Tree;
-use vulpi_tree::{Show, TreeDisplay};
+use vulpi_show::{Show, TreeDisplay};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Id<T: Identifier>(usize, PhantomData<T>);
@@ -17,7 +17,7 @@ impl<T: Identifier> Id<T> {
 }
 
 impl<T: Identifier> Show for Id<T> {
-    fn show(&self) -> vulpi_tree::TreeDisplay {
+    fn show(&self) -> vulpi_show::TreeDisplay {
         TreeDisplay::label(&format!("{}:{}", std::any::type_name::<T>(), self.0))
     }
 }

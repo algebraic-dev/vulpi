@@ -2,9 +2,9 @@ use std::ops::Range;
 
 use vulpi_location::{Byte, Spanned};
 use vulpi_macros::Tree;
+use vulpi_show::{Show, TreeDisplay};
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
-use vulpi_tree::{Show, TreeDisplay};
 
 #[derive(Debug, Clone)]
 pub struct Ident(pub Symbol, pub Range<Byte>);
@@ -16,7 +16,7 @@ impl Ident {
 }
 
 impl Show for Ident {
-    fn show(&self) -> vulpi_tree::TreeDisplay {
+    fn show(&self) -> vulpi_show::TreeDisplay {
         TreeDisplay::label(&self.0.get())
     }
 }

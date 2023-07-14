@@ -1,14 +1,10 @@
 use clap::Parser;
-use std::{
-    io::{stderr, stdout},
-    path::PathBuf,
-};
+use std::{io::stderr, path::PathBuf};
+
 use vulpi_build::error::HashReporter;
 use vulpi_parser::{parse, Lexer};
-use vulpi_report::{
-    renderer::{Classic, Renderer},
-    Report,
-};
+use vulpi_report::renderer::{Classic, Renderer};
+use vulpi_report::Report;
 use vulpi_storage::file_system::{real::RealFileSystem, FileSystem};
 
 #[derive(Parser)]

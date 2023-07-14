@@ -9,7 +9,7 @@ pub fn derive_helper_attr(item: TokenStream) -> TokenStream {
 
     let name;
     let mut sttms = vec![quote! {
-        use vulpi_tree::{TreeDisplay};
+        use vulpi_show::{TreeDisplay};
     }];
 
     let gen;
@@ -103,13 +103,13 @@ pub fn derive_helper_attr(item: TokenStream) -> TokenStream {
 
     for gen in &mut gen_changed.params {
         if let syn::GenericParam::Type(type_) = gen {
-            type_.bounds.push(syn::parse_quote!(vulpi_tree::Show));
+            type_.bounds.push(syn::parse_quote!(vulpi_show::Show));
         }
     }
 
     quote! {
-        impl #gen_changed vulpi_tree::Show for #name #gen {
-            fn show(&self) -> vulpi_tree::TreeDisplay {
+        impl #gen_changed vulpi_show::Show for #name #gen {
+            fn show(&self) -> vulpi_show::TreeDisplay {
                 #(#sttms)*
                 res
             }

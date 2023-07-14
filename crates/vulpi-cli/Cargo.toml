@@ -13,6 +13,6 @@ vulpi-report = { path = "../vulpi-report" }
 vulpi-storage = { path = "../vulpi-storage" }
 vulpi-parser = { path = "../vulpi-parser" }
 vulpi-syntax = { path = "../vulpi-syntax" }
-vulpi-tree = { path = "../vulpi-tree" }
+vulpi-show = { path = "../vulpi-show" }
 vulpi-desugar = { path = "../vulpi-desugar" }
 vulpi-build = { path = "../vulpi-build" }

@@ -10,4 +10,4 @@ edition = "2021"
 vulpi-location = { path = "../vulpi-location" }
 vulpi-macros = { path = "../vulpi-macros" }
 vulpi-storage = { path = "../vulpi-storage" }
-vulpi-tree = { path = "../vulpi-tree" }
+vulpi-show = { path = "../vulpi-show" }

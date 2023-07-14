@@ -3,8 +3,8 @@
 
 use std::ops::Range;
 
+use vulpi_show::{Show, TreeDisplay};
 use vulpi_storage::id::{File, Id};
-use vulpi_tree::{Show, TreeDisplay};
 
 /// A new-type for a usize. It's used to locate a byte inside a source code.
 #[derive(Debug, Clone)]

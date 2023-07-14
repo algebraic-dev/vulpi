@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 
-vulpi-tree = { path = "../vulpi-tree" }
+vulpi-show = { path = "../vulpi-show" }
 vulpi-macros = { path = "../vulpi-macros" }
 
 lazy_static = "1.4.0"

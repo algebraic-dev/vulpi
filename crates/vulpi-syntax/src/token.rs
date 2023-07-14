@@ -4,8 +4,8 @@
 use std::fmt::Display;
 
 use vulpi_location::Spanned;
+use vulpi_show::{Show, TreeDisplay};
 use vulpi_storage::interner::Symbol;
-use vulpi_tree::{Show, TreeDisplay};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenData {

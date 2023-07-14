@@ -1,4 +1,5 @@
 use B as A
 use Main.T as E
-
-let a (T.E : T) = T.e
+let a (T.E : T) = @
+let b = 2
+let c = @
