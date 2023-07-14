@@ -59,26 +59,32 @@ impl Env {
         }
     }
 
+    /// Adds a new variable to the environment.
     pub fn add_variable(&mut self, name: Symbol, scheme: Scheme) {
         self.variables.insert(name, scheme);
     }
 
+    /// Adds a new variable to the environment.
     pub fn add(&mut self, name: Symbol, mono: Type) {
         self.add_variable(name, Scheme::new(vec![], mono));
     }
 
+    /// Adds a new type variable to the environment.
     pub fn add_type_variable(&mut self, name: Symbol) {
         self.type_variables.insert(name);
     }
 
+    /// Checks if a variable is in scope.
     pub fn contains_type_variable(&self, name: Symbol) -> bool {
         self.type_variables.contains(&name)
     }
 
+    /// Gets a variable from the environment.
     pub fn get_variable(&self, name: Symbol) -> Option<&Scheme> {
         self.variables.get(&name)
     }
 
+    /// Reports a type error.
     pub fn report(&self, kind: TypeErrorKind) {
         self.reporter.report(Diagnostic::new(TypeError {
             location: self.location.clone(),
@@ -86,6 +92,7 @@ impl Env {
         }));
     }
 
+    /// Generates a new name for a type variable.
     pub fn new_name(&mut self) -> Symbol {
         let mut counter = self.counter.borrow_mut();
         let name = Symbol::intern(&format!("t{}", *counter));
@@ -93,10 +100,12 @@ impl Env {
         name
     }
 
+    /// Creates a new hole.
     pub fn new_hole(&mut self) -> Type {
         Type::new(Mono::Hole(Hole::new(self.new_name(), self.level)))
     }
 
+    /// Instantiates a scheme into a mono type.
     pub fn instantiate(&mut self, scheme: Scheme) -> Type {
         let new_vars = scheme
             .variables
@@ -107,6 +116,7 @@ impl Env {
         scheme.monotype.instantiate_with(&new_vars)
     }
 
+    /// Generalizes a type into a scheme.
     pub fn generalize(&mut self, typ: Type) -> Scheme {
         pub fn gen(ambient: Level, typ: Type, counter: &mut usize) {
             match &&*typ {

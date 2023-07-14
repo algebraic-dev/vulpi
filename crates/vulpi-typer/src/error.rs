@@ -23,10 +23,6 @@ impl IntoDiagnostic for TypeError {
         }
     }
 
-    fn markers(&self) -> Vec<vulpi_report::Marker> {
-        vec![]
-    }
-
     fn severity(&self) -> vulpi_report::Severity {
         vulpi_report::Severity::Error
     }

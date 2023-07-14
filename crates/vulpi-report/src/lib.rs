@@ -72,8 +72,6 @@ pub trait IntoDiagnostic {
 
     fn message(&self) -> Text;
 
-    fn markers(&self) -> Vec<Marker>;
-
     fn severity(&self) -> Severity;
 
     fn location(&self) -> Location;
@@ -97,10 +95,6 @@ impl Diagnostic {
 
     pub fn message(&self) -> Text {
         self.0.message()
-    }
-
-    pub fn markers(&self) -> Vec<Marker> {
-        self.0.markers()
     }
 
     pub fn severity(&self) -> Severity {

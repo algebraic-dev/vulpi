@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use vulpi_location::{Byte, Location};
-use vulpi_report::{IntoDiagnostic, Marker};
+use vulpi_report::IntoDiagnostic;
 use vulpi_storage::id::{File, Id};
 use vulpi_syntax::token::Token;
 
@@ -14,18 +14,7 @@ impl IntoDiagnostic for ParserError {
     fn message(&self) -> vulpi_report::Text {
         match self {
             ParserError::UnexpectedToken(token, _, _) => {
-                format!("unexpected token: {:?}", token.data).into()
-            }
-        }
-    }
-
-    fn markers(&self) -> Vec<vulpi_report::Marker> {
-        match self {
-            ParserError::UnexpectedToken(_, _, _) => {
-                vec![Marker {
-                    position: self.location(),
-                    subtitle: None,
-                }]
+                format!("unexpected token '{}'", token.data.get()).into()
             }
         }
     }
