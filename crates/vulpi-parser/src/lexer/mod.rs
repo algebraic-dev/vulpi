@@ -209,12 +209,16 @@ impl<'a> Lexer<'a> {
     fn classify_identifier(&mut self) -> TokenData {
         let data = &self.input[self.state.start..self.state.index];
         match data {
-            "let" => TokenData::Let,
-            "when" => TokenData::When,
             "is" => {
                 self.state.lex_state = LexState::PushLayout;
                 TokenData::Is
             }
+            "do" => {
+                self.state.lex_state = LexState::PushLayout;
+                TokenData::Do
+            }
+            "let" => TokenData::Let,
+            "when" => TokenData::When,
             "with" => TokenData::With,
             "if" => TokenData::If,
             "else" => TokenData::Else,
@@ -224,10 +228,6 @@ impl<'a> Lexer<'a> {
             "type" => TokenData::Type,
             "pub" => TokenData::Pub,
             "in" => TokenData::In,
-            "do" => {
-                self.state.lex_state = LexState::PushLayout;
-                TokenData::Do
-            }
             "forall" => TokenData::Forall,
             "_" => TokenData::Wildcard,
             _ => TokenData::LowerIdent,

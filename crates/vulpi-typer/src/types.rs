@@ -1,10 +1,7 @@
 use std::fmt::Display;
-use std::ops;
 use std::{cell::RefCell, rc::Rc};
 
 use vulpi_storage::interner::Symbol;
-
-use crate::context::Env;
 
 /// A mono type that is reference counted.
 pub type Type = Rc<Mono>;
@@ -74,6 +71,9 @@ impl Display for Scheme {
     }
 }
 
+/// The De Bruijin Level. This is used to track the level of a hole. When a hole is created it is
+/// created at a certain level. When it is filled it is filled with a type that is at the same level
+/// or higher.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Level(pub usize);
 
@@ -147,7 +147,9 @@ impl PartialEq for Hole {
 
 impl Eq for Hole {}
 
+/// Trait for things that exhibit type like behavior.
 pub trait Types {
+    /// Returns the free variables in the type.
     fn free_vars(&self) -> im_rc::HashSet<Symbol>;
 }
 

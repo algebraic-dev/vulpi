@@ -9,6 +9,10 @@ edition = "2021"
 
 clap = { version = "4.3.10", features = ["derive"] }
 
-vulpi-build = { path = "../vulpi-build" }
-vulpi-storage = { path = "../vulpi-storage" }
 vulpi-report = { path = "../vulpi-report" }
+vulpi-storage = { path = "../vulpi-storage" }
+vulpi-parser = { path = "../vulpi-parser" }
+vulpi-syntax = { path = "../vulpi-syntax" }
+vulpi-tree = { path = "../vulpi-tree" }
+vulpi-desugar = { path = "../vulpi-desugar" }
+vulpi-build = { path = "../vulpi-build" }

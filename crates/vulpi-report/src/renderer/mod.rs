@@ -28,7 +28,7 @@ impl LineGuide {
                 line_start = i + 1;
             }
 
-            line_end = i;
+            line_end = i + 1;
         }
 
         line_bytes.push((line_start, line_end));
@@ -135,17 +135,56 @@ impl<'a> Renderer<Classic<'a>> for Diagnostic {
         let range = self.location().range;
 
         let line_guide = LineGuide::new(content);
-        let range = line_guide.to_line_and_column(range.start).unwrap();
+
+        let start = line_guide.to_line_and_column(range.start).unwrap();
+        let end = line_guide.to_line_and_column(range.end).unwrap();
 
         write!(
             writer,
             "{}:{}:{}: ",
             relative.display(),
-            range.0 + 1,
-            range.1 + 1
+            start.0 + 1,
+            start.1 + 1
         )?;
 
         self.message().render(ctx, writer)?;
+
+        writeln!(writer)?;
+        writeln!(writer)?;
+
+        let is_inline = start.0 == end.0;
+
+        let lines = content.lines().collect::<Vec<_>>();
+
+        let minimum = start.0.saturating_sub(2);
+        let maximum = (end.0 + 2).min(lines.len());
+
+        for (i, line) in lines[minimum..maximum].iter().enumerate() {
+            let line_number = minimum + i + 1;
+
+            write!(writer, "  {:>3} | ", line_number)?;
+
+            if is_inline && line_number == start.0 + 1 {
+                let line = line.to_string();
+
+                writeln!(writer, "{}", line)?;
+
+                writeln!(
+                    writer,
+                    "      | {}{}",
+                    " ".repeat(start.1),
+                    "^".repeat(end.1 - start.1)
+                )?;
+            } else if is_inline && line_number == end.0 + 1 {
+                let mut line = line.to_string();
+
+                line.insert(end.1 + 1, '^');
+
+                writeln!(writer, "{}", line)?;
+            } else {
+                writeln!(writer, "{}", line)?;
+            }
+        }
 
         writeln!(writer)
     }
