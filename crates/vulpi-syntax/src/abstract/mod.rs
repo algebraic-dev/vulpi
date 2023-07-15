@@ -10,6 +10,7 @@ use vulpi_storage::interner::Symbol;
 
 use vulpi_macros::node_of;
 
+pub mod resolved;
 pub mod visitor;
 
 #[derive(Debug, Clone)]

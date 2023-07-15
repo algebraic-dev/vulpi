@@ -7,6 +7,12 @@ use std::sync::RwLock;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Symbol(usize);
 
+impl vulpi_show::Show for Symbol {
+    fn show(&self) -> vulpi_show::TreeDisplay {
+        vulpi_show::TreeDisplay::label(&self.get())
+    }
+}
+
 impl Symbol {
     pub fn intern(string: &str) -> Self {
         INTERNER.intern(string)

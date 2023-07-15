@@ -1,10 +1,16 @@
 #![allow(clippy::redundant_clone)]
 
 extern crate proc_macro;
+use std::collections::HashSet;
+
 use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Ident, Item, ItemStruct, ItemTrait};
+use syn::{
+    parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+    Ident, Item, ItemStruct, ItemTrait, Token,
+};
 
 #[proc_macro_derive(Tree, attributes(helper))]
 pub fn derive_helper_attr(item: TokenStream) -> TokenStream {
@@ -121,6 +127,19 @@ pub fn derive_helper_attr(item: TokenStream) -> TokenStream {
     .into()
 }
 
+struct Args {
+    pub vars: HashSet<Ident>,
+}
+
+impl Parse for Args {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let vars = Punctuated::<Ident, Token![,]>::parse_terminated(input)?;
+        Ok(Self {
+            vars: vars.into_iter().collect(),
+        })
+    }
+}
+
 #[proc_macro_attribute]
 pub fn node_of(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut parsed = syn::parse::<ItemStruct>(item).unwrap();
@@ -147,11 +166,13 @@ pub fn node_of(attr: TokenStream, item: TokenStream) -> TokenStream {
         fields.push(quote! { self.#num.accept(visitor); });
     }
 
-    let has_attr = if let Ok(ident) = syn::parse::<Ident>(attr) {
-        quote! {impl #ident for #name {}}
-    } else {
-        quote! {}
-    };
+    let parse = syn::parse::<Args>(attr);
+
+    let mut impls = Vec::new();
+
+    for ident in parse.unwrap().vars {
+        impls.push(quote! {impl #ident for #name {}})
+    }
 
     quote! {
         #parsed
@@ -162,7 +183,7 @@ pub fn node_of(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        #has_attr
+        #(#impls)*
 
         impl Walkable for #name {
             fn walk(&mut self, visitor: &mut dyn Visitor) {

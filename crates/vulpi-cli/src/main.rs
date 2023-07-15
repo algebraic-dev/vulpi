@@ -30,12 +30,6 @@ fn main() {
 
     let mut desugared = vulpi_desugar::desugar(concrete, file, reporter.clone());
 
-    println!("{}", desugared.show());
-
-    let mut test = visitor::Test {};
-
-    test.visit_program(&mut desugared);
-
     if reporter.has_errors() {
         eprintln!();
 

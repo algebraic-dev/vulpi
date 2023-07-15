@@ -1,4 +1,4 @@
-use super::*;
+use super::{resolved::ResolvedQualified, *};
 
 pub trait Walkable {
     fn walk(&mut self, visitor: &mut dyn Visitor);
@@ -54,6 +54,7 @@ pub trait Visitor {
     fn visit_use_decl_kind(&mut self, node: &mut UseDecl);
     fn visit_binder(&mut self, node: &mut Binder);
     fn visit_program(&mut self, node: &mut Program);
+    fn visit_resolved_qualified(&mut self, node: &mut ResolvedQualified);
 }
 
 impl<T> Visitor for T {
@@ -198,12 +199,7 @@ impl<T> Visitor for T {
     default fn visit_binder(&mut self, node: &mut Binder) {
         node.walk(self);
     }
-}
-
-pub struct Test;
-
-impl Visitor for Test {
-    default fn visit_ident(&mut self, node: &mut Ident) {
-        println!("{}", node.0.get())
+    default fn visit_resolved_qualified(&mut self, node: &mut ResolvedQualified) {
+        node.walk(self);
     }
 }
