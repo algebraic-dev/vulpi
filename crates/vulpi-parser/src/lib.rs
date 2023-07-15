@@ -452,27 +452,43 @@ impl Parser<'_> {
         })
     }
 
-    pub fn statement_kind(&mut self) -> Result<Statement> {
+    pub fn statement_kind(&mut self) -> Result<StatementKind> {
         match self.kind() {
-            TokenData::Let => self.let_sttm().map(Statement::Let),
-            _ => self.expr().map(Statement::Expr),
+            TokenData::Let => self.let_sttm().map(StatementKind::Let),
+            _ => self.expr().map(StatementKind::Expr),
         }
     }
 
     pub fn statement(&mut self) -> Statement {
-        match self.statement_kind() {
+        match self.spanned(Self::statement_kind) {
             Ok(ok) => ok,
             Err(err) => {
                 self.report(err);
                 let tkns = self.recover(&[TokenData::Sep, TokenData::End]);
-                Statement::Error(tkns)
+                Statement {
+                    range: tkns[0].range.clone(),
+                    data: StatementKind::Error(tkns),
+                }
             }
         }
     }
 
     pub fn block(&mut self) -> Result<Block> {
         self.expect(TokenData::Begin)?;
-        let statements = self.sep_by(TokenData::Sep, Self::statement_kind)?;
+        let mut statements = Vec::new();
+
+        while !self.at(TokenData::End) {
+            let stmt = self.statement();
+
+            let sep = if self.at(TokenData::Sep) {
+                Some(self.bump())
+            } else {
+                None
+            };
+
+            statements.push((stmt, sep));
+        }
+
         self.expect_or_pop_layout(TokenData::End)?;
         Ok(Block { statements })
     }

@@ -156,11 +156,13 @@ pub struct LetSttm {
 }
 
 #[derive(Debug, Tree)]
-pub enum Statement {
+pub enum StatementKind {
     Let(LetSttm),
     Expr(Box<Expr>),
     Error(Vec<Token>),
 }
+
+pub type Statement = Spanned<StatementKind>;
 
 #[derive(Debug, Tree)]
 pub struct Block {

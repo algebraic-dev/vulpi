@@ -17,6 +17,15 @@ pub struct Spanned<T> {
     pub range: Range<Byte>,
 }
 
+impl<T> Spanned<T> {
+    pub fn map<U>(&self, f: impl FnOnce(&T) -> U) -> Spanned<U> {
+        Spanned {
+            data: f(&self.data),
+            range: self.range.clone(),
+        }
+    }
+}
+
 impl<T: Show> Show for Spanned<T> {
     fn show(&self) -> TreeDisplay {
         self.data.show()

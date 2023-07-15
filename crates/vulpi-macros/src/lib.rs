@@ -1,7 +1,10 @@
+#![allow(clippy::redundant_clone)]
+
 extern crate proc_macro;
+use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::Item;
+use syn::{Ident, Item, ItemStruct};
 
 #[proc_macro_derive(Tree, attributes(helper))]
 pub fn derive_helper_attr(item: TokenStream) -> TokenStream {
@@ -114,6 +117,29 @@ pub fn derive_helper_attr(item: TokenStream) -> TokenStream {
                 res
             }
         }
+    }
+    .into()
+}
+
+#[proc_macro_attribute]
+pub fn node_of(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let ident: Ident = syn::parse(attr).unwrap();
+    let parsed = syn::parse::<ItemStruct>(item).unwrap();
+
+    let name = parsed.ident.clone();
+
+    let visitor = format!("visit_{}", name.to_string().to_case(Case::Snake));
+    let visitor = syn::Ident::new(&visitor, proc_macro2::Span::call_site());
+
+    quote! {
+        #parsed
+
+        impl #ident for #name {
+            fn accept(&mut self, visitor: &mut dyn Visitor) {
+                visitor.#visitor(self);
+            }
+        }
+
     }
     .into()
 }
