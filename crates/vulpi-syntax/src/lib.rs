@@ -1,3 +1,5 @@
+#![allow(incomplete_features)]
+#![feature(specialization)]
 #![feature(associated_type_bounds)]
 
 pub mod r#abstract;

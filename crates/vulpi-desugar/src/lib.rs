@@ -211,7 +211,7 @@ impl Desugar for concrete::PatAnnotation {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::PatAnnotation {
-            pat: Box::new(self.left.desugar(ctx)),
+            pat: self.left.desugar(ctx),
             ty: self.right.desugar(ctx),
         }
     }
@@ -222,8 +222,8 @@ impl Desugar for concrete::PatOr {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::PatOr {
-            left: Box::new(self.left.desugar(ctx)),
-            right: Box::new(self.right.desugar(ctx)),
+            left: self.left.desugar(ctx),
+            right: self.right.desugar(ctx),
         }
     }
 }
@@ -260,13 +260,16 @@ impl Desugar for concrete::PatternKind {
 }
 
 impl Desugar for concrete::Binder {
-    type Output = (abs::Pattern, abs::Type);
+    type Output = abs::Binder;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         let pat = self.pattern.desugar(ctx);
         let typ = self.typ.desugar(ctx);
 
-        (pat, typ)
+        abs::Binder {
+            pattern: pat,
+            ty: typ,
+        }
     }
 }
 

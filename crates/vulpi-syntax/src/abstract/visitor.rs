@@ -1,5 +1,9 @@
 use super::*;
 
+pub trait Walkable {
+    fn walk(&mut self, visitor: &mut dyn Visitor);
+}
+
 // Visitor and AST Implementation
 
 pub trait Visitor {
@@ -36,4 +40,170 @@ pub trait Visitor {
     fn visit_type_decl(&mut self, node: &mut TypeDecl);
     fn visit_unit_type(&mut self, node: &mut UnitType);
     fn visit_stmt_error(&mut self, node: &mut StmtError);
+    fn visit_arm(&mut self, node: &mut Arm);
+    fn visit_ident(&mut self, node: &mut Ident);
+    fn visit_qualified(&mut self, node: &mut Qualified);
+    fn visit_block(&mut self, node: &mut Block);
+    fn visit_variant(&mut self, node: &mut Variant);
+    fn visit_let_case(&mut self, node: &mut LetCase);
+    fn visit_enum_decl(&mut self, node: &mut EnumDecl);
+    fn visit_field(&mut self, node: &mut Field);
+    fn visit_record_decl(&mut self, node: &mut RecordDecl);
+    fn visit_use_decl(&mut self, node: &mut UseDecl);
+    fn visit_type_def(&mut self, node: &mut TypeDef);
+    fn visit_use_decl_kind(&mut self, node: &mut UseDecl);
+    fn visit_binder(&mut self, node: &mut Binder);
+    fn visit_program(&mut self, node: &mut Program);
+}
+
+impl<T> Visitor for T {
+    default fn visit_upper_type(&mut self, node: &mut UpperType) {
+        node.walk(self);
+    }
+    default fn visit_lower_type(&mut self, node: &mut LowerType) {
+        node.walk(self);
+    }
+    default fn visit_type_arrow(&mut self, node: &mut TypeArrow) {
+        node.walk(self);
+    }
+    default fn visit_type_application(&mut self, node: &mut TypeApplication) {
+        node.walk(self);
+    }
+    default fn visit_type_forall(&mut self, node: &mut TypeForall) {
+        node.walk(self);
+    }
+    default fn visit_str_literal(&mut self, node: &mut StrLiteral) {
+        node.walk(self);
+    }
+    default fn visit_char_literal(&mut self, node: &mut CharLiteral) {
+        node.walk(self);
+    }
+    default fn visit_int_literal(&mut self, node: &mut IntLiteral) {
+        node.walk(self);
+    }
+    default fn visit_float_literal(&mut self, node: &mut FloatLiteral) {
+        node.walk(self);
+    }
+    default fn visit_unit_literal(&mut self, node: &mut UnitLiteral) {
+        node.walk(self);
+    }
+    default fn visit_pat_annotation(&mut self, node: &mut PatAnnotation) {
+        node.walk(self);
+    }
+    default fn visit_pat_or(&mut self, node: &mut PatOr) {
+        node.walk(self);
+    }
+    default fn visit_pat_application(&mut self, node: &mut PatApplication) {
+        node.walk(self);
+    }
+    default fn visit_pat_wildcard(&mut self, node: &mut PatWildcard) {
+        node.walk(self);
+    }
+    default fn visit_pat_upper(&mut self, node: &mut PatUpper) {
+        node.walk(self);
+    }
+    default fn visit_pat_lower(&mut self, node: &mut PatLower) {
+        node.walk(self);
+    }
+    default fn visit_pat_literal(&mut self, node: &mut PatLiteral) {
+        node.walk(self);
+    }
+    default fn visit_stmt_expr(&mut self, node: &mut StmtExpr) {
+        node.walk(self);
+    }
+    default fn visit_stmt_let(&mut self, node: &mut StmtLet) {
+        node.walk(self);
+    }
+    default fn visit_expr_literal(&mut self, node: &mut ExprLiteral) {
+        node.walk(self);
+    }
+    default fn visit_lambda_expr(&mut self, node: &mut LambdaExpr) {
+        node.walk(self);
+    }
+    default fn visit_application_expr(&mut self, node: &mut ApplicationExpr) {
+        node.walk(self);
+    }
+    default fn visit_when_expr(&mut self, node: &mut WhenExpr) {
+        node.walk(self);
+    }
+    default fn visit_annotation_expr(&mut self, node: &mut AnnotationExpr) {
+        node.walk(self);
+    }
+    default fn visit_let_expr(&mut self, node: &mut LetExpr) {
+        node.walk(self);
+    }
+    default fn visit_expr_ident(&mut self, node: &mut ExprIdent) {
+        node.walk(self);
+    }
+    default fn visit_binary_expr(&mut self, node: &mut BinaryExpr) {
+        node.walk(self);
+    }
+    default fn visit_acessor_expr(&mut self, node: &mut AcessorExpr) {
+        node.walk(self);
+    }
+    default fn visit_block_expr(&mut self, node: &mut BlockExpr) {
+        node.walk(self);
+    }
+    default fn visit_let_decl(&mut self, node: &mut LetDecl) {
+        node.walk(self);
+    }
+    default fn visit_type_decl(&mut self, node: &mut TypeDecl) {
+        node.walk(self);
+    }
+    default fn visit_unit_type(&mut self, node: &mut UnitType) {
+        node.walk(self);
+    }
+    default fn visit_stmt_error(&mut self, node: &mut StmtError) {
+        node.walk(self);
+    }
+    default fn visit_arm(&mut self, node: &mut Arm) {
+        node.walk(self);
+    }
+    default fn visit_ident(&mut self, node: &mut Ident) {
+        node.walk(self);
+    }
+    default fn visit_qualified(&mut self, node: &mut Qualified) {
+        node.walk(self);
+    }
+    default fn visit_block(&mut self, node: &mut Block) {
+        node.walk(self);
+    }
+    default fn visit_variant(&mut self, node: &mut Variant) {
+        node.walk(self);
+    }
+    default fn visit_let_case(&mut self, node: &mut LetCase) {
+        node.walk(self);
+    }
+    default fn visit_enum_decl(&mut self, node: &mut EnumDecl) {
+        node.walk(self);
+    }
+    default fn visit_field(&mut self, node: &mut Field) {
+        node.walk(self);
+    }
+    default fn visit_record_decl(&mut self, node: &mut RecordDecl) {
+        node.walk(self);
+    }
+    default fn visit_use_decl(&mut self, node: &mut UseDecl) {
+        node.walk(self);
+    }
+    default fn visit_type_def(&mut self, node: &mut TypeDef) {
+        node.walk(self);
+    }
+    default fn visit_use_decl_kind(&mut self, node: &mut UseDecl) {
+        node.walk(self);
+    }
+    default fn visit_program(&mut self, node: &mut Program) {
+        node.walk(self);
+    }
+    default fn visit_binder(&mut self, node: &mut Binder) {
+        node.walk(self);
+    }
+}
+
+pub struct Test;
+
+impl Visitor for Test {
+    default fn visit_ident(&mut self, node: &mut Ident) {
+        println!("{}", node.0.get())
+    }
 }

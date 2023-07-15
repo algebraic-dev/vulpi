@@ -1,18 +1,20 @@
 use std::ops::Range;
 
-pub use visitor::Visitor;
+pub use visitor::{Visitor, Walkable};
 use vulpi_location::Byte;
 use vulpi_location::Spanned;
+use vulpi_macros::node;
 use vulpi_macros::Tree;
 use vulpi_show::{Show, TreeDisplay};
 use vulpi_storage::interner::Symbol;
 
 use vulpi_macros::node_of;
 
-mod visitor;
+pub mod visitor;
 
 #[derive(Debug, Clone)]
-pub struct Ident(pub Symbol, pub Range<Byte>);
+#[node_of]
+pub struct Ident(#[not] pub Symbol, #[not] pub Range<Byte>);
 
 impl Ident {
     pub fn generate(symbol: Symbol) -> Self {
@@ -27,23 +29,72 @@ impl Show for Ident {
 }
 
 #[derive(Debug, Clone, Tree)]
+#[node_of]
 pub struct Qualified {
+    #[not]
     pub segments: Vec<Ident>,
+    #[not]
     pub last: Ident,
+    #[not]
     pub range: Range<Byte>,
 }
 
-// Types
+// Node
 
-pub trait TypeImpl: Show {
+pub trait Node: Show {
     fn accept(&mut self, visitor: &mut dyn Visitor);
 }
 
-impl Show for Box<dyn TypeImpl> {
+impl<T: Node> Node for Spanned<T> {
+    fn accept(&mut self, visitor: &mut dyn Visitor) {
+        self.data.accept(visitor);
+    }
+}
+
+impl Show for Box<dyn Node> {
     fn show(&self) -> TreeDisplay {
         (**self).show()
     }
 }
+
+impl Node for Box<dyn Node> {
+    fn accept(&mut self, visitor: &mut dyn Visitor) {
+        (**self).accept(visitor);
+    }
+}
+
+impl<T: Node> Node for Vec<T> {
+    fn accept(&mut self, visitor: &mut dyn Visitor) {
+        for item in self {
+            item.accept(visitor);
+        }
+    }
+}
+
+impl<T: Node> Node for Option<T> {
+    fn accept(&mut self, visitor: &mut dyn Visitor) {
+        if let Some(item) = self {
+            item.accept(visitor);
+        }
+    }
+}
+
+impl<T: Walkable> Walkable for Spanned<T> {
+    fn walk(&mut self, visitor: &mut dyn Visitor) {
+        self.data.walk(visitor);
+    }
+}
+
+impl<T: ?Sized + Walkable> Walkable for Box<T> {
+    fn walk(&mut self, visitor: &mut dyn Visitor) {
+        (**self).walk(visitor);
+    }
+}
+
+// Types
+
+#[node]
+pub trait TypeImpl: Show + Node + Walkable {}
 
 pub type Type = Spanned<Box<dyn TypeImpl>>;
 
@@ -60,10 +111,12 @@ pub struct UpperType(pub Qualified);
 #[node_of(TypeImpl)]
 pub struct LowerType(pub Ident);
 
-#[node_of(TypeImpl)]
 #[derive(Tree)]
+#[node_of(TypeImpl)]
+
 pub struct TypeArrow {
     pub left: Type,
+    #[not]
     pub effects: Effects,
     pub right: Type,
 }
@@ -78,6 +131,7 @@ pub struct TypeApplication {
 #[node_of(TypeImpl)]
 #[derive(Tree)]
 pub struct TypeForall {
+    #[not]
     pub params: Vec<Ident>,
     pub body: Type,
 }
@@ -88,15 +142,8 @@ pub struct UnitType;
 
 // Literals
 
-pub trait LiteralImpl: Show {
-    fn accept(&mut self, visitor: &mut dyn Visitor);
-}
-
-impl Show for Box<dyn LiteralImpl> {
-    fn show(&self) -> TreeDisplay {
-        (**self).show()
-    }
-}
+#[node]
+pub trait LiteralImpl: Show + Node {}
 
 type Literal = Spanned<Box<dyn LiteralImpl>>;
 
@@ -122,15 +169,8 @@ pub struct UnitLiteral;
 
 // Patterns
 
-pub trait PatternImpl: Show {
-    fn accept(&mut self, visitor: &mut dyn Visitor);
-}
-
-impl Show for Box<dyn PatternImpl> {
-    fn show(&self) -> TreeDisplay {
-        (**self).show()
-    }
-}
+#[node]
+pub trait PatternImpl: Show + Node {}
 
 pub type Pattern = Spanned<Box<dyn PatternImpl>>;
 
@@ -153,35 +193,29 @@ pub struct PatLiteral(pub Literal);
 #[node_of(PatternImpl)]
 #[derive(Tree)]
 pub struct PatAnnotation {
-    pub pat: Box<Pattern>,
+    pub pat: Pattern,
     pub ty: Type,
 }
 
 #[node_of(PatternImpl)]
 #[derive(Tree)]
 pub struct PatOr {
-    pub left: Box<Pattern>,
-    pub right: Box<Pattern>,
+    pub left: Pattern,
+    pub right: Pattern,
 }
 
 #[node_of(PatternImpl)]
 #[derive(Tree)]
 pub struct PatApplication {
+    #[not]
     pub func: Qualified,
     pub args: Vec<Pattern>,
 }
 
 // Block
 
-pub trait StatementImpl: Show {
-    fn accept(&mut self, visitor: &mut dyn Visitor);
-}
-
-impl Show for Box<dyn StatementImpl> {
-    fn show(&self) -> TreeDisplay {
-        (**self).show()
-    }
-}
+#[node]
+pub trait StatementImpl: Show + Node {}
 
 pub type Statement = Spanned<Box<dyn StatementImpl>>;
 
@@ -201,21 +235,15 @@ pub struct StmtLet {
 pub struct StmtError;
 
 #[derive(Tree)]
+#[node_of]
 pub struct Block {
     pub statements: Vec<Statement>,
 }
 
 // Expressions
 
-pub trait ExprImpl: Show {
-    fn accept(&mut self, visitor: &mut dyn Visitor);
-}
-
-impl Show for Box<dyn ExprImpl> {
-    fn show(&self) -> TreeDisplay {
-        (**self).show()
-    }
-}
+#[node]
+pub trait ExprImpl: Show + Node {}
 
 pub type Expr = Spanned<Box<dyn ExprImpl>>;
 
@@ -263,6 +291,8 @@ pub struct ApplicationExpr {
 #[derive(Tree)]
 pub struct AcessorExpr {
     pub expr: Expr,
+
+    #[not]
     pub field: Ident,
 }
 
@@ -270,11 +300,13 @@ pub struct AcessorExpr {
 #[derive(Tree)]
 pub struct BinaryExpr {
     pub left: Expr,
+    #[not]
     pub op: Operator,
     pub right: Expr,
 }
 
 #[derive(Tree)]
+#[node_of]
 pub struct Arm {
     pub pattern: Pattern,
     pub then: Expr,
@@ -313,36 +345,50 @@ pub struct ExprIdent(pub Qualified);
 // Top level
 
 #[derive(Tree)]
+#[node_of]
+pub struct Binder {
+    pub pattern: Pattern,
+    pub ty: Type,
+}
+
+#[derive(Tree)]
+#[node_of]
 pub struct LetCase {
+    #[not]
     pub name_range: Range<Byte>,
-    pub patterns: Vec<(Pattern, Type)>,
+    pub patterns: Vec<Binder>,
     pub body: Box<Expr>,
 }
 
 #[derive(Tree)]
+#[node_of]
 pub struct LetDecl {
     pub name: Ident,
     pub cases: Vec<LetCase>,
 }
 
 #[derive(Tree)]
+#[node_of]
 pub struct Variant {
     pub name: Ident,
     pub args: Vec<Type>,
 }
 
 #[derive(Tree)]
+#[node_of]
 pub struct EnumDecl {
     pub variants: Vec<Variant>,
 }
 
 #[derive(Tree)]
+#[node_of]
 pub struct Field {
     pub name: Ident,
     pub ty: Box<Type>,
 }
 
 #[derive(Tree)]
+#[node_of]
 pub struct RecordDecl {
     pub fields: Vec<Field>,
 }
@@ -354,7 +400,24 @@ pub enum TypeDef {
     Synonym(Type),
 }
 
+impl Node for TypeDef {
+    fn accept(&mut self, visitor: &mut dyn Visitor) {
+        visitor.visit_type_def(self);
+    }
+}
+
+impl Walkable for TypeDef {
+    fn walk(&mut self, visitor: &mut dyn Visitor) {
+        match self {
+            TypeDef::Enum(e) => e.walk(visitor),
+            TypeDef::Record(r) => r.walk(visitor),
+            TypeDef::Synonym(t) => (t.data).walk(visitor),
+        }
+    }
+}
+
 #[derive(Tree)]
+#[node_of]
 pub struct TypeDecl {
     pub name: Ident,
     pub params: Vec<Ident>,
@@ -362,12 +425,14 @@ pub struct TypeDecl {
 }
 
 #[derive(Tree)]
+#[node_of]
 pub struct UseDecl {
     pub path: Qualified,
     pub alias: Option<Ident>,
 }
 
 #[derive(Tree)]
+#[node_of]
 pub struct Program {
     pub uses: Vec<UseDecl>,
     pub types: Vec<TypeDecl>,
