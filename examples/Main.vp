@@ -1,4 +1,1 @@
-let a (T.E : T) = 
-    if 2
-        then 3
-        else 4
+let a (E (F a b) (E (H I j a)) : T) = 2

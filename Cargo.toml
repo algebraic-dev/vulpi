@@ -9,6 +9,7 @@ members = [
     "crates/vulpi-report",
     "crates/vulpi-desugar",
     "crates/vulpi-storage",
+    "crates/vulpi-resolver",
     "crates/vulpi-typer",
     "crates/vulpi-cli",
 ]

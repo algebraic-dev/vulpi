@@ -423,6 +423,7 @@ dependencies = [
  "vulpi-desugar",
  "vulpi-parser",
  "vulpi-report",
+ "vulpi-resolver",
  "vulpi-show",
  "vulpi-storage",
  "vulpi-syntax",
@@ -474,6 +475,16 @@ dependencies = [
  "vulpi-location",
  "vulpi-storage",
  "yansi",
+]
+
+[[package]]
+name = "vulpi-resolver"
+version = "0.1.0"
+dependencies = [
+ "vulpi-location",
+ "vulpi-report",
+ "vulpi-storage",
+ "vulpi-syntax",
 ]
 
 [[package]]

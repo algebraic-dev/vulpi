@@ -6,3 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+
+vulpi-syntax = { path = "../vulpi-syntax" }
+vulpi-report = { path = "../vulpi-report" }
+vulpi-storage = { path = "../vulpi-storage" }
+vulpi-location = { path = "../vulpi-location" }

@@ -6,39 +6,14 @@ use vulpi_location::Spanned;
 use vulpi_macros::node;
 use vulpi_macros::Tree;
 use vulpi_show::{Show, TreeDisplay};
-use vulpi_storage::interner::Symbol;
 
 use vulpi_macros::node_of;
 
+pub mod ident;
 pub mod resolved;
 pub mod visitor;
 
-#[derive(Debug, Clone)]
-#[node_of]
-pub struct Ident(#[not] pub Symbol, #[not] pub Range<Byte>);
-
-impl Ident {
-    pub fn generate(symbol: Symbol) -> Self {
-        Self(symbol, Byte(0)..Byte(0))
-    }
-}
-
-impl Show for Ident {
-    fn show(&self) -> vulpi_show::TreeDisplay {
-        TreeDisplay::label(&self.0.get())
-    }
-}
-
-#[derive(Debug, Clone, Tree)]
-#[node_of]
-pub struct Qualified {
-    #[not]
-    pub segments: Vec<Ident>,
-    #[not]
-    pub last: Ident,
-    #[not]
-    pub range: Range<Byte>,
-}
+pub use ident::*;
 
 // Node
 
@@ -55,12 +30,6 @@ impl<T: Node> Node for Spanned<T> {
 impl Show for Box<dyn Node> {
     fn show(&self) -> TreeDisplay {
         (**self).show()
-    }
-}
-
-impl Node for Box<dyn Node> {
-    fn accept(&mut self, visitor: &mut dyn Visitor) {
-        (**self).accept(visitor);
     }
 }
 
@@ -87,7 +56,7 @@ impl<T: Walkable> Walkable for Spanned<T> {
 }
 
 impl<T: ?Sized + Walkable> Walkable for Box<T> {
-    fn walk(&mut self, visitor: &mut dyn Visitor) {
+    default fn walk(&mut self, visitor: &mut dyn Visitor) {
         (**self).walk(visitor);
     }
 }
@@ -144,7 +113,7 @@ pub struct UnitType;
 // Literals
 
 #[node]
-pub trait LiteralImpl: Show + Node {}
+pub trait LiteralImpl: Show + Node + Walkable {}
 
 type Literal = Spanned<Box<dyn LiteralImpl>>;
 
@@ -171,7 +140,7 @@ pub struct UnitLiteral;
 // Patterns
 
 #[node]
-pub trait PatternImpl: Show + Node {}
+pub trait PatternImpl: Show + Node + Walkable {}
 
 pub type Pattern = Spanned<Box<dyn PatternImpl>>;
 
@@ -216,7 +185,7 @@ pub struct PatApplication {
 // Block
 
 #[node]
-pub trait StatementImpl: Show + Node {}
+pub trait StatementImpl: Show + Node + Walkable {}
 
 pub type Statement = Spanned<Box<dyn StatementImpl>>;
 
@@ -244,7 +213,7 @@ pub struct Block {
 // Expressions
 
 #[node]
-pub trait ExprImpl: Show + Node {}
+pub trait ExprImpl: Show + Node + Walkable {}
 
 pub type Expr = Spanned<Box<dyn ExprImpl>>;
 

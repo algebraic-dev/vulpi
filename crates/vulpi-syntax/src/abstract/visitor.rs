@@ -55,6 +55,11 @@ pub trait Visitor {
     fn visit_binder(&mut self, node: &mut Binder);
     fn visit_program(&mut self, node: &mut Program);
     fn visit_resolved_qualified(&mut self, node: &mut ResolvedQualified);
+    fn visit_pattern_impl(&mut self, node: &mut Box<dyn PatternImpl>);
+    fn visit_literal_impl(&mut self, node: &mut Box<dyn LiteralImpl>);
+    fn visit_statement_impl(&mut self, node: &mut Box<dyn StatementImpl>);
+    fn visit_expr_impl(&mut self, node: &mut Box<dyn ExprImpl>);
+    fn visit_type_impl(&mut self, node: &mut Box<dyn TypeImpl>);
 }
 
 impl<T> Visitor for T {
@@ -201,5 +206,20 @@ impl<T> Visitor for T {
     }
     default fn visit_resolved_qualified(&mut self, node: &mut ResolvedQualified) {
         node.walk(self);
+    }
+    default fn visit_pattern_impl(&mut self, node: &mut Box<dyn PatternImpl>) {
+        node.walk(self)
+    }
+    default fn visit_literal_impl(&mut self, node: &mut Box<dyn LiteralImpl>) {
+        node.walk(self)
+    }
+    default fn visit_statement_impl(&mut self, node: &mut Box<dyn StatementImpl>) {
+        node.walk(self)
+    }
+    default fn visit_expr_impl(&mut self, node: &mut Box<dyn ExprImpl>) {
+        node.walk(self)
+    }
+    default fn visit_type_impl(&mut self, node: &mut Box<dyn TypeImpl>) {
+        node.walk(self)
     }
 }

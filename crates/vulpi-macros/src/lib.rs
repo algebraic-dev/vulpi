@@ -200,13 +200,15 @@ pub fn node(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let parsed = syn::parse::<ItemTrait>(item).unwrap();
 
     let name = parsed.ident.clone();
+    let visitor = format!("visit_{}", name.to_string().to_case(Case::Snake));
+    let visitor = syn::Ident::new(&visitor, proc_macro2::Span::call_site());
 
     quote! {
         #parsed
 
         impl Node for Box<dyn #name> {
             fn accept(&mut self, visitor: &mut dyn Visitor) {
-                (**self).accept(visitor);
+                visitor.#visitor(self);
             }
         }
 
@@ -216,6 +218,11 @@ pub fn node(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
+        impl Walkable for Box<dyn #name> {
+            default fn walk(&mut self, visitor: &mut dyn Visitor) {
+                (**self).walk(visitor);
+            }
+        }
     }
     .into()
 }

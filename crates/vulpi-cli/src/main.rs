@@ -1,12 +1,10 @@
 use clap::Parser;
 use std::{io::stderr, path::PathBuf};
-use vulpi_syntax::r#abstract::{visitor, Visitor};
 
 use vulpi_build::error::HashReporter;
 use vulpi_parser::{parse, Lexer};
 use vulpi_report::renderer::{Classic, Renderer};
 use vulpi_report::Report;
-use vulpi_show::Show;
 use vulpi_storage::file_system::{real::RealFileSystem, FileSystem};
 
 #[derive(Parser)]
@@ -28,7 +26,9 @@ fn main() {
     let lexer = Lexer::new(source);
     let concrete = parse(lexer, file, reporter.clone());
 
-    let mut desugared = vulpi_desugar::desugar(concrete, file, reporter.clone());
+    let desugared = vulpi_desugar::desugar(concrete, file, reporter.clone());
+
+    let _ = vulpi_resolver::resolve(desugared, file, reporter.clone());
 
     if reporter.has_errors() {
         eprintln!();
