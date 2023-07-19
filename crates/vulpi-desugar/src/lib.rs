@@ -4,7 +4,6 @@ use vulpi_location::{Byte, Location, Spanned};
 use vulpi_report::{Diagnostic, Report};
 use vulpi_storage::id::{File, Id};
 use vulpi_storage::interner::Symbol;
-use vulpi_syntax::r#abstract::Qualified;
 use vulpi_syntax::{concrete, r#abstract as abs};
 
 pub mod error;
@@ -119,9 +118,9 @@ impl Desugar for concrete::TypeArrow {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::TypeArrow {
-            left: self.left.desugar(ctx),
+            left: Box::new(self.left.desugar(ctx)),
             effects: self.effects.desugar(ctx).unwrap_or_default(),
-            right: self.right.desugar(ctx),
+            right: Box::new(self.right.desugar(ctx)),
         }
     }
 }
@@ -131,7 +130,7 @@ impl Desugar for concrete::TypeApplication {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::TypeApplication {
-            left: self.func.desugar(ctx),
+            left: Box::new(self.func.desugar(ctx)),
             right: self.args.iter().map(|x| x.desugar(ctx)).collect(),
         }
     }
@@ -143,53 +142,51 @@ impl Desugar for concrete::TypeForall {
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::TypeForall {
             params: self.params.iter().map(|x| x.desugar(ctx)).collect(),
-            body: self.body.desugar(ctx),
+            body: Box::new(self.body.desugar(ctx)),
         }
     }
 }
 
 impl Desugar for concrete::TypeKind {
-    type Output = Box<dyn abs::TypeImpl>;
+    type Output = abs::TypeKind;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        use abs::*;
+        use abs::TypeKind as AbstractType;
         use concrete::TypeKind as ConcreteType;
 
         match self {
             ConcreteType::Parenthesis(s) => s.data.desugar(ctx).data,
-            ConcreteType::Upper(s) => Box::new(UpperType(s.desugar(ctx))),
-            ConcreteType::Lower(s) => Box::new(LowerType(s.desugar(ctx))),
-            ConcreteType::Arrow(s) => Box::new(s.desugar(ctx)),
-            ConcreteType::Application(s) => Box::new(s.desugar(ctx)),
-            ConcreteType::Forall(s) => Box::new(s.desugar(ctx)),
-            ConcreteType::Unit(_) => Box::new(UnitType),
+            ConcreteType::Upper(s) => AbstractType::Upper(s.desugar(ctx)),
+            ConcreteType::Lower(s) => AbstractType::Lower(s.desugar(ctx)),
+            ConcreteType::Arrow(s) => AbstractType::Arrow(s.desugar(ctx)),
+            ConcreteType::Application(s) => AbstractType::Application(s.desugar(ctx)),
+            ConcreteType::Forall(s) => AbstractType::Forall(s.desugar(ctx)),
+            ConcreteType::Unit(_) => AbstractType::Unit,
         }
     }
 }
 
 impl Desugar for concrete::LiteralKind {
-    type Output = Box<dyn abs::LiteralImpl>;
+    type Output = abs::LiteralKind;
 
     fn desugar(&self, _: &mut DesugarCtx) -> Self::Output {
-        use abs::*;
+        use abs::LiteralKind as AbstractLit;
         use concrete::LiteralKind as ConcreteLit;
 
         match self {
             ConcreteLit::String(s) => {
-                Box::new(StrLiteral(abs::Ident(s.data.data.clone(), s.range.clone())))
+                AbstractLit::String(abs::Ident(s.data.data.clone(), s.range.clone()))
             }
             ConcreteLit::Integer(s) => {
-                Box::new(IntLiteral(abs::Ident(s.data.data.clone(), s.range.clone())))
+                AbstractLit::Integer(abs::Ident(s.data.data.clone(), s.range.clone()))
             }
-            ConcreteLit::Float(s) => Box::new(FloatLiteral(abs::Ident(
-                s.data.data.clone(),
-                s.range.clone(),
-            ))),
-            ConcreteLit::Char(s) => Box::new(CharLiteral(abs::Ident(
-                s.data.data.clone(),
-                s.range.clone(),
-            ))),
-            ConcreteLit::Unit(_) => Box::new(UnitLiteral),
+            ConcreteLit::Float(s) => {
+                AbstractLit::Float(abs::Ident(s.data.data.clone(), s.range.clone()))
+            }
+            ConcreteLit::Char(s) => {
+                AbstractLit::Char(abs::Ident(s.data.data.clone(), s.range.clone()))
+            }
+            ConcreteLit::Unit(_) => AbstractLit::Unit,
         }
     }
 }
@@ -211,8 +208,8 @@ impl Desugar for concrete::PatAnnotation {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::PatAnnotation {
-            pat: self.left.desugar(ctx),
-            ty: self.right.desugar(ctx),
+            pat: Box::new(self.left.desugar(ctx)),
+            ty: Box::new(self.right.desugar(ctx)),
         }
     }
 }
@@ -222,8 +219,8 @@ impl Desugar for concrete::PatOr {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::PatOr {
-            left: self.left.desugar(ctx),
-            right: self.right.desugar(ctx),
+            left: Box::new(self.left.desugar(ctx)),
+            right: Box::new(self.right.desugar(ctx)),
         }
     }
 }
@@ -240,36 +237,33 @@ impl Desugar for concrete::PatApplication {
 }
 
 impl Desugar for concrete::PatternKind {
-    type Output = Box<dyn abs::PatternImpl>;
+    type Output = abs::PatternKind;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        use abs::*;
+        use abs::PatternKind as AbstractPat;
         use concrete::PatternKind as ConcretePat;
 
         match self {
-            ConcretePat::Wildcard(_) => Box::new(PatWildcard),
-            ConcretePat::Upper(upper) => Box::new(PatUpper(upper.desugar(ctx))),
-            ConcretePat::Lower(lower) => Box::new(PatLower(lower.desugar(ctx))),
-            ConcretePat::Literal(lit) => Box::new(PatLiteral(lit.desugar(ctx))),
-            ConcretePat::Annotation(ann) => Box::new(ann.desugar(ctx)),
-            ConcretePat::Or(or) => Box::new(or.desugar(ctx)),
-            ConcretePat::Application(app) => Box::new(app.desugar(ctx)),
+            ConcretePat::Wildcard(_) => AbstractPat::Wildcard,
+            ConcretePat::Upper(upper) => AbstractPat::Upper(upper.desugar(ctx)),
+            ConcretePat::Lower(lower) => AbstractPat::Lower(lower.desugar(ctx)),
+            ConcretePat::Literal(lit) => AbstractPat::Literal(lit.desugar(ctx)),
+            ConcretePat::Annotation(ann) => AbstractPat::Annotation(ann.desugar(ctx)),
+            ConcretePat::Or(or) => AbstractPat::Or(or.desugar(ctx)),
+            ConcretePat::Application(app) => AbstractPat::Application(app.desugar(ctx)),
             ConcretePat::Parenthesis(par) => par.data.desugar(ctx).data,
         }
     }
 }
 
 impl Desugar for concrete::Binder {
-    type Output = abs::Binder;
+    type Output = (abs::Pattern, abs::Type);
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         let pat = self.pattern.desugar(ctx);
         let typ = self.typ.desugar(ctx);
 
-        abs::Binder {
-            pattern: pat,
-            ty: typ,
-        }
+        (pat, typ)
     }
 }
 
@@ -279,7 +273,7 @@ impl Desugar for concrete::LambdaExpr {
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::LambdaExpr {
             pattern: self.patterns.iter().map(|x| x.desugar(ctx)).collect(),
-            body: self.expr.desugar(ctx),
+            body: Box::new(self.expr.desugar(ctx)),
         }
     }
 }
@@ -289,7 +283,7 @@ impl Desugar for concrete::ApplicationExpr {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::ApplicationExpr {
-            func: self.func.desugar(ctx),
+            func: Box::new(self.func.desugar(ctx)),
             args: self.args.iter().map(|x| x.desugar(ctx)).collect(),
         }
     }
@@ -300,7 +294,7 @@ impl Desugar for concrete::AcessorExpr {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::AcessorExpr {
-            expr: self.expr.desugar(ctx),
+            expr: Box::new(self.expr.desugar(ctx)),
             field: self.field.desugar(ctx),
         }
     }
@@ -311,9 +305,9 @@ impl Desugar for concrete::BinaryExpr {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::BinaryExpr {
-            left: self.left.desugar(ctx),
+            left: Box::new(self.left.desugar(ctx)),
             op: self.op.desugar(ctx),
-            right: self.right.desugar(ctx),
+            right: Box::new(self.right.desugar(ctx)),
         }
     }
 }
@@ -353,40 +347,32 @@ impl Desugar for concrete::LetExpr {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::LetExpr {
-            pat: self.pattern.desugar(ctx),
-            value: self.value.desugar(ctx),
-            body: self.body.desugar(ctx),
+            name: Box::new(self.pattern.desugar(ctx)),
+            value: Box::new(self.value.desugar(ctx)),
+            body: Box::new(self.body.desugar(ctx)),
         }
     }
 }
 
 impl Desugar for concrete::IfExpr {
-    type Output = Box<dyn abs::ExprImpl>;
+    type Output = abs::IfExpr;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        Box::new(abs::WhenExpr {
-            scrutinee: self.cond.desugar(ctx),
-            arms: vec![
-                abs::Arm {
-                    pattern: true_pattern(self.then.range.clone()),
-                    then: self.then_expr.desugar(ctx),
-                },
-                abs::Arm {
-                    pattern: false_pattern(self.then.range.clone()),
-                    then: self.else_expr.desugar(ctx),
-                },
-            ],
-        })
+        abs::IfExpr {
+            cond: Box::new(self.cond.desugar(ctx)),
+            then: Box::new(self.then_expr.desugar(ctx)),
+            else_: Box::new(self.else_expr.desugar(ctx)),
+        }
     }
 }
 
 impl Desugar for concrete::WhenArm {
-    type Output = abs::Arm;
+    type Output = abs::WhenArm;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        abs::Arm {
-            pattern: self.pattern.desugar(ctx),
-            then: self.expr.desugar(ctx),
+        abs::WhenArm {
+            pattern: Box::new(self.pattern.desugar(ctx)),
+            then: Box::new(self.expr.desugar(ctx)),
         }
     }
 }
@@ -396,7 +382,7 @@ impl Desugar for concrete::WhenExpr {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::WhenExpr {
-            scrutinee: self.scrutinee.desugar(ctx),
+            scrutinee: Box::new(self.scrutinee.desugar(ctx)),
             arms: self.arms.iter().map(|x| x.desugar(ctx)).collect(),
         }
     }
@@ -407,34 +393,34 @@ impl Desugar for concrete::AnnotationExpr {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::AnnotationExpr {
-            expr: self.expr.desugar(ctx),
-            ty: self.ty.desugar(ctx),
+            expr: Box::new(self.expr.desugar(ctx)),
+            ty: Box::new(self.ty.desugar(ctx)),
         }
     }
 }
 
 impl Desugar for concrete::LetSttm {
-    type Output = abs::StmtLet;
+    type Output = abs::LetStmt;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        abs::StmtLet {
-            pat: self.pattern.desugar(ctx),
-            expr: self.expr.desugar(ctx),
+        abs::LetStmt {
+            name: Box::new(self.pattern.desugar(ctx)),
+            expr: Box::new(self.expr.desugar(ctx)),
         }
     }
 }
 
 impl Desugar for concrete::StatementKind {
-    type Output = Box<dyn abs::StatementImpl>;
+    type Output = abs::StatementKind;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        use abs::*;
+        use abs::StatementKind as AbstractStatement;
         use concrete::StatementKind as ConcreteStatement;
 
         match self {
-            ConcreteStatement::Let(d) => Box::new(d.desugar(ctx)),
-            ConcreteStatement::Expr(d) => Box::new(StmtExpr(d.desugar(ctx))),
-            ConcreteStatement::Error(_) => Box::new(StmtError),
+            ConcreteStatement::Let(d) => AbstractStatement::Let(d.desugar(ctx)),
+            ConcreteStatement::Expr(d) => AbstractStatement::Expr(d.desugar(ctx)),
+            ConcreteStatement::Error(_) => AbstractStatement::Error,
         }
     }
 }
@@ -455,24 +441,24 @@ impl Desugar for concrete::DoExpr {
 }
 
 impl Desugar for concrete::ExprKind {
-    type Output = Box<dyn abs::ExprImpl>;
+    type Output = abs::ExprKind;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        use abs::*;
+        use abs::ExprKind as AbstractKind;
         use concrete::ExprKind as ConcreteExpr;
 
         match self {
-            ConcreteExpr::Lambda(d) => Box::new(d.desugar(ctx)),
-            ConcreteExpr::Application(d) => Box::new(d.desugar(ctx)),
-            ConcreteExpr::Ident(d) => Box::new(ExprIdent(d.desugar(ctx))),
-            ConcreteExpr::Acessor(d) => Box::new(d.desugar(ctx)),
-            ConcreteExpr::Binary(d) => Box::new(d.desugar(ctx)),
-            ConcreteExpr::Let(d) => Box::new(d.desugar(ctx)),
-            ConcreteExpr::If(d) => d.desugar(ctx),
-            ConcreteExpr::When(d) => Box::new(d.desugar(ctx)),
-            ConcreteExpr::Annotation(d) => Box::new(d.desugar(ctx)),
-            ConcreteExpr::Do(d) => Box::new(BlockExpr(d.desugar(ctx))),
-            ConcreteExpr::Literal(d) => Box::new(ExprLiteral(d.desugar(ctx))),
+            ConcreteExpr::Lambda(d) => AbstractKind::Lambda(d.desugar(ctx)),
+            ConcreteExpr::Application(d) => AbstractKind::Application(d.desugar(ctx)),
+            ConcreteExpr::Ident(d) => AbstractKind::Ident(d.desugar(ctx)),
+            ConcreteExpr::Acessor(d) => AbstractKind::Acessor(d.desugar(ctx)),
+            ConcreteExpr::Binary(d) => AbstractKind::Binary(d.desugar(ctx)),
+            ConcreteExpr::Let(d) => AbstractKind::Let(d.desugar(ctx)),
+            ConcreteExpr::If(d) => AbstractKind::If(d.desugar(ctx)),
+            ConcreteExpr::When(d) => AbstractKind::When(d.desugar(ctx)),
+            ConcreteExpr::Annotation(d) => AbstractKind::Annotation(d.desugar(ctx)),
+            ConcreteExpr::Do(d) => AbstractKind::Block(d.desugar(ctx)),
+            ConcreteExpr::Literal(d) => AbstractKind::Literal(d.desugar(ctx)),
             ConcreteExpr::Parenthesis(d) => d.data.desugar(ctx).data,
         }
     }
@@ -643,26 +629,4 @@ pub fn desugar(concrete: concrete::Program, file: Id<File>, reporter: Report) ->
     ctx.program.lets = decls;
 
     ctx.program
-}
-
-pub fn true_pattern(range: Range<Byte>) -> abs::Pattern {
-    Spanned {
-        data: Box::new(abs::PatUpper(Qualified {
-            segments: vec![abs::Ident(Symbol::intern("Bool"), range.clone())],
-            last: abs::Ident(Symbol::intern("True"), range.clone()),
-            range: range.clone(),
-        })),
-        range,
-    }
-}
-
-pub fn false_pattern(range: Range<Byte>) -> abs::Pattern {
-    Spanned {
-        data: Box::new(abs::PatUpper(Qualified {
-            segments: vec![abs::Ident(Symbol::intern("Bool"), range.clone())],
-            last: abs::Ident(Symbol::intern("False"), range.clone()),
-            range: range.clone(),
-        })),
-        range,
-    }
 }

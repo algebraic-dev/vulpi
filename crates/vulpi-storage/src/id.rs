@@ -8,7 +8,7 @@ use vulpi_macros::Tree;
 use vulpi_show::{Show, TreeDisplay};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct Id<T: Identifier>(usize, PhantomData<T>);
+pub struct Id<T: Identifier>(pub usize, PhantomData<T>);
 
 impl<T: Identifier> Id<T> {
     pub fn index(&self) -> usize {

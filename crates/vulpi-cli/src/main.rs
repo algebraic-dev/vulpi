@@ -5,6 +5,7 @@ use vulpi_build::error::HashReporter;
 use vulpi_parser::{parse, Lexer};
 use vulpi_report::renderer::{Classic, Renderer};
 use vulpi_report::Report;
+use vulpi_show::Show;
 use vulpi_storage::file_system::{real::RealFileSystem, FileSystem};
 
 #[derive(Parser)]
@@ -26,9 +27,12 @@ fn main() {
     let lexer = Lexer::new(source);
     let concrete = parse(lexer, file, reporter.clone());
 
-    let desugared = vulpi_desugar::desugar(concrete, file, reporter.clone());
+    let mut desugared = vulpi_desugar::desugar(concrete, file, reporter.clone());
+    let mut modules = vulpi_resolver::declare::Modules::default();
+    let namespace = vulpi_resolver::declare::declare_main(&mut modules, &mut desugared);
+    let resolved = vulpi_resolver::resolve(desugared, file, namespace, reporter.clone(), &modules);
 
-    let _ = vulpi_resolver::resolve(desugared, file, reporter.clone());
+    println!("{}", resolved.show());
 
     if reporter.has_errors() {
         eprintln!();

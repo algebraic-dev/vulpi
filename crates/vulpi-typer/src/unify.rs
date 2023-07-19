@@ -41,12 +41,13 @@ pub fn unify_hole(env: Env, hole: Hole, val: Type, flip: bool) {
     }
 }
 
+// Checks if a type occurs in another type. This is used to detect cycles in the type.
 pub fn occur(hole: Hole, typ: Type) -> bool {
     match &*typ {
         Mono::Variable(_) => false,
         Mono::Generalized(_) => false,
         Mono::Error => false,
-        Mono::Hole(hole_inner) => hole_inner.clone() == hole,
+        Mono::Hole(hole_inner) => *hole_inner == hole,
         Mono::Function(l, r) => occur(hole.clone(), l.clone()) || occur(hole, r.clone()),
     }
 }

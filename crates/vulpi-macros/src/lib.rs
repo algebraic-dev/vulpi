@@ -1,16 +1,10 @@
 #![allow(clippy::redundant_clone)]
 
 extern crate proc_macro;
-use std::collections::HashSet;
 
-use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{
-    parse::{Parse, ParseStream},
-    punctuated::Punctuated,
-    Ident, Item, ItemStruct, ItemTrait, Token,
-};
+use syn::Item;
 
 #[proc_macro_derive(Tree, attributes(helper))]
 pub fn derive_helper_attr(item: TokenStream) -> TokenStream {
@@ -121,106 +115,6 @@ pub fn derive_helper_attr(item: TokenStream) -> TokenStream {
             fn show(&self) -> vulpi_show::TreeDisplay {
                 #(#sttms)*
                 res
-            }
-        }
-    }
-    .into()
-}
-
-struct Args {
-    pub vars: HashSet<Ident>,
-}
-
-impl Parse for Args {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let vars = Punctuated::<Ident, Token![,]>::parse_terminated(input)?;
-        Ok(Self {
-            vars: vars.into_iter().collect(),
-        })
-    }
-}
-
-#[proc_macro_attribute]
-pub fn node_of(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut parsed = syn::parse::<ItemStruct>(item).unwrap();
-
-    let name = parsed.ident.clone();
-
-    let visitor = format!("visit_{}", name.to_string().to_case(Case::Snake));
-    let visitor = syn::Ident::new(&visitor, proc_macro2::Span::call_site());
-
-    let mut fields = vec![];
-
-    for (i, field) in parsed.fields.iter_mut().enumerate() {
-        if !field.attrs.is_empty() {
-            field.attrs = vec![];
-            continue;
-        }
-
-        let num = if let Some(ident) = &field.ident {
-            quote! { #ident }
-        } else {
-            let index = syn::Index::from(i);
-            quote! { #index }
-        };
-        fields.push(quote! { self.#num.accept(visitor); });
-    }
-
-    let parse = syn::parse::<Args>(attr);
-
-    let mut impls = Vec::new();
-
-    for ident in parse.unwrap().vars {
-        impls.push(quote! {impl #ident for #name {}})
-    }
-
-    quote! {
-        #parsed
-
-        impl Node for #name {
-            fn accept(&mut self, visitor: &mut dyn Visitor) {
-                visitor.#visitor(self);
-            }
-        }
-
-        #(#impls)*
-
-        impl Walkable for #name {
-            fn walk(&mut self, visitor: &mut dyn Visitor) {
-                #(#fields)*
-            }
-        }
-
-    }
-    .into()
-}
-
-#[proc_macro_attribute]
-pub fn node(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let parsed = syn::parse::<ItemTrait>(item).unwrap();
-
-    let name = parsed.ident.clone();
-    let visitor = format!("visit_{}", name.to_string().to_case(Case::Snake));
-    let visitor = syn::Ident::new(&visitor, proc_macro2::Span::call_site());
-
-    quote! {
-        #parsed
-
-        impl Node for Box<dyn #name> {
-            fn accept(&mut self, visitor: &mut dyn Visitor) {
-                visitor.#visitor(self);
-            }
-        }
-
-        impl Show for Box<dyn #name> {
-            fn show(&self) -> TreeDisplay {
-                (**self).show()
-            }
-        }
-
-        impl Walkable for Box<dyn #name> {
-            default fn walk(&mut self, visitor: &mut dyn Visitor) {
-                (**self).walk(visitor);
             }
         }
     }

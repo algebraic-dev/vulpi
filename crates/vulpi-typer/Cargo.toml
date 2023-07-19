@@ -11,3 +11,4 @@ im-rc = "15.1.0"
 vulpi-storage = { path = "../vulpi-storage" }
 vulpi-report = { path = "../vulpi-report" }
 vulpi-location = { path = "../vulpi-location" }
+vulpi-syntax = { path = "../vulpi-syntax" }

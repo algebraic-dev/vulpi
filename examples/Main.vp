@@ -1,1 +1,12 @@
-let a (E (F a b) (E (H I j a)) : T) = 2
+use Result as E
+use Result
+
+type Result a b = 
+    | Ok a 
+    | Err b
+    
+type Teste a b = 
+    | Ok a 
+    | Err b
+
+let a (Result.Ok a b : Result) = a b E.Err Err Teste.Err

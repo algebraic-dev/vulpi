@@ -1,4 +1,8 @@
-use std::{fmt::Display, ops::Range};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    ops::Range,
+};
 
 #[derive(Debug)]
 pub struct TreeDisplay {
@@ -78,6 +82,30 @@ impl<T: Show> Show for Box<T> {
 impl<T: Show> Show for Vec<T> {
     fn show(&self) -> TreeDisplay {
         let mut node = TreeDisplay::label("Vec");
+        for child in self {
+            node = node.with(child.show());
+        }
+        node
+    }
+}
+
+impl<T: Show, U: Show> Show for HashMap<T, U> {
+    fn show(&self) -> TreeDisplay {
+        let mut node = TreeDisplay::label("HashMap");
+        for (key, value) in self {
+            node = node.with(
+                TreeDisplay::label("Entry")
+                    .with(key.show())
+                    .with(value.show()),
+            );
+        }
+        node
+    }
+}
+
+impl<T: Show> Show for HashSet<T> {
+    fn show(&self) -> TreeDisplay {
+        let mut node = TreeDisplay::label("HashSet");
         for child in self {
             node = node.with(child.show());
         }

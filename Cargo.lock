@@ -481,8 +481,11 @@ dependencies = [
 name = "vulpi-resolver"
 version = "0.1.0"
 dependencies = [
+ "im-rc",
  "vulpi-location",
+ "vulpi-macros",
  "vulpi-report",
+ "vulpi-show",
  "vulpi-storage",
  "vulpi-syntax",
 ]
@@ -520,6 +523,7 @@ dependencies = [
  "vulpi-location",
  "vulpi-report",
  "vulpi-storage",
+ "vulpi-syntax",
 ]
 
 [[package]]

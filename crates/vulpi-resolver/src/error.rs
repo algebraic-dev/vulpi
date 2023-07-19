@@ -10,6 +10,13 @@ use vulpi_storage::interner::Symbol;
 
 pub enum ResolverErrorKind {
     AlreadyCaptured(Symbol),
+    CannotFindVariable(Symbol),
+    CannotFindTypeVariable(Symbol),
+    CannotFindModule(Vec<Symbol>),
+    VariableAlreadyCaptured(Symbol),
+    VariableNotBoundOnBothSides(Symbol),
+    CannotFindType(Symbol),
+    AmbiguousImport(Symbol),
 }
 
 pub struct ResolverError {
@@ -23,6 +30,33 @@ impl IntoDiagnostic for ResolverError {
         match &self.message {
             ResolverErrorKind::AlreadyCaptured(symbol) => {
                 format!("Symbol {} is already captured", symbol.get()).into()
+            }
+            ResolverErrorKind::CannotFindVariable(symbol) => {
+                format!("cannot find variable {}", symbol.get()).into()
+            }
+            ResolverErrorKind::CannotFindTypeVariable(symbol) => {
+                format!("cannot find type variable {}", symbol.get()).into()
+            }
+            ResolverErrorKind::CannotFindModule(symbols) => format!(
+                "cannot find module '{}'",
+                symbols
+                    .iter()
+                    .map(|x| x.get())
+                    .collect::<Vec<_>>()
+                    .join(".")
+            )
+            .into(),
+            ResolverErrorKind::VariableAlreadyCaptured(symbol) => {
+                format!("variable {} is already captured", symbol.get()).into()
+            }
+            ResolverErrorKind::VariableNotBoundOnBothSides(symbol) => {
+                format!("variable {} is not bound on both sides", symbol.get()).into()
+            }
+            ResolverErrorKind::CannotFindType(symbol) => {
+                format!("cannot find type {}", symbol.get()).into()
+            }
+            ResolverErrorKind::AmbiguousImport(symbol) => {
+                format!("ambiguous import of {}", symbol.get()).into()
             }
         }
     }
