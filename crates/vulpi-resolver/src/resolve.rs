@@ -21,40 +21,42 @@ use vulpi_syntax::resolved::{self};
 
 pub type Path = Vec<Symbol>;
 
-pub enum Ambiguity<T, U> {
-    Single(T, U),
-    Ambiguous(HashMap<T, U>),
+/// This is a structure that represents if a name is ambiguous os not inside the module. It's useful
+/// to report errors lately when something is used.
+pub enum Ambiguity<T> {
+    Single(T),
+    Ambiguous(HashSet<T>),
 }
 
-impl<T: std::hash::Hash + PartialEq + Eq, U> Ambiguity<T, U> {
-    pub fn new(key: T, value: U) -> Self {
-        Self::Single(key, value)
+impl<T: std::hash::Hash + PartialEq + Eq> Ambiguity<T> {
+    pub fn new(key: T) -> Self {
+        Self::Single(key)
     }
 
     pub fn to_ambiguous(self) -> Self {
         match self {
-            Self::Single(key, value) => Self::Ambiguous(std::iter::once((key, value)).collect()),
+            Self::Single(key) => Self::Ambiguous(std::iter::once(key).collect()),
             Self::Ambiguous(map) => Self::Ambiguous(map),
         }
     }
 
-    pub fn add(&mut self, key: T, value: U) {
+    pub fn add(&mut self, key: T) {
         match self {
-            Self::Single(k, _) if *k != key => {
+            Self::Single(k) if *k != key => {
                 let empty = unsafe { std::mem::zeroed() };
                 let res = std::mem::replace(self, empty);
                 match res {
-                    Self::Single(k, v) => {
-                        let mut val = HashMap::new();
-                        val.insert(k, v);
-                        val.insert(key, value);
+                    Self::Single(k) => {
+                        let mut val = HashSet::new();
+                        val.insert(k);
+                        val.insert(key);
                         *self = Self::Ambiguous(val)
                     }
                     _ => unreachable!(),
                 }
             }
             Self::Ambiguous(ref mut map) => {
-                map.insert(key, value);
+                map.insert(key);
             }
             _ => (),
         }
@@ -64,20 +66,20 @@ impl<T: std::hash::Hash + PartialEq + Eq, U> Ambiguity<T, U> {
         matches!(self, Self::Ambiguous(_))
     }
 
-    pub fn get_canonical(&self) -> &U {
+    pub fn get_canonical(&self) -> &T {
         match self {
-            Self::Single(_, res) => res,
-            Self::Ambiguous(map) => map.values().next().unwrap()
+            Self::Single(res) => res,
+            Self::Ambiguous(map) => map.iter().next().unwrap()
         }
     }
 }
 
 #[derive(Default)]
 pub struct ImportMap<U> {
-    map: HashMap<Symbol, Ambiguity<Symbol, U>>,
+    map: HashMap<Symbol, Ambiguity<U>>,
 }
 
-impl<U> ImportMap<U> {
+impl<U: std::hash::Hash + PartialEq + Eq> ImportMap<U> {
     pub fn new() -> Self {
         Self {
             map: HashMap::new(),
@@ -86,14 +88,14 @@ impl<U> ImportMap<U> {
 
     pub fn add(&mut self, key: Symbol, range: U) {
         match self.map.get_mut(&key) {
-            Some(ambiguity) => ambiguity.add(key, range),
+            Some(ambiguity) => ambiguity.add(range),
             None => {
-                self.map.insert(key.clone(), Ambiguity::new(key, range));
+                self.map.insert(key.clone(), Ambiguity::new(range));
             }
         }
     }
 
-    pub fn get(&self, key: &Symbol) -> Option<&Ambiguity<Symbol, U>> {
+    pub fn get(&self, key: &Symbol) -> Option<&Ambiguity<U>> {
         self.map.get(key)
     }
 }
@@ -201,7 +203,7 @@ impl<'a> Context<'a> {
         & self, 
         range: Range<Byte>,
         name: &Symbol,
-        imports: impl FnOnce(&Symbol) -> Option<&'b Ambiguity<Symbol,resolved::Qualified>>, 
+        imports: impl FnOnce(&Symbol) -> Option<&'b Ambiguity<resolved::Qualified>>, 
         decls: impl FnOnce(Id<id::Namespace>, &Symbol) -> bool, 
         err: impl FnOnce(Symbol)) ->
     resolved::Qualified {
@@ -209,7 +211,7 @@ impl<'a> Context<'a> {
             if res.is_ambiguous() {
                 self.report(
                     ResolverErrorKind::AmbiguousImport(name.clone()),
-                    res.get_canonical().get_range(),
+                    range,
                 );
                 return resolved::Qualified::Error(res.get_canonical().get_range());
             }

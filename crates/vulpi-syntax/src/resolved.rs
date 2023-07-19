@@ -21,6 +21,44 @@ pub enum Qualified {
     Error(Range<Byte>),
 }
 
+impl PartialEq for Qualified {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Resolved {
+                    canonical: l_canonical,
+                    last: l_last,
+                    ..
+                },
+                Self::Resolved {
+                    canonical: r_canonical,
+                    last: r_last,
+                    ..
+                },
+            ) => l_canonical == r_canonical && l_last == r_last,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Qualified {}
+
+impl std::hash::Hash for Qualified {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Resolved {
+                canonical,
+                last,
+                range: _,
+            } => {
+                canonical.hash(state);
+                last.hash(state);
+            }
+            Self::Error(_) => {}
+        }
+    }
+}
+
 impl Qualified {
     pub fn get_range(&self) -> Range<Byte> {
         match self {
