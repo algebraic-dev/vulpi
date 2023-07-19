@@ -15,6 +15,15 @@ impl Ident {
     }
 }
 
+impl From<Ident> for Spanned<Symbol> {
+    fn from(value: Ident) -> Self {
+        Spanned {
+            data: value.0,
+            range: value.1,
+        }
+    }
+}
+
 impl Show for Ident {
     fn show(&self) -> vulpi_show::TreeDisplay {
         TreeDisplay::label(&self.0.get())

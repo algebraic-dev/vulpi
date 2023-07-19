@@ -73,6 +73,7 @@ pub struct Definition {
     pub path: Vec<Symbol>,
     pub value_decls: HashSet<Symbol>,
     pub type_decls: HashSet<Symbol>,
+    pub cons_decls: HashSet<Symbol>,
 }
 
 impl Definition {
@@ -81,6 +82,7 @@ impl Definition {
             path,
             value_decls: Default::default(),
             type_decls: Default::default(),
+            cons_decls: Default::default(),
         }
     }
 }
@@ -151,7 +153,7 @@ impl Declare for Variant {
             .definitions
             .last_mut()
             .unwrap()
-            .value_decls
+            .cons_decls
             .insert(self.name.0.clone());
     }
 }

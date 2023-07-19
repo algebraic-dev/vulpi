@@ -32,6 +32,7 @@ fn main() {
     let namespace = vulpi_resolver::declare::declare_main(&mut modules, &mut desugared);
     let resolved = vulpi_resolver::resolve(desugared, file, namespace, reporter.clone(), &modules);
 
+    println!("{}", modules.show());
     println!("{}", resolved.show());
 
     if reporter.has_errors() {

@@ -18,11 +18,16 @@ pub enum Qualified {
         last: Symbol,
         range: Range<Byte>,
     },
-    Local {
-        last: Symbol,
-        range: Range<Byte>,
-    },
-    Error,
+    Error(Range<Byte>),
+}
+
+impl Qualified {
+    pub fn get_range(&self) -> Range<Byte> {
+        match self {
+            Self::Resolved { range, .. } => range.clone(),
+            Self::Error(range) => range.clone(),
+        }
+    }
 }
 
 impl Show for Qualified {
@@ -31,8 +36,7 @@ impl Show for Qualified {
             Self::Resolved {
                 canonical, last, ..
             } => TreeDisplay::label(&format!("{}:{}", canonical.0, last.get())),
-            Self::Local { last, .. } => TreeDisplay::label(&format!("Local {}", last.get())),
-            Self::Error => TreeDisplay::label("error"),
+            Self::Error(..) => TreeDisplay::label("error"),
         }
     }
 }
@@ -227,7 +231,10 @@ pub struct LetExpr {
 #[derive(Tree, Debug)]
 pub enum ExprKind {
     Variable(Ident),
-    Ident(Qualified),
+
+    Function(Qualified),
+    Constructor(Qualified),
+
     Lambda(LambdaExpr),
     Application(ApplicationExpr),
     Acessor(AcessorExpr),

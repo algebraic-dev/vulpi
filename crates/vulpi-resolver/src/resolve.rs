@@ -8,6 +8,7 @@ use crate::declare::Modules;
 use crate::error::{ResolverError, ResolverErrorKind};
 use crate::scopes::scopable::{TypeVariable, Variable};
 use crate::scopes::{Kaleidoscope, Scopeable};
+
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
@@ -60,16 +61,13 @@ impl<T: std::hash::Hash + PartialEq + Eq, U> Ambiguity<T, U> {
     }
 
     pub fn is_ambiguous(&self) -> bool {
-        match self {
-            Self::Ambiguous(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Ambiguous(_))
     }
 
-    pub fn get_canonical(&self) -> Option<&U> {
+    pub fn get_canonical(&self) -> &U {
         match self {
-            Self::Single(key, res) => Some(res),
-            _ => None,
+            Self::Single(_, res) => res,
+            Self::Ambiguous(map) => map.values().next().unwrap()
         }
     }
 }
@@ -100,6 +98,12 @@ impl<U> ImportMap<U> {
     }
 }
 
+pub struct Leveled<T> {
+    pub types: T,
+    pub values: T,
+    pub cons: T
+}
+
 /// The resolver context. This is used to keep track of the symbols that are captured by patterns,
 /// and to report errors.
 pub struct Context<'a> {
@@ -113,11 +117,10 @@ pub struct Context<'a> {
     pub types: HashSet<Symbol>,
     pub modules: &'a Modules,
 
-    /// Set of uses
+    /// Alias to import map
     pub uses: HashMap<Symbol, Vec<Symbol>>,
 
-    pub import_typ: ImportMap<resolved::Qualified>,
-    pub import_val: ImportMap<resolved::Qualified>,
+    pub imports: Leveled<ImportMap<resolved::Qualified>>,
 
     pub namespace: Id<id::Namespace>,
 }
@@ -136,8 +139,11 @@ impl<'a> Context<'a> {
             captured: vec![],
             types: HashSet::new(),
             modules,
-            import_typ: ImportMap::new(),
-            import_val: ImportMap::new(),
+            imports: Leveled {
+                types: ImportMap::new(),
+                values: ImportMap::new(),
+                cons: ImportMap::new(),
+            },
             uses: HashMap::new(),
             namespace,
         }
@@ -162,16 +168,13 @@ impl<'a> Context<'a> {
         self.scopes.add::<T>(symbol);
     }
 
-    // TODO: Patterns can access other variables!! and it's not cool >:c we need to 
-    // keep track if it need to be solved to a value.
-    fn canonicalize(&mut self, u: &Qualified, is_type: bool) -> resolved::Qualified {
-        if !u.segments.is_empty() {
-            let segments = u.to_path();
-            let mut rest = &segments[..];
+    fn canonicalize(&mut self, range: Range<Byte>, path: Vec<Symbol>) -> Result<Option<Id<id::Namespace>>, ()> {
+        if !path.is_empty() {
+            let mut rest = &path[..];
 
-            let sub_tree = if let Some(fst) = self.uses.get(&segments[0]) {
+            let sub_tree = if let Some(fst) = self.uses.get(&path[0]) {
                 if let Some(res) = self.modules.tree.find_sub_tree(fst) {
-                    rest = &segments[1..];
+                    rest = &path[1..];
                     res
                 } else {
                     &self.modules.tree
@@ -181,86 +184,181 @@ impl<'a> Context<'a> {
             };
 
             if let Some(res) = sub_tree.find(rest) {
-                let definitions = &self.modules.definitions[res.0];
-
-                if is_type && !definitions.type_decls.contains(&u.last.0) {
-                    self.report(
-                        ResolverErrorKind::CannotFindType(u.last.0.clone()),
-                        u.range.clone(),
-                    );
-                    return resolved::Qualified::Error;
-                }
-
-                if !is_type && !definitions.value_decls.contains(&u.last.0) {
-                    self.report(
-                        ResolverErrorKind::CannotFindVariable(u.last.0.clone()),
-                        u.range.clone(),
-                    );
-                    return resolved::Qualified::Error;
-                }
-
-                return resolved::Qualified::Resolved {
-                    canonical: res,
-                    last: u.last.0.clone(),
-                    range: u.range.clone(),
-                };
+                Ok(Some(res))
             } else {
                 self.report(
-                    ResolverErrorKind::CannotFindModule(u.to_path()),
-                    u.range.clone(),
+                    ResolverErrorKind::CannotFindModule(path),
+                    range,
                 );
-                return resolved::Qualified::Error;
+                Err(())
             }
-        } else if self.scopes.contains::<Variable>(&u.last.0) {
-            return resolved::Qualified::Local {
-                last: u.last.0.clone(),
-                range: u.range.clone(),
-            };
+        } else {
+            Ok(None)
         }
+    }
 
-        let aliased = if is_type {
-            self.import_typ.get(&u.last.0)
-        } else {
-            self.import_val.get(&u.last.0)
-        };
-
-        if let Some(ambiguity) = aliased {
-            if ambiguity.is_ambiguous() {
+    fn find_import<'b>(
+        & self, 
+        range: Range<Byte>,
+        name: &Symbol,
+        imports: impl FnOnce(&Symbol) -> Option<&'b Ambiguity<Symbol,resolved::Qualified>>, 
+        decls: impl FnOnce(Id<id::Namespace>, &Symbol) -> bool, 
+        err: impl FnOnce(Symbol)) ->
+    resolved::Qualified {
+        if let Some(res) = imports(name) {
+            if res.is_ambiguous() {
                 self.report(
-                    ResolverErrorKind::AmbiguousImport(u.last.0.clone()),
-                    u.range.clone(),
+                    ResolverErrorKind::AmbiguousImport(name.clone()),
+                    res.get_canonical().get_range(),
                 );
-                return resolved::Qualified::Error;
+                return resolved::Qualified::Error(res.get_canonical().get_range());
             }
 
-            ambiguity.get_canonical().unwrap().clone()
-        } else {
-            let map = if is_type {
-                &self.modules.definitions[self.namespace.0].type_decls
-            } else {
-                &self.modules.definitions[self.namespace.0].value_decls
+            let qualified = res.get_canonical();
+
+            let resolved::Qualified::Resolved { canonical, last, range } = qualified.clone() else {
+                return qualified.clone();
             };
 
-            if !map.contains(&u.last.0) {
-                if is_type {
-                    self.report(
-                        ResolverErrorKind::CannotFindType(u.last.0.clone()),
-                        u.range.clone(),
-                    );
-                } else {
-                    self.report(
-                        ResolverErrorKind::CannotFindVariable(u.last.0.clone()),
-                        u.range.clone(),
-                    );
-                }
-                resolved::Qualified::Error
-            } else {
-                resolved::Qualified::Resolved {
-                    canonical: self.namespace,
-                    last: u.last.0.clone(),
-                    range: u.range.clone(),
-                }
+            if !decls(canonical, name) {
+                err(name.clone());
+                return resolved::Qualified::Error(range);
             }
+
+            resolved::Qualified::Resolved {
+                canonical,
+                last,
+                range
+            }
+        } else if decls(self.namespace, name) {
+            resolved::Qualified::Resolved {
+                canonical: self.namespace,
+                last: name.clone(),
+                range,
+            }
+        } else {
+            err(name.clone());
+            resolved::Qualified::Error(range)
+        }
+    }
+
+    fn find_type_on_namespace(&self, range: Range<Byte>, name: &Symbol, namespace: Id<id::Namespace>) -> resolved::Qualified {
+        if self.modules.definitions[namespace.0].type_decls.contains(name) {
+            resolved::Qualified::Resolved {
+                canonical: namespace,
+                last: name.clone(),
+                range,
+            }
+        } else {
+            resolved::Qualified::Error(range)
+        }
+    }
+
+    fn find_type_import(&self, range: Range<Byte>, name: &Symbol) -> resolved::Qualified {
+        self.find_import(
+            range.clone(), 
+            name, 
+            |s| self.imports.types.get(s), 
+            |id, name| self.modules.definitions[id.0].type_decls.contains(name), 
+            |name| {
+                self.report(
+                    ResolverErrorKind::CannotFindType(name),
+                    range,
+                )
+            }
+        )
+    }
+
+    fn find_type(&mut self, qualified: &Qualified) -> resolved::Qualified {
+        let canonical = self.canonicalize(qualified.range.clone(), qualified.to_path());
+        
+        if let Err(()) = canonical {
+            resolved::Qualified::Error(qualified.range.clone())
+        } else if let Ok(Some(id)) = canonical {
+            self.find_type_on_namespace(qualified.range.clone(), &qualified.last.0, id)
+        } else {
+            self.find_type_import(qualified.range.clone(), &qualified.last.0)
+        }
+    }
+
+    fn find_value_on_namespace(&self, range: Range<Byte>, name: &Symbol, namespace: Id<id::Namespace>) -> resolved::Qualified {
+        if self.modules.definitions[namespace.0].value_decls.contains(name)
+        || self.modules.definitions[namespace.0].cons_decls.contains(name) {
+            resolved::Qualified::Resolved {
+                canonical: namespace,
+                last: name.clone(),
+                range,
+            }
+        } else {
+            resolved::Qualified::Error(range)
+        }
+    }
+    
+    fn find_value_import(&self, range: Range<Byte>, name: &Symbol) -> resolved::Qualified {
+        self.find_import(
+            range.clone(), 
+            name, 
+            |s| self.imports.values.get(s).or_else(|| self.imports.cons.get(s)),
+            |id, name| self.modules.definitions[id.0].value_decls.contains(name)
+                    || self.modules.definitions[id.0].cons_decls.contains(name), 
+            |name| {
+                self.report(
+                    ResolverErrorKind::CannotFindVariable(name),
+                    range,
+                )
+            }
+        )
+    }
+
+    fn find_value(&mut self, qualified: &Qualified) -> resolved::Qualified {
+        let canonical = self.canonicalize(qualified.range.clone(), qualified.to_path());
+        
+        if let Err(()) = canonical {
+            resolved::Qualified::Error(qualified.range.clone())
+        } else if let Ok(Some(id)) = canonical {
+            self.find_value_on_namespace(qualified.range.clone(), &qualified.last.0, id)
+        } else {
+            self.find_value_import(qualified.range.clone(), &qualified.last.0)
+        }
+    }
+
+    fn find_constructor_on_namespace(&self, range: Range<Byte>, name: &Symbol, namespace: Id<id::Namespace>) -> resolved::Qualified {
+        if self.modules.definitions[namespace.0].cons_decls.contains(name) {
+            resolved::Qualified::Resolved {
+                canonical: namespace,
+                last: name.clone(),
+                range,
+            }
+        } else {
+            resolved::Qualified::Error(range)
+        }
+    }
+
+    fn find_constructor_import(&self, range: Range<Byte>, name: &Symbol, report: bool) -> resolved::Qualified {
+        self.find_import(
+            range.clone(), 
+            name, 
+            |s| self.imports.cons.get(s),
+            |id, n| self.modules.definitions[id.0].cons_decls.contains(n), 
+            |name| {
+            if report {
+                self.report(
+                    ResolverErrorKind::CannotFindVariable(name),
+                    range,
+                )
+            }
+        })
+    }
+
+    fn find_constructor(&mut self, qualified: &Qualified, report: bool) -> resolved::Qualified {
+        let canonical = self.canonicalize(qualified.range.clone(), qualified.to_path());
+        
+        if let Err(()) = canonical {
+            resolved::Qualified::Error(qualified.range.clone())
+        } else if let Ok(Some(id)) = canonical {
+            self.find_constructor_on_namespace(qualified.range.clone(), &qualified.last.0, id)
+        } else {
+            self.find_constructor_import(qualified.range.clone(), &qualified.last.0, report)
         }
     }
 }
@@ -350,14 +448,11 @@ impl Resolve for TypeKind {
 
     fn resolve(self, context: &mut Context) -> Self::Out {
         match self {
-            TypeKind::Upper(u) => resolved::TypeKind::Upper(context.canonicalize(&u, true)),
+            TypeKind::Upper(u) => {
+                let upper = context.find_type(&u);
+                resolved::TypeKind::Upper(upper)
+            },
             TypeKind::Lower(l) => {
-                if !context.scopes.contains::<TypeVariable>(&l.0) {
-                    context.report(
-                        ResolverErrorKind::CannotFindVariable(l.0.clone()),
-                        l.1.clone(),
-                    );
-                }
                 resolved::TypeKind::Lower(l.resolve(context))
             }
             TypeKind::Arrow(a) => resolved::TypeKind::Arrow(a.resolve(context)),
@@ -386,8 +481,9 @@ impl Resolve for PatApplication {
     type Out = resolved::PatApplication;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
+        let cons = context.find_constructor(&self.func, true);
         resolved::PatApplication {
-            func: context.canonicalize(&self.func, false),
+            func: cons,
             args: self.args.into_iter().map(|a| a.resolve(context)).collect(),
         }
     }
@@ -452,8 +548,8 @@ impl Resolve for PatternKind {
         }
 
         let result = match self {
-            PatternKind::Upper(u) => {
-                let canonical = context.canonicalize(&u, false);
+            PatternKind::Upper(qualified) => {
+                let canonical = context.find_constructor(&qualified, true);
                 resolved::PatternKind::Upper(canonical)
             }
             PatternKind::Lower(l) => {
@@ -666,14 +762,20 @@ impl Resolve for ExprKind {
     fn resolve(self, context: &mut Context) -> Self::Out {
         match self {
             ExprKind::Ident(qualified) => {
-                if qualified.segments.is_empty()
-                    && context.scopes.contains::<Variable>(&qualified.last.0)
-                {
-                    return resolved::ExprKind::Variable(qualified.last.resolve(context));
+                if context.scopes.contains::<Variable>(&qualified.last.0) && qualified.segments.is_empty() {
+                    return resolved::ExprKind::Variable(qualified.last.clone().into())
                 }
+    
+                let canonical = context.find_value(&qualified);
 
-                let canonical = context.canonicalize(&qualified, false);
-                resolved::ExprKind::Ident(canonical)
+                if let resolved::Qualified::Resolved { canonical: path, .. } = &canonical {
+                    let definitions = &context.modules.definitions[path.0];
+                    if definitions.value_decls.contains(&qualified.last.0) {
+                        return resolved::ExprKind::Function(canonical)
+                    }   
+                };
+                
+                resolved::ExprKind::Constructor(canonical)
             }
             ExprKind::Lambda(lambda) => resolved::ExprKind::Lambda(lambda.resolve(context)),
             ExprKind::Application(app) => resolved::ExprKind::Application(app.resolve(context)),
@@ -809,10 +911,10 @@ impl Resolve for UseDecl {
             let definitions = &context.modules.definitions[id.0];
 
             for typedef in &definitions.type_decls {
-                context.import_typ.add(
+                context.imports.types.add(
                     typedef.clone(),
                     resolved::Qualified::Resolved {
-                        canonical: id.clone(),
+                        canonical: id,
                         last: typedef.clone(),
                         range: self.path.range.clone(),
                     },
@@ -820,11 +922,22 @@ impl Resolve for UseDecl {
             }
 
             for valuedef in &definitions.value_decls {
-                context.import_val.add(
+                context.imports.values.add(
                     valuedef.clone(),
                     resolved::Qualified::Resolved {
-                        canonical: id.clone(),
+                        canonical: id,
                         last: valuedef.clone(),
+                        range: self.path.range.clone(),
+                    },
+                )
+            }
+
+            for consdef in &definitions.cons_decls {
+                context.imports.cons.add(
+                    consdef.clone(),
+                    resolved::Qualified::Resolved {
+                        canonical: id,
+                        last: consdef.clone(),
                         range: self.path.range.clone(),
                     },
                 )

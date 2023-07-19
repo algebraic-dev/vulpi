@@ -1,12 +1,7 @@
 use Result as E
-use Result
 
 type Result a b = 
     | Ok a 
     | Err b
     
-type Teste a b = 
-    | Ok a 
-    | Err b
-
-let a (Result.Ok a b : Result) = a b E.Err Err Teste.Err
+let a (Result.Ok a b : Result) = Err
