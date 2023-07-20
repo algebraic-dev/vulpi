@@ -5,6 +5,8 @@ use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 use vulpi_syntax::r#abstract::*;
 
+use crate::ambiguity::DataType;
+
 #[derive(Default, Tree)]
 pub struct ModuleTree {
     name: Id<id::Namespace>,
@@ -71,18 +73,14 @@ impl ModuleTree {
 #[derive(Tree)]
 pub struct Definition {
     pub path: Vec<Symbol>,
-    pub value_decls: HashSet<Symbol>,
-    pub type_decls: HashSet<Symbol>,
-    pub cons_decls: HashSet<Symbol>,
+    pub decls: HashSet<DataType>,
 }
 
 impl Definition {
     pub fn new(path: Vec<Symbol>) -> Self {
         Self {
             path,
-            value_decls: Default::default(),
-            type_decls: Default::default(),
-            cons_decls: Default::default(),
+            decls: Default::default(),
         }
     }
 }
@@ -153,15 +151,15 @@ impl Declare for Variant {
             .definitions
             .last_mut()
             .unwrap()
-            .cons_decls
-            .insert(self.name.0.clone());
+            .decls
+            .insert(DataType::Constructor(self.name.0.clone()));
     }
 }
 
 impl Declare for TypeDecl {
     fn declare(&mut self, context: &mut Modules) {
         let defs = context.current();
-        defs.type_decls.insert(self.name.0.clone());
+        defs.decls.insert(DataType::Type(self.name.0.clone()));
 
         let old_path = context.module.clone();
         let mut path = context.module.clone();
@@ -183,7 +181,7 @@ impl Declare for TypeDecl {
 impl Declare for LetDecl {
     fn declare(&mut self, context: &mut Modules) {
         let defs = context.current();
-        defs.value_decls.insert(self.name.0.clone());
+        defs.decls.insert(DataType::Let(self.name.0.clone()));
     }
 }
 

@@ -8,6 +8,8 @@ use vulpi_report::IntoDiagnostic;
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 
+use crate::ambiguity::DataType;
+
 pub enum ResolverErrorKind {
     AlreadyCaptured(Symbol),
     CannotFindVariable(Symbol),
@@ -15,8 +17,8 @@ pub enum ResolverErrorKind {
     CannotFindModule(Vec<Symbol>),
     VariableAlreadyCaptured(Symbol),
     VariableNotBoundOnBothSides(Symbol),
-    CannotFindType(Symbol),
-    AmbiguousImport(Symbol),
+    CannotFind(DataType),
+    AmbiguousImport(DataType),
 }
 
 pub struct ResolverError {
@@ -52,11 +54,15 @@ impl IntoDiagnostic for ResolverError {
             ResolverErrorKind::VariableNotBoundOnBothSides(symbol) => {
                 format!("variable {} is not bound on both sides", symbol.get()).into()
             }
-            ResolverErrorKind::CannotFindType(symbol) => {
-                format!("cannot find type {}", symbol.get()).into()
-            }
+            ResolverErrorKind::CannotFind(data) => match data {
+                DataType::Type(symbol) => format!("cannot find type {}", symbol.get()).into(),
+                DataType::Let(symbol) => format!("cannot find variable {}", symbol.get()).into(),
+                DataType::Constructor(symbol) => {
+                    format!("cannot find constructor {}", symbol.get()).into()
+                }
+            },
             ResolverErrorKind::AmbiguousImport(symbol) => {
-                format!("ambiguous import of {}", symbol.get()).into()
+                format!("ambiguous import of {}", symbol.symbol().get()).into()
             }
         }
     }
