@@ -6,7 +6,7 @@
 
 use crate::declare::Modules;
 use crate::error::{ResolverError, ResolverErrorKind};
-use crate::scopes::scopable::{TypeVariable, Variable};
+use crate::scopes::scopable::{self, TypeVariable, Variable};
 use crate::scopes::{Kaleidoscope, Scopeable};
 
 use std::collections::{HashMap, HashSet};
@@ -19,112 +19,40 @@ use vulpi_storage::interner::Symbol;
 use vulpi_syntax::r#abstract::*;
 use vulpi_syntax::resolved::{self};
 
-pub type Path = Vec<Symbol>;
+use super::ambiguity::{Ambiguity, ImportMap};
 
-/// This is a structure that represents if a name is ambiguous os not inside the module. It's useful
-/// to report errors lately when something is used.
-pub enum Ambiguity<T> {
-    Single(T),
-    Ambiguous(HashSet<T>),
-}
-
-impl<T: std::hash::Hash + PartialEq + Eq> Ambiguity<T> {
-    pub fn new(key: T) -> Self {
-        Self::Single(key)
-    }
-
-    pub fn to_ambiguous(self) -> Self {
-        match self {
-            Self::Single(key) => Self::Ambiguous(std::iter::once(key).collect()),
-            Self::Ambiguous(map) => Self::Ambiguous(map),
-        }
-    }
-
-    pub fn add(&mut self, key: T) {
-        match self {
-            Self::Single(k) if *k != key => {
-                let empty = unsafe { std::mem::zeroed() };
-                let res = std::mem::replace(self, empty);
-                match res {
-                    Self::Single(k) => {
-                        let mut val = HashSet::new();
-                        val.insert(k);
-                        val.insert(key);
-                        *self = Self::Ambiguous(val)
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            Self::Ambiguous(ref mut map) => {
-                map.insert(key);
-            }
-            _ => (),
-        }
-    }
-
-    pub fn is_ambiguous(&self) -> bool {
-        matches!(self, Self::Ambiguous(_))
-    }
-
-    pub fn get_canonical(&self) -> &T {
-        match self {
-            Self::Single(res) => res,
-            Self::Ambiguous(map) => map.iter().next().unwrap()
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct ImportMap<U> {
-    map: HashMap<Symbol, Ambiguity<U>>,
-}
-
-impl<U: std::hash::Hash + PartialEq + Eq> ImportMap<U> {
-    pub fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
-    }
-
-    pub fn add(&mut self, key: Symbol, range: U) {
-        match self.map.get_mut(&key) {
-            Some(ambiguity) => ambiguity.add(range),
-            None => {
-                self.map.insert(key.clone(), Ambiguity::new(range));
-            }
-        }
-    }
-
-    pub fn get(&self, key: &Symbol) -> Option<&Ambiguity<U>> {
-        self.map.get(key)
-    }
-}
-
-pub struct Leveled<T> {
-    pub types: T,
-    pub values: T,
-    pub cons: T
+struct Leveled<T> {
+    types: T,
+    values: T,
+    cons: T,
 }
 
 /// The resolver context. This is used to keep track of the symbols that are captured by patterns,
 /// and to report errors.
 pub struct Context<'a> {
     /// Pattern symbols captured by the pattern.
-    pub captured: Vec<HashMap<Symbol, Range<Byte>>>,
-    pub reporter: Report,
-    pub file: Id<id::File>,
-    pub scopes: Kaleidoscope,
+    captured: Vec<HashMap<Symbol, Range<Byte>>>,
+
+    /// Error report structure
+    reporter: Report,
+
+    /// THe current file
+    file: Id<id::File>,
+
+    /// A collection of scopes that are currently active
+    scopes: Kaleidoscope,
 
     /// The set of types that are defined in this scope
-    pub types: HashSet<Symbol>,
-    pub modules: &'a Modules,
+    modules: &'a Modules,
 
     /// Alias to import map
-    pub uses: HashMap<Symbol, Vec<Symbol>>,
+    uses: HashMap<Symbol, Vec<Symbol>>,
 
-    pub imports: Leveled<ImportMap<resolved::Qualified>>,
+    /// A bunch of things that got imported like constructors, values and types in the current scope
+    imports: Leveled<ImportMap<resolved::Qualified>>,
 
-    pub namespace: Id<id::Namespace>,
+    /// The current namespace
+    namespace: Id<id::Namespace>,
 }
 
 impl<'a> Context<'a> {
@@ -139,7 +67,6 @@ impl<'a> Context<'a> {
             reporter,
             scopes: Kaleidoscope::default(),
             captured: vec![],
-            types: HashSet::new(),
             modules,
             imports: Leveled {
                 types: ImportMap::new(),
@@ -151,7 +78,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn report(&self, message: ResolverErrorKind, range: Range<Byte>) {
+    fn report(&self, message: ResolverErrorKind, range: Range<Byte>) {
         self.reporter.report(Diagnostic::new(ResolverError {
             message,
             range,
@@ -159,18 +86,22 @@ impl<'a> Context<'a> {
         }));
     }
 
-    pub fn scope<T: Scopeable, U>(&mut self, fun: impl FnOnce(&mut Self) -> U) -> U {
+    fn scope<T: Scopeable, U>(&mut self, fun: impl FnOnce(&mut Self) -> U) -> U {
         self.scopes.push::<T>();
         let result = fun(self);
         self.scopes.pop::<T>();
         result
     }
 
-    pub fn add<T: Scopeable>(&mut self, symbol: Symbol) {
+    fn add<T: Scopeable>(&mut self, symbol: Symbol) {
         self.scopes.add::<T>(symbol);
     }
 
-    fn canonicalize(&mut self, range: Range<Byte>, path: Vec<Symbol>) -> Result<Option<Id<id::Namespace>>, ()> {
+    fn canonicalize(
+        &mut self,
+        range: Range<Byte>,
+        path: Vec<Symbol>,
+    ) -> Result<Option<Id<id::Namespace>>, ()> {
         if !path.is_empty() {
             let mut rest = &path[..];
 
@@ -188,10 +119,7 @@ impl<'a> Context<'a> {
             if let Some(res) = sub_tree.find(rest) {
                 Ok(Some(res))
             } else {
-                self.report(
-                    ResolverErrorKind::CannotFindModule(path),
-                    range,
-                );
+                self.report(ResolverErrorKind::CannotFindModule(path), range);
                 Err(())
             }
         } else {
@@ -200,19 +128,16 @@ impl<'a> Context<'a> {
     }
 
     fn find_import<'b>(
-        & self, 
+        &self,
         range: Range<Byte>,
         name: &Symbol,
-        imports: impl FnOnce(&Symbol) -> Option<&'b Ambiguity<resolved::Qualified>>, 
-        decls: impl FnOnce(Id<id::Namespace>, &Symbol) -> bool, 
-        err: impl FnOnce(Symbol)) ->
-    resolved::Qualified {
+        imports: impl FnOnce(&Symbol) -> Option<&'b Ambiguity<resolved::Qualified>>,
+        decls: impl FnOnce(Id<id::Namespace>, &Symbol) -> bool,
+        err: impl FnOnce(Symbol),
+    ) -> resolved::Qualified {
         if let Some(res) = imports(name) {
             if res.is_ambiguous() {
-                self.report(
-                    ResolverErrorKind::AmbiguousImport(name.clone()),
-                    range,
-                );
+                self.report(ResolverErrorKind::AmbiguousImport(name.clone()), range);
                 return resolved::Qualified::Error(res.get_canonical().get_range());
             }
 
@@ -230,7 +155,7 @@ impl<'a> Context<'a> {
             resolved::Qualified::Resolved {
                 canonical,
                 last,
-                range
+                range,
             }
         } else if decls(self.namespace, name) {
             resolved::Qualified::Resolved {
@@ -244,8 +169,16 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn find_type_on_namespace(&self, range: Range<Byte>, name: &Symbol, namespace: Id<id::Namespace>) -> resolved::Qualified {
-        if self.modules.definitions[namespace.0].type_decls.contains(name) {
+    fn find_type_on_namespace(
+        &self,
+        range: Range<Byte>,
+        name: &Symbol,
+        namespace: Id<id::Namespace>,
+    ) -> resolved::Qualified {
+        if self.modules.definitions[namespace.0]
+            .type_decls
+            .contains(name)
+        {
             resolved::Qualified::Resolved {
                 canonical: namespace,
                 last: name.clone(),
@@ -258,22 +191,17 @@ impl<'a> Context<'a> {
 
     fn find_type_import(&self, range: Range<Byte>, name: &Symbol) -> resolved::Qualified {
         self.find_import(
-            range.clone(), 
-            name, 
-            |s| self.imports.types.get(s), 
-            |id, name| self.modules.definitions[id.0].type_decls.contains(name), 
-            |name| {
-                self.report(
-                    ResolverErrorKind::CannotFindType(name),
-                    range,
-                )
-            }
+            range.clone(),
+            name,
+            |s| self.imports.types.get(s),
+            |id, name| self.modules.definitions[id.0].type_decls.contains(name),
+            |name| self.report(ResolverErrorKind::CannotFindType(name), range),
         )
     }
 
     fn find_type(&mut self, qualified: &Qualified) -> resolved::Qualified {
         let canonical = self.canonicalize(qualified.range.clone(), qualified.to_path());
-        
+
         if let Err(()) = canonical {
             resolved::Qualified::Error(qualified.range.clone())
         } else if let Ok(Some(id)) = canonical {
@@ -283,9 +211,19 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn find_value_on_namespace(&self, range: Range<Byte>, name: &Symbol, namespace: Id<id::Namespace>) -> resolved::Qualified {
-        if self.modules.definitions[namespace.0].value_decls.contains(name)
-        || self.modules.definitions[namespace.0].cons_decls.contains(name) {
+    fn find_value_on_namespace(
+        &self,
+        range: Range<Byte>,
+        name: &Symbol,
+        namespace: Id<id::Namespace>,
+    ) -> resolved::Qualified {
+        if self.modules.definitions[namespace.0]
+            .value_decls
+            .contains(name)
+            || self.modules.definitions[namespace.0]
+                .cons_decls
+                .contains(name)
+        {
             resolved::Qualified::Resolved {
                 canonical: namespace,
                 last: name.clone(),
@@ -295,26 +233,28 @@ impl<'a> Context<'a> {
             resolved::Qualified::Error(range)
         }
     }
-    
+
     fn find_value_import(&self, range: Range<Byte>, name: &Symbol) -> resolved::Qualified {
         self.find_import(
-            range.clone(), 
-            name, 
-            |s| self.imports.values.get(s).or_else(|| self.imports.cons.get(s)),
-            |id, name| self.modules.definitions[id.0].value_decls.contains(name)
-                    || self.modules.definitions[id.0].cons_decls.contains(name), 
-            |name| {
-                self.report(
-                    ResolverErrorKind::CannotFindVariable(name),
-                    range,
-                )
-            }
+            range.clone(),
+            name,
+            |s| {
+                self.imports
+                    .values
+                    .get(s)
+                    .or_else(|| self.imports.cons.get(s))
+            },
+            |id, name| {
+                self.modules.definitions[id.0].value_decls.contains(name)
+                    || self.modules.definitions[id.0].cons_decls.contains(name)
+            },
+            |name| self.report(ResolverErrorKind::CannotFindVariable(name), range),
         )
     }
 
     fn find_value(&mut self, qualified: &Qualified) -> resolved::Qualified {
         let canonical = self.canonicalize(qualified.range.clone(), qualified.to_path());
-        
+
         if let Err(()) = canonical {
             resolved::Qualified::Error(qualified.range.clone())
         } else if let Ok(Some(id)) = canonical {
@@ -324,8 +264,16 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn find_constructor_on_namespace(&self, range: Range<Byte>, name: &Symbol, namespace: Id<id::Namespace>) -> resolved::Qualified {
-        if self.modules.definitions[namespace.0].cons_decls.contains(name) {
+    fn find_constructor_on_namespace(
+        &self,
+        range: Range<Byte>,
+        name: &Symbol,
+        namespace: Id<id::Namespace>,
+    ) -> resolved::Qualified {
+        if self.modules.definitions[namespace.0]
+            .cons_decls
+            .contains(name)
+        {
             resolved::Qualified::Resolved {
                 canonical: namespace,
                 last: name.clone(),
@@ -336,25 +284,28 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn find_constructor_import(&self, range: Range<Byte>, name: &Symbol, report: bool) -> resolved::Qualified {
+    fn find_constructor_import(
+        &self,
+        range: Range<Byte>,
+        name: &Symbol,
+        report: bool,
+    ) -> resolved::Qualified {
         self.find_import(
-            range.clone(), 
-            name, 
+            range.clone(),
+            name,
             |s| self.imports.cons.get(s),
-            |id, n| self.modules.definitions[id.0].cons_decls.contains(n), 
+            |id, n| self.modules.definitions[id.0].cons_decls.contains(n),
             |name| {
-            if report {
-                self.report(
-                    ResolverErrorKind::CannotFindVariable(name),
-                    range,
-                )
-            }
-        })
+                if report {
+                    self.report(ResolverErrorKind::CannotFindVariable(name), range)
+                }
+            },
+        )
     }
 
     fn find_constructor(&mut self, qualified: &Qualified, report: bool) -> resolved::Qualified {
         let canonical = self.canonicalize(qualified.range.clone(), qualified.to_path());
-        
+
         if let Err(()) = canonical {
             resolved::Qualified::Error(qualified.range.clone())
         } else if let Ok(Some(id)) = canonical {
@@ -453,10 +404,8 @@ impl Resolve for TypeKind {
             TypeKind::Upper(u) => {
                 let upper = context.find_type(&u);
                 resolved::TypeKind::Upper(upper)
-            },
-            TypeKind::Lower(l) => {
-                resolved::TypeKind::Lower(l.resolve(context))
             }
+            TypeKind::Lower(l) => resolved::TypeKind::Lower(l.resolve(context)),
             TypeKind::Arrow(a) => resolved::TypeKind::Arrow(a.resolve(context)),
             TypeKind::Application(a) => resolved::TypeKind::Application(a.resolve(context)),
             TypeKind::Forall(f) => resolved::TypeKind::Forall(f.resolve(context)),
@@ -696,10 +645,10 @@ impl Resolve for WhenArm {
     type Out = resolved::WhenArm;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
-        resolved::WhenArm {
+        context.scope::<scopable::Variable, _>(|context| resolved::WhenArm {
             pattern: Box::new(self.pattern.resolve(context)),
             then: Box::new(self.then.resolve(context)),
-        }
+        })
     }
 }
 
@@ -752,9 +701,9 @@ impl Resolve for Block {
     type Out = resolved::Block;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
-        resolved::Block {
+        context.scope::<scopable::Variable, _>(|context| resolved::Block {
             statements: self.statements.resolve(context),
-        }
+        })
     }
 }
 
@@ -764,19 +713,24 @@ impl Resolve for ExprKind {
     fn resolve(self, context: &mut Context) -> Self::Out {
         match self {
             ExprKind::Ident(qualified) => {
-                if context.scopes.contains::<Variable>(&qualified.last.0) && qualified.segments.is_empty() {
-                    return resolved::ExprKind::Variable(qualified.last.clone().into())
+                if context.scopes.contains::<Variable>(&qualified.last.0)
+                    && qualified.segments.is_empty()
+                {
+                    return resolved::ExprKind::Variable(qualified.last.clone().into());
                 }
-    
+
                 let canonical = context.find_value(&qualified);
 
-                if let resolved::Qualified::Resolved { canonical: path, .. } = &canonical {
+                if let resolved::Qualified::Resolved {
+                    canonical: path, ..
+                } = &canonical
+                {
                     let definitions = &context.modules.definitions[path.0];
                     if definitions.value_decls.contains(&qualified.last.0) {
-                        return resolved::ExprKind::Function(canonical)
-                    }   
+                        return resolved::ExprKind::Function(canonical);
+                    }
                 };
-                
+
                 resolved::ExprKind::Constructor(canonical)
             }
             ExprKind::Lambda(lambda) => resolved::ExprKind::Lambda(lambda.resolve(context)),
@@ -879,11 +833,11 @@ impl Resolve for LetCase {
     type Out = resolved::LetCase;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
-        resolved::LetCase {
+        context.scope::<scopable::Variable, _>(|context| resolved::LetCase {
             name_range: self.name_range,
             patterns: self.patterns.resolve(context),
             body: Box::new(self.body.resolve(context)),
-        }
+        })
     }
 }
 
@@ -904,8 +858,8 @@ impl Resolve for UseDecl {
     fn resolve(self, context: &mut Context) -> Self::Out {
         let path = self.path.to_entire_path();
         let Some(id) = context.modules.find_module(&path) else {
-                        context.report(ResolverErrorKind::CannotFindModule(path), self.path.range);
-            return 
+            context.report(ResolverErrorKind::CannotFindModule(path), self.path.range);
+            return;
         };
         if let Some(alias) = self.alias {
             context.uses.insert(alias.0, path);

@@ -3,12 +3,11 @@ use declare::Modules;
 use resolve::Context;
 
 use vulpi_report::Report;
-use vulpi_storage::{
-    id::{self, Id},
-    interner::Symbol,
-};
+use vulpi_storage::id::{self, Id};
+use vulpi_storage::interner::Symbol;
 use vulpi_syntax::{r#abstract::Program, resolved};
 
+pub mod ambiguity;
 pub mod declare;
 pub mod error;
 pub mod resolve;

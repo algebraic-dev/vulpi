@@ -1,16 +1,10 @@
 pub mod scopable {
-    pub enum Type {}
-    pub enum Function {}
-    pub enum Constructor {}
     pub enum Variable {}
     pub enum TypeVariable {}
     pub enum Module {}
 
     mod sealed {
         pub trait Scopable {}
-        impl Scopable for super::Type {}
-        impl Scopable for super::Function {}
-        impl Scopable for super::Constructor {}
         impl Scopable for super::Variable {}
         impl Scopable for super::TypeVariable {}
         impl Scopable for super::Module {}
@@ -59,11 +53,8 @@ impl<'a> ScopesMut<'a> {
 
 #[derive(Clone, Default)]
 pub struct Kaleidoscope {
-    types: Scope,
-    functions: Scope,
-    constructors: Scope,
-    variables: Scope,
-    type_variables: Scope,
+    pub variables: Scope,
+    pub type_variables: Scope,
 }
 
 pub trait Scoped {
@@ -74,36 +65,6 @@ pub trait Scoped {
 pub trait Scopeable {
     fn scope(kaleidoscope: &Kaleidoscope) -> Scopes<'_>;
     fn scope_mut(kaleidoscope: &mut Kaleidoscope) -> ScopesMut<'_>;
-}
-
-impl Scopeable for scopable::Type {
-    fn scope(kaleidoscope: &Kaleidoscope) -> Scopes<'_> {
-        Scopes(vec![&kaleidoscope.types])
-    }
-
-    fn scope_mut(kaleidoscope: &mut Kaleidoscope) -> ScopesMut<'_> {
-        ScopesMut(vec![&mut kaleidoscope.types])
-    }
-}
-
-impl Scopeable for scopable::Function {
-    fn scope(kaleidoscope: &Kaleidoscope) -> Scopes<'_> {
-        Scopes(vec![&kaleidoscope.functions])
-    }
-
-    fn scope_mut(kaleidoscope: &mut Kaleidoscope) -> ScopesMut<'_> {
-        ScopesMut(vec![&mut kaleidoscope.functions])
-    }
-}
-
-impl Scopeable for scopable::Constructor {
-    fn scope(kaleidoscope: &Kaleidoscope) -> Scopes<'_> {
-        Scopes(vec![&kaleidoscope.constructors])
-    }
-
-    fn scope_mut(kaleidoscope: &mut Kaleidoscope) -> ScopesMut<'_> {
-        ScopesMut(vec![&mut kaleidoscope.constructors])
-    }
 }
 
 impl Scopeable for scopable::Variable {
@@ -123,26 +84,6 @@ impl Scopeable for scopable::TypeVariable {
 
     fn scope_mut(kaleidoscope: &mut Kaleidoscope) -> ScopesMut<'_> {
         ScopesMut(vec![&mut kaleidoscope.type_variables])
-    }
-}
-
-impl Scopeable for scopable::Module {
-    fn scope(kaleidoscope: &Kaleidoscope) -> Scopes<'_> {
-        Scopes(vec![
-            &kaleidoscope.types,
-            &kaleidoscope.functions,
-            &kaleidoscope.constructors,
-            &kaleidoscope.type_variables,
-        ])
-    }
-
-    fn scope_mut(kaleidoscope: &mut Kaleidoscope) -> ScopesMut<'_> {
-        ScopesMut(vec![
-            &mut kaleidoscope.types,
-            &mut kaleidoscope.functions,
-            &mut kaleidoscope.constructors,
-            &mut kaleidoscope.type_variables,
-        ])
     }
 }
 
@@ -171,6 +112,6 @@ impl Kaleidoscope {
         T::scope(self)
             .0
             .iter()
-            .any(|scope| scope.map.last().unwrap().contains(name))
+            .any(|scope| scope.map.iter().any(|x| x.contains(name)))
     }
 }
