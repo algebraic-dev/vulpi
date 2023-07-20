@@ -756,6 +756,19 @@ impl Parser<'_> {
         })
     }
 
+    pub fn let_case(&mut self) -> Result<LetCase> {
+        let pipe = self.expect(TokenData::Bar)?;
+        let patterns = self.multiple(Self::pattern_atom)?;
+        let arrow = self.expect(TokenData::FatArrow)?;
+        let expr = self.expr()?;
+        Ok(LetCase {
+            pipe,
+            patterns,
+            arrow,
+            expr,
+        })
+    }
+
     pub fn let_decl(&mut self) -> Result<LetDecl> {
         let let_ = self.expect(TokenData::Let)?;
         let name = self.lower()?;
@@ -769,16 +782,20 @@ impl Parser<'_> {
             None
         };
 
-        let eq = self.expect(TokenData::Equal)?;
-        let expr = self.expr()?;
+        let body = if self.at(TokenData::Equal) {
+            let eq = self.expect(TokenData::Equal)?;
+            let expr = self.expr()?;
+            LetMode::Body(eq, expr)
+        } else {
+            LetMode::Cases(self.multiple(Self::let_case)?)
+        };
 
         Ok(LetDecl {
             let_,
             name,
             binders,
             typ,
-            eq,
-            expr,
+            body,
         })
     }
 

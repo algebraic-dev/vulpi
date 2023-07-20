@@ -299,13 +299,26 @@ pub struct Binder {
 }
 
 #[derive(Debug, Tree)]
+pub struct LetCase {
+    pub pipe: Token,
+    pub patterns: Vec<Box<Pattern>>,
+    pub arrow: Token,
+    pub expr: Box<Expr>,
+}
+
+#[derive(Debug, Tree)]
+pub enum LetMode {
+    Body(Token, Box<Expr>),
+    Cases(Vec<LetCase>),
+}
+
+#[derive(Debug, Tree)]
 pub struct LetDecl {
     pub let_: Token,
     pub name: Lower,
     pub binders: Vec<Binder>,
     pub typ: Option<(Token, Box<Type>)>,
-    pub eq: Token,
-    pub expr: Box<Expr>,
+    pub body: LetMode,
 }
 
 #[derive(Debug, Tree)]

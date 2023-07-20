@@ -1,14 +1,7 @@
-use Result
-use Result as A
-use Teste as B
-
 type Result a b = 
     | Ok a 
     | Err b
+    a
+let ata (a | b | a : Result a b) =
+    2
 
-type Teste a b = 
-    | Ok a 
-    | Err b
-    
-let b = 2
-let a (Teste.Ok a c : Result) = b

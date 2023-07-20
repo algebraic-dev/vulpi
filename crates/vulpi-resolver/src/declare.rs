@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use vulpi_macros::Tree;
+use vulpi_report::Report;
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 use vulpi_syntax::r#abstract::*;
@@ -85,28 +86,29 @@ impl Definition {
     }
 }
 
-#[derive(Tree)]
 pub struct Modules {
     pub counter: usize,
     pub tree: ModuleTree,
     pub definitions: Vec<Definition>,
     pub current: Vec<Id<id::Namespace>>,
     pub module: Vec<Symbol>,
+    pub reporter: Report,
+    pub file_id: Id<id::File>,
 }
 
-impl Default for Modules {
-    fn default() -> Self {
+impl Modules {
+    pub fn new(reporter: Report, file_id: Id<id::File>) -> Self {
         Self {
             counter: 1,
             tree: ModuleTree::new(Id::new(0)),
             definitions: vec![Definition::new(vec![])],
             current: vec![Id::new(0)],
             module: Default::default(),
+            reporter,
+            file_id,
         }
     }
-}
 
-impl Modules {
     pub fn find_module(&self, path: &[Symbol]) -> Option<Id<id::Namespace>> {
         self.tree.find(path)
     }
@@ -181,6 +183,9 @@ impl Declare for TypeDecl {
 impl Declare for LetDecl {
     fn declare(&mut self, context: &mut Modules) {
         let defs = context.current();
+
+        if defs.decls.contains(&DataType::Let(self.name.0.clone())) {}
+
         defs.decls.insert(DataType::Let(self.name.0.clone()));
     }
 }

@@ -715,7 +715,6 @@ impl Resolve for LetCase {
 
     fn resolve(self, context: &mut Context) -> Self::Out {
         context.scope::<scopable::Variable, _>(|context| resolved::LetCase {
-            name_range: self.name_range,
             patterns: self.patterns.resolve(context),
             body: Box::new(self.body.resolve(context)),
         })
@@ -726,10 +725,11 @@ impl Resolve for LetDecl {
     type Out = resolved::LetDecl;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
-        resolved::LetDecl {
+        context.scope::<Variable, _>(|context| resolved::LetDecl {
             name: self.name.resolve(context),
+            params: self.params.resolve(context),
             cases: self.cases.resolve(context),
-        }
+        })
     }
 }
 

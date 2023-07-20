@@ -291,14 +291,14 @@ pub type Expr = Spanned<ExprKind>;
 
 #[derive(Tree, Debug)]
 pub struct LetCase {
-    pub name_range: Range<Byte>,
-    pub patterns: Vec<(Pattern, Type)>,
+    pub patterns: Vec<Pattern>,
     pub body: Box<Expr>,
 }
 
 #[derive(Tree, Debug)]
 pub struct LetDecl {
     pub name: Ident,
+    pub params: Vec<(Pattern, Type)>,
     pub cases: Vec<LetCase>,
 }
 

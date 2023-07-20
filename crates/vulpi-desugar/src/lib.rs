@@ -1,45 +1,26 @@
-use std::{collections::HashMap, ops::Range};
-
-use vulpi_location::{Byte, Location, Spanned};
-use vulpi_report::{Diagnostic, Report};
-use vulpi_storage::id::{File, Id};
-use vulpi_storage::interner::Symbol;
+use vulpi_location::Spanned;
+use vulpi_syntax::concrete::LetMode;
 use vulpi_syntax::{concrete, r#abstract as abs};
 
 pub mod error;
 
 pub struct DesugarCtx {
     program: abs::Program,
-    right_now: Option<Symbol>,
-    let_decls: HashMap<Symbol, Vec<abs::LetCase>>,
-    reporter: Report,
-    id: Id<File>,
 }
 
-impl DesugarCtx {
-    pub fn new(reporter: Report, file: Id<File>) -> Self {
-        Self {
+impl Default for DesugarCtx {
+    fn default() -> Self {
+        DesugarCtx {
             program: abs::Program {
                 uses: Default::default(),
                 types: Default::default(),
                 lets: Default::default(),
             },
-            right_now: Default::default(),
-            let_decls: Default::default(),
-            reporter,
-            id: file,
         }
-    }
-
-    pub fn report_error(&mut self, error_kind: error::ErrorKind, range: Range<Byte>) {
-        self.reporter.report(Diagnostic::new(error::Error {
-            kind: error_kind,
-            location: Location::new(self.id, range),
-        }));
     }
 }
 
-pub trait Desugar {
+trait Desugar {
     type Output;
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output;
 }
@@ -464,43 +445,42 @@ impl Desugar for concrete::ExprKind {
     }
 }
 
-impl Desugar for concrete::LetDecl {
-    type Output = ();
+impl Desugar for concrete::LetCase {
+    type Output = abs::LetCase;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        let name = self.name.0.data.data.clone();
-
-        let patterns: Vec<_> = self.binders.iter().map(|x| x.desugar(ctx)).collect();
-
-        let is_const = patterns.is_empty();
-
-        let case = abs::LetCase {
-            name_range: self.name.0.range.clone(),
-            patterns,
+        abs::LetCase {
+            patterns: self.patterns.iter().map(|x| x.desugar(ctx)).collect(),
             body: Box::new(self.expr.desugar(ctx)),
-        };
+        }
+    }
+}
 
-        if let Some(exists) = ctx.let_decls.get_mut(&name) {
-            if is_const {
-                ctx.reporter.report(Diagnostic::new(error::Error {
-                    kind: error::ErrorKind::Redeclaration(name.clone()),
-                    location: Location::new(ctx.id, self.name.0.range.clone()),
-                }))
-            }
+impl Desugar for concrete::LetDecl {
+    type Output = abs::LetDecl;
 
-            if Some(name.clone()) == ctx.right_now {
-                exists.push(case);
-            } else {
-                ctx.reporter.report(Diagnostic::new(error::Error {
-                    kind: error::ErrorKind::OutOfOrderDefinition(name.clone()),
-                    location: Location::new(ctx.id, self.name.0.range.clone()),
-                }))
+    fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
+        let mut clauses = Vec::new();
+
+        match &self.body {
+            LetMode::Body(_, body) => {
+                clauses.push(abs::LetCase {
+                    patterns: vec![],
+                    body: Box::new(body.desugar(ctx)),
+                });
             }
-        } else {
-            ctx.let_decls.insert(name.clone(), vec![case]);
+            LetMode::Cases(cases) => {
+                for case in cases {
+                    clauses.push(case.desugar(ctx));
+                }
+            }
         }
 
-        ctx.right_now = Some(name);
+        abs::LetDecl {
+            name: self.name.desugar(ctx),
+            params: self.binders.iter().map(|x| x.desugar(ctx)).collect(),
+            cases: clauses,
+        }
     }
 }
 
@@ -598,7 +578,10 @@ impl Desugar for concrete::Program {
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         for top in &self.top_levels {
             match top {
-                concrete::TopLevel::Let(let_) => let_.desugar(ctx),
+                concrete::TopLevel::Let(let_) => {
+                    let desugared = let_.desugar(ctx);
+                    ctx.program.lets.push(desugared);
+                }
                 concrete::TopLevel::Type(type_) => {
                     let desugared = type_.desugar(ctx);
                     ctx.program.types.push(desugared);
@@ -613,20 +596,9 @@ impl Desugar for concrete::Program {
     }
 }
 
-pub fn desugar(concrete: concrete::Program, file: Id<File>, reporter: Report) -> abs::Program {
-    let mut ctx = DesugarCtx::new(reporter, file);
+pub fn desugar(concrete: concrete::Program) -> abs::Program {
+    let mut ctx = DesugarCtx::default();
     concrete.desugar(&mut ctx);
-
-    let decls = ctx
-        .let_decls
-        .into_iter()
-        .map(|(name, value)| abs::LetDecl {
-            name: abs::Ident(name, value[0].name_range.clone()),
-            cases: value,
-        })
-        .collect();
-
-    ctx.program.lets = decls;
 
     ctx.program
 }
