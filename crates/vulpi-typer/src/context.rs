@@ -2,14 +2,13 @@
 //! It is also responsible to report errors and store the `level`. Each context contains a `level`
 //! to identify where it is in the type checking process.
 
+use std::ops::Range;
 use std::{cell::RefCell, rc::Rc};
 
 use vulpi_location::{Byte, Location};
 use vulpi_report::{Diagnostic, Report};
-use vulpi_storage::{
-    id::{self, Id},
-    interner::Symbol,
-};
+use vulpi_storage::id::{self, Id};
+use vulpi_storage::interner::Symbol;
 
 use crate::{
     error::{TypeError, TypeErrorKind},
@@ -94,8 +93,11 @@ impl Env {
             .cloned()
     }
 
-    pub fn set_location(&self, location: vulpi_location::Location) {
-        *self.location.borrow_mut() = location;
+    pub fn set_location(&self, range: Range<Byte>) {
+        *self.location.borrow_mut() = Location {
+            file: self.file,
+            range,
+        };
     }
 
     /// Create a environment based on the last one but with the level increased

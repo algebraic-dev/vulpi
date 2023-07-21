@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use context::Env;
 use infer::Infer;
-use types::{Kind, Mono, Scheme, Type};
+use types::{Kind, KindType, Mono, Scheme, Type};
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 use vulpi_syntax::resolved::{Program, TypeDef};
@@ -39,8 +40,8 @@ pub fn declare_types(modules: &mut Modules, program: &Program) {
         let values = typ
             .params
             .iter()
-            .map(|_| Kind::Star)
-            .fold(Kind::Star, |x, y| Kind::Fun(Box::new(y), Box::new(x)));
+            .map(|_| Rc::new(KindType::Star))
+            .rfold(Rc::new(KindType::Star), |x, y| Rc::new(KindType::Fun(y, x)));
 
         modules
             .modules
@@ -59,7 +60,7 @@ pub fn declare_values(mut env: Env, program: &Program) {
 
         for (i, params) in typ.params.iter().enumerate() {
             env.type_variables
-                .insert(params.data.clone(), (Kind::Star, i));
+                .insert(params.data.clone(), (Rc::new(KindType::Star), i));
         }
 
         let init = Type::new(Mono::Variable(program.id, typ.name.data.clone()));

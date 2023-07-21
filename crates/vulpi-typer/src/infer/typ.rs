@@ -1,6 +1,11 @@
+use std::rc::Rc;
+
 use vulpi_syntax::resolved::*;
 
-use crate::types::{Kind, Mono, Type};
+use crate::{
+    types::{Kind, KindType, Mono, Type},
+    unify::unify_kinds,
+};
 
 use super::Infer;
 
@@ -14,7 +19,7 @@ impl Infer for TypeKind {
                     let typ = Type::new(Mono::Variable(upper.canonical, upper.last.clone()));
                     (kind, typ)
                 } else {
-                    (Kind::Error, Type::new(Mono::Error))
+                    (Rc::new(KindType::Error), Type::new(Mono::Error))
                 }
             }
             TypeKind::Lower(l) => {
@@ -24,30 +29,37 @@ impl Infer for TypeKind {
                     env.report(crate::error::TypeErrorKind::CannotFindTypeVariable(
                         l.data.clone(),
                     ));
-                    (Kind::Error, Type::new(Mono::Error))
+                    (Rc::new(KindType::Error), Type::new(Mono::Error))
                 }
             }
             TypeKind::Arrow(TypeArrow { left, right, .. }) => {
-                // TODO: Both sides have to have Star side
-                let (_, l_type) = left.infer(env.clone());
-                let (_, r_type) = right.infer(env);
-                (Kind::Star, Type::new(Mono::Function(l_type, r_type)))
+                let (l_kind, l_type) = left.infer(env.clone());
+                let (r_kind, r_type) = right.infer(env.clone());
+
+                unify_kinds(env.clone(), l_kind, Rc::new(KindType::Star));
+                unify_kinds(env, r_kind, Rc::new(KindType::Star));
+
+                (
+                    Kind::new(KindType::Star),
+                    Type::new(Mono::Function(l_type, r_type)),
+                )
             }
             TypeKind::Application(TypeApplication { fun, args }) => {
-                // TODO: Check kind
                 let (mut kind, mut l_type) = fun.infer(env.clone());
 
                 for r in args {
-                    let (_, r_type) = r.infer(env.clone());
+                    env.set_location(r.range.clone());
 
-                    match kind {
-                        Kind::Fun(_, right) => {
-                            // Unify kinds
-                            kind = *right;
+                    let (r_kind, r_type) = r.infer(env.clone());
+
+                    match &*kind {
+                        KindType::Fun(left, right) => {
+                            unify_kinds(env.clone(), left.clone(), r_kind);
+                            kind = right.clone();
                         }
                         _ => {
                             env.report(crate::error::TypeErrorKind::CannotApplyType);
-                            return (Kind::Error, Type::new(Mono::Error));
+                            return (Rc::new(KindType::Error), Type::new(Mono::Error));
                         }
                     }
 
@@ -58,9 +70,9 @@ impl Infer for TypeKind {
             }
             TypeKind::Forall(_) => {
                 env.report(crate::error::TypeErrorKind::CannotInferForall);
-                (Kind::Error, Type::new(Mono::Error))
+                (Rc::new(KindType::Error), Type::new(Mono::Error))
             }
-            TypeKind::Error => (Kind::Error, Type::new(Mono::Error)),
+            TypeKind::Error => (Rc::new(KindType::Error), Type::new(Mono::Error)),
         }
     }
 }

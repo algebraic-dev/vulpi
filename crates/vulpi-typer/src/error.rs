@@ -4,10 +4,11 @@ use vulpi_location::Location;
 use vulpi_report::IntoDiagnostic;
 use vulpi_storage::interner::Symbol;
 
-use crate::types::Type;
+use crate::types::{Kind, Type};
 
 pub enum TypeErrorKind {
     Mismatch(Type, Type),
+    MismatchKind(Kind, Kind),
     CannotFindTypeVariable(Symbol),
     CannotInferForall,
     CannotApplyType,
@@ -29,6 +30,9 @@ impl IntoDiagnostic for TypeError {
             }
             TypeErrorKind::CannotInferForall => "cannot infer type for forall".to_string().into(),
             TypeErrorKind::CannotApplyType => "cannot apply type".to_string().into(),
+            TypeErrorKind::MismatchKind(ref left, ref right) => {
+                format!("mismatched kinds: expected `{}`, found `{}`", left, right).into()
+            }
         }
     }
 

@@ -4,8 +4,14 @@
 
 use crate::{
     context::Env,
-    types::{Hole, HoleInner, Mono, Type},
+    types::{Hole, HoleInner, Kind, Mono, Type},
 };
+
+pub fn unify_kinds(env: Env, left: Kind, right: Kind) {
+    if !left.is_error() && !right.is_error() && left != right {
+        env.report(crate::error::TypeErrorKind::MismatchKind(left, right))
+    }
+}
 
 /// Unify two types together (make them equal).
 pub fn unify(env: Env, left: Type, right: Type) {

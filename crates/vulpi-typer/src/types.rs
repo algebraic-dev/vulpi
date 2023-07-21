@@ -29,19 +29,27 @@ pub enum Mono {
     Error,
 }
 
-#[derive(Clone)]
-pub enum Kind {
+#[derive(Clone, PartialEq, Eq)]
+pub enum KindType {
     Star,
-    Fun(Box<Kind>, Box<Kind>),
+    Fun(Kind, Kind),
     Error,
 }
 
-impl Display for Kind {
+impl KindType {
+    pub fn is_error(&self) -> bool {
+        matches!(self, KindType::Error)
+    }
+}
+
+pub type Kind = Rc<KindType>;
+
+impl Display for KindType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Kind::Star => write!(f, "*"),
-            Kind::Fun(left, right) => write!(f, "({} -> {})", left, right),
-            Kind::Error => write!(f, "ERROR"),
+            KindType::Star => write!(f, "*"),
+            KindType::Fun(left, right) => write!(f, "({} -> {})", left, right),
+            KindType::Error => write!(f, "ERROR"),
         }
     }
 }

@@ -2,7 +2,6 @@ use std::ops::Range;
 
 use vulpi_location::{Byte, Spanned};
 use vulpi_macros::Tree;
-
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 

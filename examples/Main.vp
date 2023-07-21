@@ -1,5 +1,8 @@
+type Int = 
+    | Int
+
 type Result a b = 
-    | Ok (Result a b)
+    | Ok (Result Result a)
     | Err b
 
 let ata : Result a b -> c

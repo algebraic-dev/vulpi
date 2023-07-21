@@ -2,12 +2,8 @@ use std::ops::Range;
 
 use vulpi_location::{Byte, Spanned};
 use vulpi_macros::Tree;
-
-use vulpi_show::Show;
-use vulpi_storage::{
-    id::{self, Id},
-    interner::Symbol,
-};
+use vulpi_storage::id::{self, Id};
+use vulpi_storage::interner::Symbol;
 
 pub type Ident = Spanned<Symbol>;
 

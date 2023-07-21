@@ -1,5 +1,7 @@
 use Main
 
+type Int =
+
 type Result a b = 
     | Ok a 
     | Err b

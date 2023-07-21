@@ -1,7 +1,7 @@
 //! This module defines the [Infer] trait that is responsible for inferring the type of an
 //! expression and return an elaborated expression.
 
-use vulpi_location::{Location, Spanned};
+use vulpi_location::Spanned;
 
 use crate::{context::Env, types::Type};
 
@@ -12,10 +12,7 @@ impl<T: Infer> Infer for Spanned<T> {
     type Out = T::Out;
 
     fn infer(&self, env: Env) -> (Self::Out, Type) {
-        env.set_location(Location {
-            range: self.range.clone(),
-            file: env.file,
-        });
+        env.set_location(self.range.clone());
         self.data.infer(env)
     }
 }
