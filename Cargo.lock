@@ -427,6 +427,7 @@ dependencies = [
  "vulpi-show",
  "vulpi-storage",
  "vulpi-syntax",
+ "vulpi-typer",
 ]
 
 [[package]]

@@ -17,3 +17,4 @@ vulpi-show = { path = "../vulpi-show" }
 vulpi-desugar = { path = "../vulpi-desugar" }
 vulpi-build = { path = "../vulpi-build" }
 vulpi-resolver = { path = "../vulpi-resolver" }
+vulpi-typer = { path = "../vulpi-typer" }

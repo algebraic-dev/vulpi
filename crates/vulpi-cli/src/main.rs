@@ -1,12 +1,14 @@
 use clap::Parser;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::{io::stderr, path::PathBuf};
 use vulpi_resolver::declare::{self, Modules};
+use vulpi_typer::context::Env;
 
 use vulpi_build::error::HashReporter;
 use vulpi_parser::{parse, Lexer};
 use vulpi_report::renderer::{Classic, Renderer};
 use vulpi_report::Report;
-use vulpi_show::Show;
 use vulpi_storage::file_system::{real::RealFileSystem, FileSystem};
 
 #[derive(Parser)]
@@ -33,7 +35,14 @@ fn main() {
     let namespace = declare::declare_main(&mut modules, &mut desugared);
     let resolved = vulpi_resolver::resolve(desugared, file, namespace, reporter.clone(), &modules);
 
-    println!("{}", resolved.show());
+    let mut modules = vulpi_typer::Modules::default();
+
+    vulpi_typer::declare_types(&mut modules, &resolved);
+
+    let modules = Rc::new(RefCell::new(modules));
+    let env = Env::new(reporter.clone(), file, modules);
+
+    vulpi_typer::declare_values(env, &resolved);
 
     if reporter.has_errors() {
         eprintln!();

@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 
 use vulpi_macros::Tree;
-use vulpi_report::Report;
+use vulpi_report::{Diagnostic, Report};
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 use vulpi_syntax::r#abstract::*;
 
 use crate::ambiguity::DataType;
+use crate::error;
 
 #[derive(Default, Tree)]
 pub struct ModuleTree {
@@ -167,7 +168,9 @@ impl Declare for TypeDecl {
         let mut path = context.module.clone();
         path.push(self.name.0.clone());
 
-        context.add_module(path).unwrap();
+        let id = context.add_module(path).unwrap();
+
+        self.id = Some(id);
 
         match &mut self.def {
             TypeDef::Enum(enum_) => enum_.variants.declare(context),
@@ -182,9 +185,17 @@ impl Declare for TypeDecl {
 
 impl Declare for LetDecl {
     fn declare(&mut self, context: &mut Modules) {
+        let file = context.file_id;
+        let reporter = context.reporter.clone();
         let defs = context.current();
 
-        if defs.decls.contains(&DataType::Let(self.name.0.clone())) {}
+        if defs.decls.contains(&DataType::Let(self.name.0.clone())) {
+            reporter.report(Diagnostic::new(error::ResolverError {
+                message: error::ResolverErrorKind::AlreadyCaptured(self.name.0.clone()),
+                range: self.name.1.clone(),
+                file,
+            }))
+        }
 
         defs.decls.insert(DataType::Let(self.name.0.clone()));
     }

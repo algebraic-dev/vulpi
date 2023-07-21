@@ -1,6 +1,7 @@
 use std::fmt::Display;
 use std::{cell::RefCell, rc::Rc};
 
+use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 
 /// A mono type that is reference counted.
@@ -10,7 +11,7 @@ pub type Type = Rc<Mono>;
 #[derive(Debug)]
 pub enum Mono {
     /// A variable is a type that we not that it exists in the context. e.g. `Int`
-    Variable(Symbol),
+    Variable(Id<id::Namespace>, Symbol),
 
     /// A type that is bound to some scheme. e.g. `a`
     Generalized(usize),
@@ -21,8 +22,28 @@ pub enum Mono {
     /// A function type that takes a type and returns a type `A -> B`.
     Function(Type, Type),
 
+    /// Application
+    Application(Type, Type),
+
     /// Error type. It's a sentinel value that unifies with everything.
     Error,
+}
+
+#[derive(Clone)]
+pub enum Kind {
+    Star,
+    Fun(Box<Kind>, Box<Kind>),
+    Error,
+}
+
+impl Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Kind::Star => write!(f, "*"),
+            Kind::Fun(left, right) => write!(f, "({} -> {})", left, right),
+            Kind::Error => write!(f, "ERROR"),
+        }
+    }
 }
 
 impl Mono {
@@ -32,10 +53,23 @@ impl Mono {
         f: &mut std::fmt::Formatter<'_>,
     ) -> std::fmt::Result {
         match self {
-            Mono::Variable(symbol) => write!(f, "{}", symbol.get()),
+            Mono::Variable(x, symbol) => write!(f, "{}:{}", x.0, symbol.get()),
             Mono::Generalized(n) => write!(f, "{}", ctx[*n].get()),
             Mono::Hole(hole) => hole.get().fmt_with_context(ctx, f),
-            Mono::Function(left, right) => write!(f, "({} -> {})", left, right),
+            Mono::Function(left, right) => {
+                write!(f, "(")?;
+                left.fmt_with_context(ctx, f)?;
+                write!(f, " -> ")?;
+                right.fmt_with_context(ctx, f)?;
+                write!(f, ")")
+            }
+            Mono::Application(fun, arg) => {
+                write!(f, "(")?;
+                fun.fmt_with_context(ctx, f)?;
+                write!(f, " ")?;
+                arg.fmt_with_context(ctx, f)?;
+                write!(f, ")")
+            }
             Mono::Error => write!(f, "ERROR"),
         }
     }
@@ -147,47 +181,6 @@ impl PartialEq for Hole {
 
 impl Eq for Hole {}
 
-/// Trait for things that exhibit type like behavior.
-pub trait Types {
-    /// Returns the free variables in the type.
-    fn free_vars(&self) -> im_rc::HashSet<Symbol>;
-}
-
-impl Types for Hole {
-    fn free_vars(&self) -> im_rc::HashSet<Symbol> {
-        match &*self.0.borrow_mut() {
-            HoleInner::Unbound(_, _) => Default::default(),
-            HoleInner::Link(t) => t.free_vars(),
-        }
-    }
-}
-
-impl Types for Mono {
-    fn free_vars(&self) -> im_rc::HashSet<Symbol> {
-        match self {
-            Mono::Variable(symbol) => {
-                let mut set = im_rc::HashSet::new();
-                set.insert(symbol.clone());
-                set
-            }
-            Mono::Generalized(_) => Default::default(),
-            Mono::Hole(hole) => hole.free_vars(),
-            Mono::Function(left, right) => {
-                let left = left.free_vars();
-                let right = right.free_vars();
-                left.union(right)
-            }
-            Mono::Error => Default::default(),
-        }
-    }
-}
-
-impl Types for Scheme {
-    fn free_vars(&self) -> im_rc::HashSet<Symbol> {
-        self.monotype.free_vars()
-    }
-}
-
 impl Mono {
     pub(crate) fn instantiate_with(self: Type, substitute: &[Type]) -> Type {
         match &&*self {
@@ -202,7 +195,12 @@ impl Mono {
                 Type::new(Mono::Function(l, r))
             }
             Mono::Error => self.clone(),
-            Mono::Variable(_) => self.clone(),
+            Mono::Variable(_, _) => self.clone(),
+            Mono::Application(f, a) => {
+                let f = f.clone().instantiate_with(substitute);
+                let a = a.clone().instantiate_with(substitute);
+                Type::new(Mono::Application(f, a))
+            }
         }
     }
 }

@@ -4,7 +4,10 @@ use vulpi_location::{Byte, Spanned};
 use vulpi_macros::Tree;
 use vulpi_show::{Show, TreeDisplay};
 
-use vulpi_storage::interner::Symbol;
+use vulpi_storage::{
+    id::{self, Id},
+    interner::Symbol,
+};
 
 #[derive(Debug, Clone)]
 pub struct Ident(pub Symbol, pub Range<Byte>);
@@ -94,7 +97,6 @@ pub enum TypeKind {
     Arrow(TypeArrow),
     Application(TypeApplication),
     Forall(TypeForall),
-    Unit,
 }
 
 pub type Type = Spanned<TypeKind>;
@@ -309,6 +311,7 @@ pub enum TypeDef {
 
 #[derive(Tree, Debug)]
 pub struct TypeDecl {
+    pub id: Option<Id<id::Namespace>>,
     pub name: Ident,
     pub params: Vec<Ident>,
     pub def: TypeDef,

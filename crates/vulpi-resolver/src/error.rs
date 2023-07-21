@@ -31,7 +31,7 @@ impl IntoDiagnostic for ResolverError {
     fn message(&self) -> vulpi_report::Text {
         match &self.message {
             ResolverErrorKind::AlreadyCaptured(symbol) => {
-                format!("Symbol {} is already captured", symbol.get()).into()
+                format!("the function {} is already declared", symbol.get()).into()
             }
             ResolverErrorKind::CannotFindVariable(symbol) => {
                 format!("cannot find variable {}", symbol.get()).into()

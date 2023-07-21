@@ -1,7 +1,8 @@
 type Result a b = 
-    | Ok a 
+    | Ok (Result a b)
     | Err b
-    a
-let ata (a | b | a : Result a b) =
-    2
+
+let ata : Result a b -> c
+    | Result.Ok  a => 1
+    | Result.Err b => 2
 

@@ -1,4 +1,5 @@
 use vulpi_location::Spanned;
+use vulpi_storage::interner::Symbol;
 use vulpi_syntax::concrete::LetMode;
 use vulpi_syntax::{concrete, r#abstract as abs};
 
@@ -142,7 +143,11 @@ impl Desugar for concrete::TypeKind {
             ConcreteType::Arrow(s) => AbstractType::Arrow(s.desugar(ctx)),
             ConcreteType::Application(s) => AbstractType::Application(s.desugar(ctx)),
             ConcreteType::Forall(s) => AbstractType::Forall(s.desugar(ctx)),
-            ConcreteType::Unit(_) => AbstractType::Unit,
+            ConcreteType::Unit(r) => AbstractType::Upper(abs::Qualified {
+                segments: Vec::new(),
+                last: abs::Ident(Symbol::intern("Unit"), r.range.clone()),
+                range: r.range.clone(),
+            }),
         }
     }
 }
@@ -546,6 +551,7 @@ impl Desugar for concrete::TypeDecl {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::TypeDecl {
+            id: None,
             name: self.name.desugar(ctx),
             params: self.binders.iter().map(|x| x.desugar(ctx)).collect(),
             def: self.def.desugar(ctx),

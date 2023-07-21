@@ -4,5 +4,6 @@
 
 pub mod r#abstract;
 pub mod concrete;
+pub mod elaborated;
 pub mod resolved;
 pub mod token;

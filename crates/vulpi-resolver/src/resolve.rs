@@ -18,8 +18,8 @@ use vulpi_report::{Diagnostic, Report};
 
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
-use vulpi_syntax::r#abstract::*;
 use vulpi_syntax::resolved::{self};
+use vulpi_syntax::{elaborated, r#abstract::*};
 
 use super::ambiguity::ImportMap;
 
@@ -42,10 +42,16 @@ pub struct Context<'a> {
     modules: &'a Modules,
 
     /// Alias to import map
-    uses: HashMap<Symbol, Vec<Symbol>>,
+    aliases: HashMap<Symbol, Vec<Symbol>>,
 
     /// A bunch of things that got imported like constructors, values and types in the current scope
-    imports: ImportMap<resolved::Qualified>,
+    available: ImportMap<resolved::Qualified>,
+
+    /// Imported things in order to inject in the type checker
+    imported: HashSet<elaborated::Qualified<DataType>>,
+
+    /// Namespaces where things that got imported matter
+    import_namespace: Id<id::Namespace>,
 
     /// The current namespace
     namespace: Id<id::Namespace>,
@@ -64,8 +70,10 @@ impl<'a> Context<'a> {
             scopes: Kaleidoscope::default(),
             captured: vec![],
             modules,
-            imports: ImportMap::new(),
-            uses: HashMap::new(),
+            available: ImportMap::new(),
+            aliases: HashMap::new(),
+            imported: HashSet::new(),
+            import_namespace: namespace,
             namespace,
         }
     }
@@ -100,7 +108,7 @@ impl<'a> Context<'a> {
         if !path.is_empty() {
             let mut rest = &path[..];
 
-            let sub_tree = if let Some(fst) = self.uses.get(&path[0]) {
+            let sub_tree = if let Some(fst) = self.aliases.get(&path[0]) {
                 if let Some(res) = self.modules.tree.find_sub_tree(fst) {
                     rest = &path[1..];
                     res
@@ -127,45 +135,45 @@ impl<'a> Context<'a> {
         range: Range<Byte>,
         name: &DataType,
         report: bool,
-    ) -> resolved::Qualified {
-        if let Some(res) = self.imports.get(name) {
+    ) -> Result<resolved::Qualified, ()> {
+        if let Some(res) = self.available.get(name) {
             if res.is_ambiguous() {
                 self.report(ResolverErrorKind::AmbiguousImport(name.clone()), range);
-                return resolved::Qualified::Error(res.get_canonical().get_range());
+                return Err(());
             }
 
             let qualified = res.get_canonical();
 
-            let resolved::Qualified::Resolved { canonical, last, .. } = qualified.clone() else {
-                return qualified.clone();
-            };
+            let resolved::Qualified {
+                canonical, last, ..
+            } = qualified.clone();
 
             if !self.modules.definitions[canonical.0].decls.contains(name) {
                 if report {
-                    self.report(ResolverErrorKind::CannotFind(name.clone()), range.clone());
+                    self.report(ResolverErrorKind::CannotFind(name.clone()), range);
                 }
-                return resolved::Qualified::Error(range);
+                return Err(());
             }
 
-            resolved::Qualified::Resolved {
+            Ok(resolved::Qualified {
                 canonical,
                 last,
                 range,
-            }
-        } else if self.modules.definitions[self.namespace.0]
+            })
+        } else if self.modules.definitions[self.import_namespace.0]
             .decls
             .contains(name)
         {
-            resolved::Qualified::Resolved {
-                canonical: self.namespace,
+            Ok(resolved::Qualified {
+                canonical: self.import_namespace,
                 last: name.symbol().clone(),
                 range,
-            }
+            })
         } else {
             if report {
-                self.report(ResolverErrorKind::CannotFind(name.clone()), range.clone());
+                self.report(ResolverErrorKind::CannotFind(name.clone()), range);
             }
-            resolved::Qualified::Error(range)
+            Err(())
         }
     }
 
@@ -174,15 +182,15 @@ impl<'a> Context<'a> {
         range: Range<Byte>,
         name: &DataType,
         namespace: Id<id::Namespace>,
-    ) -> resolved::Qualified {
+    ) -> Result<resolved::Qualified, ()> {
         if self.modules.definitions[namespace.0].decls.contains(name) {
-            resolved::Qualified::Resolved {
+            Ok(resolved::Qualified {
                 canonical: namespace,
                 last: name.symbol().clone(),
                 range,
-            }
+            })
         } else {
-            resolved::Qualified::Error(range)
+            Err(())
         }
     }
 
@@ -191,17 +199,27 @@ impl<'a> Context<'a> {
         qualified: &Qualified,
         report: bool,
         typ: fn(Symbol) -> DataType,
-    ) -> resolved::Qualified {
+    ) -> Result<resolved::Qualified, ()> {
         let canonical = self.canonicalize(qualified.range.clone(), qualified.to_path());
         let data = typ(qualified.last.0.clone());
 
-        if let Err(()) = canonical {
-            resolved::Qualified::Error(qualified.range.clone())
+        let result = if let Err(()) = canonical {
+            Err(())
         } else if let Ok(Some(id)) = canonical {
             self.find_on_namespace(qualified.last.1.clone(), &data, id)
         } else {
             self.find_import(qualified.last.1.clone(), &data, report)
+        };
+
+        if let Ok(res) = &result {
+            self.imported.insert(elaborated::Qualified {
+                canonical: res.canonical,
+                last: typ(res.last.clone()),
+                range: res.range.clone(),
+            });
         }
+
+        result
     }
 }
 
@@ -264,8 +282,8 @@ impl Resolve for TypeApplication {
 
     fn resolve(self, context: &mut Context) -> Self::Out {
         resolved::TypeApplication {
-            left: Box::new(self.left.resolve(context)),
-            right: self.right.into_iter().map(|t| t.resolve(context)).collect(),
+            fun: Box::new(self.left.resolve(context)),
+            args: self.right.into_iter().map(|t| t.resolve(context)).collect(),
         }
     }
 }
@@ -291,14 +309,16 @@ impl Resolve for TypeKind {
     fn resolve(self, context: &mut Context) -> Self::Out {
         match self {
             TypeKind::Upper(u) => {
-                let upper = context.find(&u, true, DataType::Type);
-                resolved::TypeKind::Upper(upper)
+                if let Ok(res) = context.find(&u, true, DataType::Type) {
+                    resolved::TypeKind::Upper(res)
+                } else {
+                    resolved::TypeKind::Error
+                }
             }
             TypeKind::Lower(l) => resolved::TypeKind::Lower(l.resolve(context)),
             TypeKind::Arrow(a) => resolved::TypeKind::Arrow(a.resolve(context)),
             TypeKind::Application(a) => resolved::TypeKind::Application(a.resolve(context)),
             TypeKind::Forall(f) => resolved::TypeKind::Forall(f.resolve(context)),
-            TypeKind::Unit => resolved::TypeKind::Unit,
         }
     }
 }
@@ -313,18 +333,6 @@ impl Resolve for LiteralKind {
             LiteralKind::Char(d) => resolved::LiteralKind::Char(d.resolve(context)),
             LiteralKind::Float(d) => resolved::LiteralKind::Float(d.resolve(context)),
             LiteralKind::Unit => resolved::LiteralKind::Unit,
-        }
-    }
-}
-
-impl Resolve for PatApplication {
-    type Out = resolved::PatApplication;
-
-    fn resolve(self, context: &mut Context) -> Self::Out {
-        let cons = context.find(&self.func, true, DataType::Constructor);
-        resolved::PatApplication {
-            func: cons,
-            args: self.args.into_iter().map(|a| a.resolve(context)).collect(),
         }
     }
 }
@@ -354,9 +362,9 @@ impl Resolve for PatOr {
         let leftcol = left.keys().cloned().collect::<HashSet<_>>();
         let rightcol = right.keys().cloned().collect::<HashSet<_>>();
 
-        let symmetric_difference = rightcol.difference(&leftcol);
+        let diff = rightcol.difference(&leftcol);
 
-        for key in symmetric_difference {
+        for key in diff {
             let range = right.get(key).unwrap();
 
             context.report(
@@ -387,7 +395,11 @@ impl Resolve for PatternKind {
         let result = match self {
             PatternKind::Upper(qualified) => {
                 let canonical = context.find(&qualified, true, DataType::Constructor);
-                resolved::PatternKind::Upper(canonical)
+                if let Ok(canonical) = canonical {
+                    resolved::PatternKind::Upper(canonical)
+                } else {
+                    resolved::PatternKind::Error
+                }
             }
             PatternKind::Lower(l) => {
                 if context.captured.iter().any(|c| c.contains_key(&l.0)) {
@@ -409,7 +421,17 @@ impl Resolve for PatternKind {
             PatternKind::Literal(l) => resolved::PatternKind::Literal(l.resolve(context)),
             PatternKind::Annotation(ann) => resolved::PatternKind::Annotation(ann.resolve(context)),
             PatternKind::Application(app) => {
-                resolved::PatternKind::Application(app.resolve(context))
+                let args = app.args.into_iter().map(|a| a.resolve(context)).collect();
+                let cons = context.find(&app.func, true, DataType::Constructor);
+
+                if let Ok(cons) = cons {
+                    resolved::PatternKind::Application(resolved::PatApplication {
+                        func: cons,
+                        args,
+                    })
+                } else {
+                    resolved::PatternKind::Error
+                }
             }
         };
 
@@ -605,13 +627,13 @@ impl Resolve for ExprKind {
                     return resolved::ExprKind::Variable(qualified.last.clone().into());
                 }
 
-                let canonical = context.find(&qualified, false, DataType::Let);
-
-                if let resolved::Qualified::Resolved { .. } = &canonical {
+                if let Ok(canonical) = context.find(&qualified, false, DataType::Let) {
                     resolved::ExprKind::Function(canonical)
-                } else {
-                    let canonical = context.find(&qualified, true, DataType::Constructor);
+                } else if let Ok(canonical) = context.find(&qualified, true, DataType::Constructor)
+                {
                     resolved::ExprKind::Constructor(canonical)
+                } else {
+                    resolved::ExprKind::Error
                 }
             }
             ExprKind::Lambda(lambda) => resolved::ExprKind::Lambda(lambda.resolve(context)),
@@ -686,7 +708,10 @@ impl Resolve for TypeDecl {
     type Out = resolved::TypeDecl;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
-        context.scope::<TypeVariable, _>(|context| {
+        let ns = context.namespace;
+        context.namespace = self.id.unwrap();
+
+        let result = context.scope::<TypeVariable, _>(|context| {
             let params = self.params.resolve(context);
 
             for param in &params {
@@ -694,11 +719,15 @@ impl Resolve for TypeDecl {
             }
 
             resolved::TypeDecl {
+                id: self.id.unwrap(),
                 name: self.name.resolve(context),
                 params,
                 def: self.def.resolve(context),
             }
-        })
+        });
+
+        context.namespace = ns;
+        result
     }
 }
 
@@ -743,14 +772,14 @@ impl Resolve for UseDecl {
             return;
         };
         if let Some(alias) = self.alias {
-            context.uses.insert(alias.0, path);
+            context.aliases.insert(alias.0, path);
         } else {
             let definitions = &context.modules.definitions[id.0];
 
             for defs in &definitions.decls {
-                context.imports.add(
+                context.available.add(
                     defs.clone(),
-                    resolved::Qualified::Resolved {
+                    resolved::Qualified {
                         canonical: id,
                         last: defs.symbol().clone(),
                         range: self.path.range.clone(),
@@ -768,6 +797,7 @@ impl Resolve for Program {
         self.uses.resolve(context);
 
         resolved::Program {
+            id: context.namespace,
             types: self.types.resolve(context),
             lets: self.lets.resolve(context),
         }

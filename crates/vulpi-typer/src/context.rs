@@ -4,13 +4,24 @@
 
 use std::{cell::RefCell, rc::Rc};
 
+use vulpi_location::{Byte, Location};
 use vulpi_report::{Diagnostic, Report};
-use vulpi_storage::interner::Symbol;
+use vulpi_storage::{
+    id::{self, Id},
+    interner::Symbol,
+};
 
 use crate::{
     error::{TypeError, TypeErrorKind},
-    types::{Hole, HoleInner, Level, Mono, Scheme, Type},
+    types::{Hole, HoleInner, Kind, Level, Mono, Scheme, Type},
+    Data, Modules,
 };
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Qualified {
+    pub path: Symbol,
+    pub name: Symbol,
+}
 
 /// The env is responsible for storing types and variables.
 #[derive(Clone)]
@@ -18,8 +29,12 @@ pub struct Env {
     /// Variables that are in scope and their types.
     pub variables: im_rc::HashMap<Symbol, Scheme>,
 
+    /// Injected variables that corresponds to things declared in
+    /// other modules or in this module.
+    pub modules: Rc<RefCell<Modules>>,
+
     /// Type variables that are in scope.
-    pub type_variables: im_rc::HashSet<Symbol>,
+    pub type_variables: im_rc::HashMap<Symbol, (Kind, usize)>,
 
     /// The reporter that is used to report errors.
     pub reporter: Report,
@@ -29,18 +44,58 @@ pub struct Env {
     pub level: Level,
 
     /// Location of the expression that we are type checking.
-    pub location: vulpi_location::Location,
+    pub location: RefCell<vulpi_location::Location>,
 
     /// Counter for name generation
     pub counter: Rc<RefCell<usize>>,
+
+    /// Error on type variables
+    pub type_variables_hole: bool,
+
+    /// File identifier
+    pub file: Id<id::File>,
 }
 
 impl Env {
-    pub fn set_location(&self, location: vulpi_location::Location) -> Self {
+    pub fn new(reporter: Report, file: Id<id::File>, modules: Rc<RefCell<Modules>>) -> Self {
         Self {
-            location,
-            ..self.clone()
+            modules,
+            variables: Default::default(),
+            type_variables: Default::default(),
+            reporter,
+            level: Level(0),
+            type_variables_hole: false,
+            location: RefCell::new(Location {
+                file,
+                range: Byte(0)..Byte(0),
+            }),
+            counter: Rc::new(RefCell::new(0)),
+            file,
         }
+    }
+
+    pub fn get_global_type(&self, id: Id<id::Namespace>, name: &Symbol) -> Option<Kind> {
+        self.modules
+            .borrow()
+            .modules
+            .get(&id)?
+            .types
+            .get(name)
+            .cloned()
+    }
+
+    pub fn get_global_value(&self, id: Id<id::Namespace>, name: &Data) -> Option<Scheme> {
+        self.modules
+            .borrow()
+            .modules
+            .get(&id)?
+            .values
+            .get(name)
+            .cloned()
+    }
+
+    pub fn set_location(&self, location: vulpi_location::Location) {
+        *self.location.borrow_mut() = location;
     }
 
     /// Create a environment based on the last one but with the level increased
@@ -70,13 +125,8 @@ impl Env {
     }
 
     /// Adds a new type variable to the environment.
-    pub fn add_type_variable(&mut self, name: Symbol) {
-        self.type_variables.insert(name);
-    }
-
-    /// Checks if a variable is in scope.
-    pub fn contains_type_variable(&self, name: Symbol) -> bool {
-        self.type_variables.contains(&name)
+    pub fn add_type_variable(&mut self, name: Symbol, kind: Kind, place: usize) {
+        self.type_variables.insert(name, (kind, place));
     }
 
     /// Gets a variable from the environment.
@@ -87,7 +137,7 @@ impl Env {
     /// Reports a type error.
     pub fn report(&self, kind: TypeErrorKind) {
         self.reporter.report(Diagnostic::new(TypeError {
-            location: self.location.clone(),
+            location: self.location.borrow().clone(),
             kind,
         }));
     }

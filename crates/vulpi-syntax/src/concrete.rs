@@ -299,6 +299,7 @@ pub struct Binder {
 }
 
 #[derive(Debug, Tree)]
+
 pub struct LetCase {
     pub pipe: Token,
     pub patterns: Vec<Box<Pattern>>,

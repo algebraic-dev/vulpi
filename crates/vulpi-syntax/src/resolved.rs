@@ -3,7 +3,7 @@ use std::ops::Range;
 use vulpi_location::{Byte, Spanned};
 use vulpi_macros::Tree;
 
-use vulpi_show::{Show, TreeDisplay};
+use vulpi_show::Show;
 use vulpi_storage::{
     id::{self, Id},
     interner::Symbol,
@@ -11,33 +11,16 @@ use vulpi_storage::{
 
 pub type Ident = Spanned<Symbol>;
 
-#[derive(Debug, Clone)]
-pub enum Qualified {
-    Resolved {
-        canonical: Id<id::Namespace>,
-        last: Symbol,
-        range: Range<Byte>,
-    },
-    Error(Range<Byte>),
+#[derive(Debug, Clone, Tree)]
+pub struct Qualified {
+    pub canonical: Id<id::Namespace>,
+    pub last: Symbol,
+    pub range: Range<Byte>,
 }
 
 impl PartialEq for Qualified {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Self::Resolved {
-                    canonical: l_canonical,
-                    last: l_last,
-                    ..
-                },
-                Self::Resolved {
-                    canonical: r_canonical,
-                    last: r_last,
-                    ..
-                },
-            ) => l_canonical == r_canonical && l_last == r_last,
-            _ => false,
-        }
+        self.canonical == other.canonical && self.last == other.last
     }
 }
 
@@ -45,37 +28,14 @@ impl Eq for Qualified {}
 
 impl std::hash::Hash for Qualified {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Self::Resolved {
-                canonical,
-                last,
-                range: _,
-            } => {
-                canonical.hash(state);
-                last.hash(state);
-            }
-            Self::Error(_) => {}
-        }
+        self.canonical.hash(state);
+        self.last.hash(state);
     }
 }
 
 impl Qualified {
     pub fn get_range(&self) -> Range<Byte> {
-        match self {
-            Self::Resolved { range, .. } => range.clone(),
-            Self::Error(range) => range.clone(),
-        }
-    }
-}
-
-impl Show for Qualified {
-    fn show(&self) -> vulpi_show::TreeDisplay {
-        match self {
-            Self::Resolved {
-                canonical, last, ..
-            } => TreeDisplay::label(&format!("{}:{}", canonical.0, last.get())),
-            Self::Error(..) => TreeDisplay::label("error"),
-        }
+        self.range.clone()
     }
 }
 
@@ -95,8 +55,8 @@ pub struct TypeArrow {
 /// The application type `A B`
 #[derive(Tree, Debug)]
 pub struct TypeApplication {
-    pub left: Box<Type>,
-    pub right: Vec<Type>,
+    pub fun: Box<Type>,
+    pub args: Vec<Type>,
 }
 
 /// The forall type `forall a b. A -> B`
@@ -114,7 +74,7 @@ pub enum TypeKind {
     Arrow(TypeArrow),
     Application(TypeApplication),
     Forall(TypeForall),
-    Unit,
+    Error,
 }
 
 pub type Type = Spanned<TypeKind>;
@@ -161,6 +121,7 @@ pub enum PatternKind {
     Annotation(PatAnnotation),
     Or(PatOr),
     Application(PatApplication),
+    Error,
 }
 
 pub type Pattern = Spanned<PatternKind>;
@@ -283,6 +244,8 @@ pub enum ExprKind {
     Annotation(AnnotationExpr),
     Block(Block),
     Literal(Literal),
+
+    Error,
 }
 
 pub type Expr = Spanned<ExprKind>;
@@ -333,6 +296,7 @@ pub enum TypeDef {
 
 #[derive(Tree, Debug)]
 pub struct TypeDecl {
+    pub id: Id<id::Namespace>,
     pub name: Ident,
     pub params: Vec<Ident>,
     pub def: TypeDef,
@@ -340,6 +304,7 @@ pub struct TypeDecl {
 
 #[derive(Tree, Debug)]
 pub struct Program {
+    pub id: Id<id::Namespace>,
     pub types: Vec<TypeDecl>,
     pub lets: Vec<LetDecl>,
 }
