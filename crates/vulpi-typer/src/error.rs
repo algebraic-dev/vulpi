@@ -12,6 +12,9 @@ pub enum TypeErrorKind {
     CannotFindTypeVariable(Symbol),
     CannotInferForall,
     CannotApplyType,
+    UnboundVariable(Symbol),
+    WrongArity(Symbol, usize, usize),
+    CannotAccessType,
 }
 
 pub struct TypeError {
@@ -33,6 +36,17 @@ impl IntoDiagnostic for TypeError {
             TypeErrorKind::MismatchKind(ref left, ref right) => {
                 format!("mismatched kinds: expected `{}`, found `{}`", left, right).into()
             }
+            TypeErrorKind::UnboundVariable(symbol) => {
+                format!("unbound variable {}", symbol.get()).into()
+            }
+            TypeErrorKind::WrongArity(symbol, expected, found) => format!(
+                "wrong number of arguments for `{}`: expected {}, found {}",
+                symbol.get(),
+                expected,
+                found
+            )
+            .into(),
+            TypeErrorKind::CannotAccessType => "cannot access type".to_string().into(),
         }
     }
 

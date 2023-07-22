@@ -302,7 +302,7 @@ pub struct Binder {
 
 pub struct LetCase {
     pub pipe: Token,
-    pub patterns: Vec<Box<Pattern>>,
+    pub patterns: Vec<(Box<Pattern>, Option<Token>)>,
     pub arrow: Token,
     pub expr: Box<Expr>,
 }

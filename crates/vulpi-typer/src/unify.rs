@@ -17,7 +17,8 @@ pub fn unify_kinds(env: Env, left: Kind, right: Kind) {
 pub fn unify(env: Env, left: Type, right: Type) {
     match (&*left, &*right) {
         (Mono::Variable(p, x), Mono::Variable(p1, y)) if p == p1 && x == y => (),
-        (Mono::Generalized(x, _), Mono::Generalized(y, _)) if x == y => todo!(),
+        (Mono::Generalized(x, _), Mono::Generalized(y, _)) if x == y => (),
+        (Mono::Unit, Mono::Unit) => (),
 
         (Mono::Hole(l), Mono::Hole(r)) if l == r => (),
 
@@ -34,7 +35,7 @@ pub fn unify(env: Env, left: Type, right: Type) {
             unify(env, a.clone(), a1.clone());
         }
 
-        _ => {}
+        _ => env.report(crate::error::TypeErrorKind::Mismatch(left, right)),
     }
 }
 
@@ -55,6 +56,7 @@ pub fn unify_hole(env: Env, hole: Hole, val: Type, flip: bool) {
 // Checks if a type occurs in another type. This is used to detect cycles in the type.
 pub fn occur(hole: Hole, typ: Type) -> bool {
     match &*typ {
+        Mono::Unit => false,
         Mono::Variable(_, _) => false,
         Mono::Generalized(_, _) => false,
         Mono::Error => false,

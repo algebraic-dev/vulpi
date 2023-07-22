@@ -193,7 +193,7 @@ pub enum Operator {
 
 #[derive(Tree, Debug)]
 pub struct LambdaExpr {
-    pub pattern: Vec<Pattern>,
+    pub pattern: Pattern,
     pub body: Box<Expr>,
 }
 
@@ -212,7 +212,7 @@ pub struct AcessorExpr {
 #[derive(Tree, Debug)]
 pub struct BinaryExpr {
     pub left: Box<Expr>,
-    pub op: Operator,
+    pub op: Spanned<Operator>,
     pub right: Box<Expr>,
 }
 
@@ -271,6 +271,7 @@ pub type Expr = Spanned<ExprKind>;
 pub struct LetCase {
     pub patterns: Vec<Pattern>,
     pub body: Box<Expr>,
+    pub range: Range<Byte>,
 }
 
 #[derive(Tree, Debug)]

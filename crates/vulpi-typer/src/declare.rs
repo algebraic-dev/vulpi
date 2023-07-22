@@ -13,7 +13,7 @@ use vulpi_syntax::resolved::{Program, TypeDef, TypeKind};
 use crate::context::Env;
 use crate::types::{free_variables_located, KindType, Mono, Scheme, Type};
 use crate::unify::{self};
-use crate::Modules;
+use crate::{ConsDef, LetDef, Modules};
 
 /// Declare all types in the environment.
 // TODO: Improve kind inference.
@@ -82,13 +82,22 @@ fn declare_let_types(env: &Env, let_: &vulpi_syntax::resolved::LetDecl, program:
         env.new_hole()
     };
 
-    let typ = infer_types(let_.params.iter().map(|x| &x.1), &env);
-    let typ = make_function(typ, &ret);
-    let value = Scheme::new(fvs.into_iter().collect(), typ);
+    let params: Vec<_> = fvs.into_iter().collect();
 
-    env.modules
-        .borrow_mut()
-        .declare_let(program.id, name.data, value);
+    let args = infer_types(let_.params.iter().map(|x| &x.1), &env);
+    let typ = make_function(args.clone(), &ret);
+    let typ = Scheme::new(params.clone(), typ);
+
+    env.modules.borrow_mut().declare_let(
+        program.id,
+        name.data,
+        LetDef {
+            args,
+            params,
+            typ,
+            ret,
+        },
+    );
 }
 
 fn declare_type_def(
@@ -107,9 +116,14 @@ fn declare_type_def(
                 let monotype = make_function(types, &ret_type);
                 let value = Scheme::new(variables.clone(), monotype);
 
-                env.modules
-                    .borrow_mut()
-                    .declare_cons(typ.id, name.data, value);
+                env.modules.borrow_mut().declare_cons(
+                    typ.id,
+                    name.data,
+                    ConsDef {
+                        arity: args.len(),
+                        typ: value,
+                    },
+                );
             }
         }
         TypeDef::Record(rec_) => {
@@ -128,6 +142,54 @@ fn declare_type_def(
             }
         }
         TypeDef::Synonym(_) => todo!(),
+    }
+}
+
+pub fn define_body(env: &Env, program: &Program) {
+    for let_ in &program.lets {
+        let mut env = env.clone();
+
+        let def = env
+            .modules
+            .borrow()
+            .get_let(program.id, &let_.name.data)
+            .unwrap()
+            .clone();
+
+        for (i, name) in def.params.into_iter().enumerate() {
+            env.type_variables
+                .insert(name.clone(), (Rc::new(KindType::Star), i));
+        }
+
+        for ((pat, _), typ_typ) in let_.params.iter().zip(&def.args) {
+            let (bindings, pat_typ) = pat.infer(env.clone());
+            unify::unify(env.clone(), typ_typ.clone(), pat_typ);
+
+            for (k, t) in bindings {
+                env.add_variable(k, t.into());
+            }
+        }
+
+        for let_case in &let_.cases {
+            let mut env = env.clone();
+
+            let mut args = Vec::new();
+
+            for (bindings, typ) in let_case.patterns.infer(env.clone()) {
+                for (k, t) in bindings {
+                    env.add_variable(k, t.into());
+                }
+
+                args.push(typ);
+            }
+
+            let body = let_case.body.infer(env.clone());
+
+            let typ = make_function(args, &body);
+
+            env.set_location(let_case.body.range.clone());
+            unify::unify(env.clone(), def.ret.clone(), typ);
+        }
     }
 }
 

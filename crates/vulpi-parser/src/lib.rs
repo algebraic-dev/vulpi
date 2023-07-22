@@ -758,7 +758,7 @@ impl Parser<'_> {
 
     pub fn let_case(&mut self) -> Result<LetCase> {
         let pipe = self.expect(TokenData::Bar)?;
-        let patterns = self.multiple(Self::pattern_atom)?;
+        let patterns = self.sep_by(TokenData::Comma, Self::pattern)?;
         let arrow = self.expect(TokenData::FatArrow)?;
         let expr = self.expr()?;
         Ok(LetCase {

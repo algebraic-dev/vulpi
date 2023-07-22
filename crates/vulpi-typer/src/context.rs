@@ -38,16 +38,13 @@ pub struct Env {
 
     /// The level is the place that we are inside the typ checking process. The level increases
     /// each time we enter inside a generalization scope.
-    pub level: Level,
+    pub level: RefCell<Level>,
 
     /// Location of the expression that we are type checking.
     pub location: RefCell<vulpi_location::Location>,
 
     /// Counter for name generation
     pub counter: Rc<RefCell<usize>>,
-
-    /// Error on type variables
-    pub type_variables_hole: bool,
 
     /// File identifier
     pub file: Id<id::File>,
@@ -60,8 +57,7 @@ impl Env {
             variables: Default::default(),
             type_variables: Default::default(),
             reporter,
-            level: Level(0),
-            type_variables_hole: false,
+            level: RefCell::new(Level(0)),
             location: RefCell::new(Location {
                 file,
                 range: Byte(0)..Byte(0),
@@ -99,19 +95,15 @@ impl Env {
     }
 
     /// Create a environment based on the last one but with the level increased
-    pub fn increase_level(&self) -> Self {
-        Self {
-            level: self.level.inc(),
-            ..self.clone()
-        }
+    pub fn increase_level(&self) {
+        let inc = self.level.borrow().inc();
+        *self.level.borrow_mut() = inc;
     }
 
     /// Create a environment based on the last one but with the level decreased
-    pub fn decrease_level(&self) -> Self {
-        Self {
-            level: self.level.dec(),
-            ..self.clone()
-        }
+    pub fn decrease_level(&self) {
+        let inc = self.level.borrow().inc();
+        *self.level.borrow_mut() = inc;
     }
 
     /// Adds a new variable to the environment.
@@ -152,7 +144,7 @@ impl Env {
 
     /// Creates a new hole.
     pub fn new_hole(&mut self) -> Type {
-        Type::new(Mono::Hole(Hole::new(self.new_name(), self.level)))
+        Type::new(Mono::Hole(Hole::new(self.new_name(), *self.level.borrow())))
     }
 
     /// Instantiates a scheme into a mono type.
@@ -188,7 +180,7 @@ impl Env {
         }
         let mut counter = 0;
         let names = (0..counter).map(|_| self.new_name()).collect::<Vec<_>>();
-        gen(self.level, typ.clone(), &mut counter);
+        gen(*self.level.borrow(), typ.clone(), &mut counter);
         Scheme::new(names, typ)
     }
 }

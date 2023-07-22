@@ -42,7 +42,9 @@ fn main() {
     let modules = Rc::new(RefCell::new(modules));
     let env = Env::new(reporter.clone(), file, modules);
 
-    vulpi_typer::declare::declare_values_types(env, &resolved);
+    vulpi_typer::declare::declare_values_types(env.clone(), &resolved);
+
+    vulpi_typer::declare::define_body(&env, &resolved);
 
     if reporter.has_errors() {
         eprintln!();

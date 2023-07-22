@@ -79,11 +79,12 @@ pub type Type = Spanned<TypeKind>;
 
 #[derive(Tree, Debug)]
 pub enum LiteralKind {
-    String(Ident),
-    Integer(Ident),
-    Char(Ident),
-    Float(Ident),
-    Unit,
+    String(Ident, Qualified),
+    Integer(Ident, Qualified),
+    Char(Ident, Qualified),
+    Float(Ident, Qualified),
+    Unit(Qualified),
+    Error,
 }
 
 pub type Literal = Spanned<LiteralKind>;
@@ -111,7 +112,6 @@ pub struct PatApplication {
 #[derive(Tree, Debug)]
 pub enum PatternKind {
     Wildcard,
-    Upper(Qualified),
     Lower(Ident),
     Literal(Literal),
     Annotation(PatAnnotation),
@@ -168,7 +168,7 @@ pub enum Operator {
 
 #[derive(Tree, Debug)]
 pub struct LambdaExpr {
-    pub pattern: Vec<Pattern>,
+    pub pattern: Pattern,
     pub body: Box<Expr>,
 }
 
@@ -182,20 +182,6 @@ pub struct ApplicationExpr {
 pub struct AcessorExpr {
     pub expr: Box<Expr>,
     pub field: Ident,
-}
-
-#[derive(Tree, Debug)]
-pub struct BinaryExpr {
-    pub left: Box<Expr>,
-    pub op: Operator,
-    pub right: Box<Expr>,
-}
-
-#[derive(Tree, Debug)]
-pub struct IfExpr {
-    pub cond: Box<Expr>,
-    pub then: Box<Expr>,
-    pub else_: Box<Expr>,
 }
 
 #[derive(Tree, Debug)]
@@ -233,9 +219,7 @@ pub enum ExprKind {
     Lambda(LambdaExpr),
     Application(ApplicationExpr),
     Acessor(AcessorExpr),
-    Binary(BinaryExpr),
     Let(LetExpr),
-    If(IfExpr),
     When(WhenExpr),
     Annotation(AnnotationExpr),
     Block(Block),
@@ -252,6 +236,7 @@ pub type Expr = Spanned<ExprKind>;
 pub struct LetCase {
     pub patterns: Vec<Pattern>,
     pub body: Box<Expr>,
+    pub range: Range<Byte>,
 }
 
 #[derive(Tree, Debug)]

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use types::{Kind, Scheme};
+use types::{Kind, Scheme, Type};
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 
@@ -22,9 +22,23 @@ pub enum Data {
 pub struct Interface {
     pub types: HashMap<Symbol, Kind>,
 
-    pub lets: HashMap<Symbol, Scheme>,
-    pub cons: HashMap<Symbol, Scheme>,
+    pub lets: HashMap<Symbol, LetDef>,
+    pub cons: HashMap<Symbol, ConsDef>,
     pub fields: HashMap<Symbol, Scheme>,
+}
+
+#[derive(Clone)]
+pub struct LetDef {
+    pub args: Vec<Type>,
+    pub params: Vec<Symbol>,
+    pub ret: Type,
+    pub typ: Scheme,
+}
+
+#[derive(Clone)]
+pub struct ConsDef {
+    pub arity: usize,
+    pub typ: Scheme,
 }
 
 #[derive(Default)]
@@ -37,7 +51,7 @@ impl Modules {
         self.modules.entry(id).or_default().types.insert(name, kind);
     }
 
-    pub fn declare_let(&mut self, id: Id<id::Namespace>, name: Symbol, scheme: Scheme) {
+    pub fn declare_let(&mut self, id: Id<id::Namespace>, name: Symbol, scheme: LetDef) {
         self.modules
             .entry(id)
             .or_default()
@@ -45,7 +59,7 @@ impl Modules {
             .insert(name, scheme);
     }
 
-    pub fn declare_cons(&mut self, id: Id<id::Namespace>, name: Symbol, scheme: Scheme) {
+    pub fn declare_cons(&mut self, id: Id<id::Namespace>, name: Symbol, scheme: ConsDef) {
         self.modules
             .entry(id)
             .or_default()
@@ -59,5 +73,21 @@ impl Modules {
             .or_default()
             .fields
             .insert(name, scheme);
+    }
+
+    pub fn get_let(&self, id: Id<id::Namespace>, name: &Symbol) -> Option<&LetDef> {
+        self.modules.get(&id).and_then(|x| x.lets.get(name))
+    }
+
+    pub fn get_cons(&self, id: Id<id::Namespace>, name: &Symbol) -> Option<&ConsDef> {
+        self.modules.get(&id).and_then(|x| x.cons.get(name))
+    }
+
+    pub fn get_type(&self, id: Id<id::Namespace>, name: &Symbol) -> Option<&Kind> {
+        self.modules.get(&id).and_then(|x| x.types.get(name))
+    }
+
+    pub fn get_field(&self, id: Id<id::Namespace>, name: &Symbol) -> Option<&Scheme> {
+        self.modules.get(&id).and_then(|x| x.fields.get(name))
     }
 }

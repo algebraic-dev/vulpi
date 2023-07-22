@@ -30,6 +30,8 @@ pub enum Mono {
     /// Application
     Application(Type, Type),
 
+    Unit,
+
     /// Error type. It's a sentinel value that unifies with everything.
     Error,
 }
@@ -74,6 +76,7 @@ impl Mono {
         mode: Mode,
     ) -> std::fmt::Result {
         match self {
+            Mono::Unit => write!(f, "()"),
             Mono::Variable(_, symbol) => write!(f, "{}", symbol.get()),
             Mono::Generalized(_, s) => write!(f, "{}", s.get()),
             Mono::Hole(hole) => hole.get().fmt_with_context(ctx, f, mode),
@@ -193,7 +196,7 @@ impl HoleInner {
         match self {
             HoleInner::Unbound(n, l) => write!(f, "!{}~{}", n.get(), l.0),
             HoleInner::Link(t) => {
-                write!(f, "^")?;
+                write!(f, "~")?;
                 t.fmt_with_context(ctx, f, mode)
             }
         }
@@ -239,6 +242,7 @@ impl Eq for Hole {}
 impl Mono {
     pub(crate) fn instantiate_with(self: Type, substitute: &[Type]) -> Type {
         match &&*self {
+            Mono::Unit => self.clone(),
             Mono::Generalized(n, _) => substitute[*n].clone(),
             Mono::Hole(hole) => match hole.get() {
                 HoleInner::Unbound(_, _) => self.clone(),

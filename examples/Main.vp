@@ -8,7 +8,8 @@ type Result a b =
     | Ok a
     | Err b
 
+use Result
+
 let ata (x: Result a b) (y: Result b a) : a
-    | Result.Ok  a => x
-    | Result.Err b => 2
+    | Ok a => 2
 

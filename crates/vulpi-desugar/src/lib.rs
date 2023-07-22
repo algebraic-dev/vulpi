@@ -254,13 +254,24 @@ impl Desugar for concrete::Binder {
 }
 
 impl Desugar for concrete::LambdaExpr {
-    type Output = abs::LambdaExpr;
+    type Output = Box<abs::Expr>;
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        abs::LambdaExpr {
-            pattern: self.patterns.iter().map(|x| x.desugar(ctx)).collect(),
-            body: Box::new(self.expr.desugar(ctx)),
-        }
+        let patterns = self
+            .patterns
+            .iter()
+            .map(|x| x.desugar(ctx))
+            .collect::<Vec<_>>();
+
+        let body = Box::new(self.expr.desugar(ctx));
+        let end = body.range.end.clone();
+
+        patterns.into_iter().fold(body, |acc, pattern| {
+            Box::new(abs::Expr {
+                range: pattern.range.start.clone()..end.clone(),
+                data: abs::ExprKind::Lambda(abs::LambdaExpr { pattern, body: acc }),
+            })
+        })
     }
 }
 
@@ -299,32 +310,34 @@ impl Desugar for concrete::BinaryExpr {
 }
 
 impl Desugar for concrete::Operator {
-    type Output = abs::Operator;
+    type Output = Spanned<abs::Operator>;
 
     fn desugar(&self, _: &mut DesugarCtx) -> Self::Output {
         use abs::Operator as AbstractOp;
         use concrete::Operator as ConcreteOp;
 
-        match self {
-            ConcreteOp::Add(_) => AbstractOp::Add,
-            ConcreteOp::Sub(_) => AbstractOp::Sub,
-            ConcreteOp::Mul(_) => AbstractOp::Mul,
-            ConcreteOp::Div(_) => AbstractOp::Div,
-            ConcreteOp::Rem(_) => AbstractOp::Rem,
-            ConcreteOp::And(_) => AbstractOp::And,
-            ConcreteOp::Or(_) => AbstractOp::Or,
-            ConcreteOp::Xor(_) => AbstractOp::Xor,
-            ConcreteOp::Not(_) => AbstractOp::Not,
-            ConcreteOp::Eq(_) => AbstractOp::Eq,
-            ConcreteOp::Neq(_) => AbstractOp::Neq,
-            ConcreteOp::Lt(_) => AbstractOp::Lt,
-            ConcreteOp::Gt(_) => AbstractOp::Gt,
-            ConcreteOp::Le(_) => AbstractOp::Le,
-            ConcreteOp::Ge(_) => AbstractOp::Ge,
-            ConcreteOp::Shl(_) => AbstractOp::Shl,
-            ConcreteOp::Shr(_) => AbstractOp::Shr,
-            ConcreteOp::Pipe(_) => AbstractOp::Pipe,
-        }
+        let (range, data) = match self {
+            ConcreteOp::Add(t) => (t.range.clone(), AbstractOp::Add),
+            ConcreteOp::Sub(t) => (t.range.clone(), AbstractOp::Sub),
+            ConcreteOp::Mul(t) => (t.range.clone(), AbstractOp::Mul),
+            ConcreteOp::Div(t) => (t.range.clone(), AbstractOp::Div),
+            ConcreteOp::Rem(t) => (t.range.clone(), AbstractOp::Rem),
+            ConcreteOp::And(t) => (t.range.clone(), AbstractOp::And),
+            ConcreteOp::Or(t) => (t.range.clone(), AbstractOp::Or),
+            ConcreteOp::Xor(t) => (t.range.clone(), AbstractOp::Xor),
+            ConcreteOp::Not(t) => (t.range.clone(), AbstractOp::Not),
+            ConcreteOp::Eq(t) => (t.range.clone(), AbstractOp::Eq),
+            ConcreteOp::Neq(t) => (t.range.clone(), AbstractOp::Neq),
+            ConcreteOp::Lt(t) => (t.range.clone(), AbstractOp::Lt),
+            ConcreteOp::Gt(t) => (t.range.clone(), AbstractOp::Gt),
+            ConcreteOp::Le(t) => (t.range.clone(), AbstractOp::Le),
+            ConcreteOp::Ge(t) => (t.range.clone(), AbstractOp::Ge),
+            ConcreteOp::Shl(t) => (t.range.clone(), AbstractOp::Shl),
+            ConcreteOp::Shr(t) => (t.range.clone(), AbstractOp::Shr),
+            ConcreteOp::Pipe(t) => (t.range.clone(), AbstractOp::Pipe),
+        };
+
+        Spanned { range, data }
     }
 }
 
@@ -434,7 +447,7 @@ impl Desugar for concrete::ExprKind {
         use concrete::ExprKind as ConcreteExpr;
 
         match self {
-            ConcreteExpr::Lambda(d) => AbstractKind::Lambda(d.desugar(ctx)),
+            ConcreteExpr::Lambda(d) => d.desugar(ctx).data,
             ConcreteExpr::Application(d) => AbstractKind::Application(d.desugar(ctx)),
             ConcreteExpr::Ident(d) => AbstractKind::Ident(d.desugar(ctx)),
             ConcreteExpr::Acessor(d) => AbstractKind::Acessor(d.desugar(ctx)),
@@ -455,8 +468,9 @@ impl Desugar for concrete::LetCase {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::LetCase {
-            patterns: self.patterns.iter().map(|x| x.desugar(ctx)).collect(),
+            patterns: self.patterns.iter().map(|x| x.0.desugar(ctx)).collect(),
             body: Box::new(self.expr.desugar(ctx)),
+            range: self.pipe.range.start.clone()..self.expr.range.end.clone(),
         }
     }
 }
@@ -472,6 +486,7 @@ impl Desugar for concrete::LetDecl {
                 clauses.push(abs::LetCase {
                     patterns: vec![],
                     body: Box::new(body.desugar(ctx)),
+                    range: body.range.clone(),
                 });
             }
             LetMode::Cases(cases) => {

@@ -97,6 +97,24 @@ impl<'a> Context<'a> {
         self.scopes.add::<T>(symbol);
     }
 
+    fn capture_scope<U>(&mut self, fun: impl FnOnce(&mut Self) -> U) -> U {
+        let not_capturing = self.captured.is_empty();
+
+        if not_capturing {
+            self.captured.push(HashMap::new());
+        }
+
+        let result = fun(self);
+
+        if not_capturing {
+            for name in self.captured.pop().unwrap().keys() {
+                self.scopes.add::<Variable>(name.clone());
+            }
+        }
+
+        result
+    }
+
     /// Gets a path and returns it's canonical version using the `use` statements that are aliases.
     /// It also appends the rest of the path to the canonical path if the first segment of the path
     /// is a alias.
@@ -331,16 +349,40 @@ impl Resolve for TypeKind {
     }
 }
 
-impl Resolve for LiteralKind {
-    type Out = resolved::LiteralKind;
+impl Resolve for Literal {
+    type Out = resolved::Literal;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
-        match self {
-            LiteralKind::String(d) => resolved::LiteralKind::String(d.resolve(context)),
-            LiteralKind::Integer(d) => resolved::LiteralKind::Integer(d.resolve(context)),
-            LiteralKind::Char(d) => resolved::LiteralKind::Char(d.resolve(context)),
-            LiteralKind::Float(d) => resolved::LiteralKind::Float(d.resolve(context)),
-            LiteralKind::Unit => resolved::LiteralKind::Unit,
+        let response = match self.data {
+            LiteralKind::String(d) => context
+                .find_import(d.1.clone(), &DataType::Type(Symbol::intern("String")), true)
+                .map(|x| resolved::LiteralKind::String(d.resolve(context), x))
+                .unwrap_or(resolved::LiteralKind::Error),
+            LiteralKind::Integer(d) => context
+                .find_import(d.1.clone(), &DataType::Type(Symbol::intern("Int")), true)
+                .map(|x| resolved::LiteralKind::Integer(d.resolve(context), x))
+                .unwrap_or(resolved::LiteralKind::Error),
+            LiteralKind::Char(d) => context
+                .find_import(d.1.clone(), &DataType::Type(Symbol::intern("Char")), true)
+                .map(|x| resolved::LiteralKind::Char(d.resolve(context), x))
+                .unwrap_or(resolved::LiteralKind::Error),
+            LiteralKind::Float(d) => context
+                .find_import(d.1.clone(), &DataType::Type(Symbol::intern("Float")), true)
+                .map(|x| resolved::LiteralKind::Float(d.resolve(context), x))
+                .unwrap_or(resolved::LiteralKind::Error),
+            LiteralKind::Unit => context
+                .find_import(
+                    self.range.clone(),
+                    &DataType::Type(Symbol::intern("Unit")),
+                    true,
+                )
+                .map(resolved::LiteralKind::Unit)
+                .unwrap_or(resolved::LiteralKind::Error),
+        };
+
+        Spanned {
+            data: response,
+            range: self.range,
         }
     }
 }
@@ -357,7 +399,7 @@ impl Resolve for PatAnnotation {
 }
 
 impl Resolve for PatOr {
-    type Out = resolved::PatOr;
+    type Out = resolved::PatternKind;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
         context.captured.push(HashMap::new());
@@ -370,10 +412,17 @@ impl Resolve for PatOr {
         let leftcol = left.keys().cloned().collect::<HashSet<_>>();
         let rightcol = right.keys().cloned().collect::<HashSet<_>>();
 
-        let diff = rightcol.difference(&leftcol);
+        let diff = rightcol.symmetric_difference(&leftcol);
+
+        let mut errored = false;
 
         for key in diff {
-            let range = right.get(key).unwrap();
+            errored = true;
+
+            let range = right
+                .get(key)
+                .unwrap_or_else(|| left.get(key).unwrap())
+                .clone();
 
             context.report(
                 ResolverErrorKind::VariableNotBoundOnBothSides(key.clone()),
@@ -383,9 +432,13 @@ impl Resolve for PatOr {
 
         context.captured.last_mut().unwrap().extend(left);
 
-        resolved::PatOr {
-            left: Box::new(left_op),
-            right: Box::new(right_op),
+        if errored {
+            resolved::PatternKind::Error
+        } else {
+            resolved::PatternKind::Or(resolved::PatOr {
+                left: Box::new(left_op),
+                right: Box::new(right_op),
+            })
         }
     }
 }
@@ -394,17 +447,14 @@ impl Resolve for PatternKind {
     type Out = resolved::PatternKind;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
-        let not_capturing = context.captured.is_empty();
-
-        if not_capturing {
-            context.captured.push(HashMap::new());
-        }
-
-        let result = match self {
+        context.capture_scope(|context| match self {
             PatternKind::Upper(qualified) => {
                 let canonical = context.find(&qualified, true, DataType::Constructor);
                 if let Ok(canonical) = canonical {
-                    resolved::PatternKind::Upper(canonical)
+                    resolved::PatternKind::Application(resolved::PatApplication {
+                        func: canonical,
+                        args: vec![],
+                    })
                 } else {
                     resolved::PatternKind::Error
                 }
@@ -424,7 +474,7 @@ impl Resolve for PatternKind {
                 }
                 resolved::PatternKind::Lower(l.resolve(context))
             }
-            PatternKind::Or(or) => resolved::PatternKind::Or(or.resolve(context)),
+            PatternKind::Or(or) => or.resolve(context),
             PatternKind::Wildcard => resolved::PatternKind::Wildcard,
             PatternKind::Literal(l) => resolved::PatternKind::Literal(l.resolve(context)),
             PatternKind::Annotation(ann) => resolved::PatternKind::Annotation(ann.resolve(context)),
@@ -441,14 +491,7 @@ impl Resolve for PatternKind {
                     resolved::PatternKind::Error
                 }
             }
-        };
-
-        if not_capturing {
-            for name in context.captured.pop().unwrap().keys() {
-                context.scopes.add::<Variable>(name.clone());
-            }
-        }
-        result
+        })
     }
 }
 
@@ -505,53 +548,43 @@ impl Resolve for LetExpr {
     }
 }
 
-impl Resolve for Operator {
-    type Out = resolved::Operator;
+impl Resolve for Spanned<Operator> {
+    type Out = resolved::Expr;
 
-    fn resolve(self, _: &mut Context) -> Self::Out {
-        match self {
-            Operator::Add => resolved::Operator::Add,
-            Operator::Sub => resolved::Operator::Sub,
-            Operator::Mul => resolved::Operator::Mul,
-            Operator::Div => resolved::Operator::Div,
-            Operator::Rem => resolved::Operator::Rem,
-            Operator::And => resolved::Operator::And,
-            Operator::Or => resolved::Operator::Or,
-            Operator::Xor => resolved::Operator::Xor,
-            Operator::Not => resolved::Operator::Not,
-            Operator::Eq => resolved::Operator::Eq,
-            Operator::Neq => resolved::Operator::Neq,
-            Operator::Lt => resolved::Operator::Lt,
-            Operator::Gt => resolved::Operator::Gt,
-            Operator::Le => resolved::Operator::Le,
-            Operator::Ge => resolved::Operator::Ge,
-            Operator::Shl => resolved::Operator::Shl,
-            Operator::Shr => resolved::Operator::Shr,
-            Operator::Pipe => resolved::Operator::Pipe,
-        }
-    }
-}
+    fn resolve(self, ctx: &mut Context) -> Self::Out {
+        let name = match self.data {
+            Operator::Add => "add",
+            Operator::Sub => "sub",
+            Operator::Mul => "mul",
+            Operator::Div => "div",
+            Operator::Rem => "rem",
+            Operator::And => "and",
+            Operator::Or => "or",
+            Operator::Xor => "xor",
+            Operator::Not => "not",
+            Operator::Eq => "eq",
+            Operator::Neq => "neq",
+            Operator::Lt => "lt",
+            Operator::Gt => "gt",
+            Operator::Le => "le",
+            Operator::Ge => "ge",
+            Operator::Shl => "shl",
+            Operator::Shr => "shr",
+            Operator::Pipe => "pipe",
+        };
 
-impl Resolve for BinaryExpr {
-    type Out = resolved::BinaryExpr;
+        let data = ctx
+            .find_import(
+                self.range.clone(),
+                &DataType::Type(Symbol::intern(name)),
+                true,
+            )
+            .map(resolved::ExprKind::Function)
+            .unwrap_or(resolved::ExprKind::Error);
 
-    fn resolve(self, context: &mut Context) -> Self::Out {
-        resolved::BinaryExpr {
-            left: Box::new(self.left.resolve(context)),
-            op: self.op.resolve(context),
-            right: Box::new(self.right.resolve(context)),
-        }
-    }
-}
-
-impl Resolve for IfExpr {
-    type Out = resolved::IfExpr;
-
-    fn resolve(self, context: &mut Context) -> Self::Out {
-        resolved::IfExpr {
-            cond: Box::new(self.cond.resolve(context)),
-            then: Box::new(self.then.resolve(context)),
-            else_: Box::new(self.else_.resolve(context)),
+        Spanned {
+            data,
+            range: self.range,
         }
     }
 }
@@ -646,13 +679,13 @@ impl Resolve for ExprKind {
             ExprKind::Lambda(lambda) => resolved::ExprKind::Lambda(lambda.resolve(context)),
             ExprKind::Application(app) => resolved::ExprKind::Application(app.resolve(context)),
             ExprKind::Acessor(acc) => resolved::ExprKind::Acessor(acc.resolve(context)),
-            ExprKind::Binary(bin) => resolved::ExprKind::Binary(bin.resolve(context)),
             ExprKind::Let(let_) => resolved::ExprKind::Let(let_.resolve(context)),
-            ExprKind::If(if_) => resolved::ExprKind::If(if_.resolve(context)),
             ExprKind::When(when) => resolved::ExprKind::When(when.resolve(context)),
             ExprKind::Annotation(ann) => resolved::ExprKind::Annotation(ann.resolve(context)),
             ExprKind::Block(block) => resolved::ExprKind::Block(block.resolve(context)),
             ExprKind::Literal(lit) => resolved::ExprKind::Literal(lit.resolve(context)),
+            ExprKind::Binary(_) => todo!(),
+            ExprKind::If(_) => todo!(),
         }
     }
 }
@@ -751,8 +784,9 @@ impl Resolve for LetCase {
 
     fn resolve(self, context: &mut Context) -> Self::Out {
         context.scope::<scopable::Variable, _>(|context| resolved::LetCase {
-            patterns: self.patterns.resolve(context),
+            patterns: context.capture_scope(|context| self.patterns.resolve(context)),
             body: Box::new(self.body.resolve(context)),
+            range: self.range,
         })
     }
 }
