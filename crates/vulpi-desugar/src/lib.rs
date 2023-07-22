@@ -37,6 +37,14 @@ impl<T: Desugar> Desugar for Spanned<T> {
     }
 }
 
+impl<T: Desugar> Desugar for Option<T> {
+    type Output = Option<T::Output>;
+
+    fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
+        self.as_ref().map(|x| x.desugar(ctx))
+    }
+}
+
 impl<T: Desugar> Desugar for &T {
     type Output = T::Output;
 
@@ -50,14 +58,6 @@ impl<T: Desugar> Desugar for Vec<T> {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         self.iter().map(|x| x.desugar(ctx)).collect()
-    }
-}
-
-impl<T: Desugar> Desugar for Option<T> {
-    type Output = Option<T::Output>;
-
-    fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
-        self.as_ref().map(|x| x.desugar(ctx))
     }
 }
 
@@ -485,6 +485,7 @@ impl Desugar for concrete::LetDecl {
             name: self.name.desugar(ctx),
             params: self.binders.iter().map(|x| x.desugar(ctx)).collect(),
             cases: clauses,
+            ret: self.typ.as_ref().map(|x| x.1.desugar(ctx)),
         }
     }
 }

@@ -1,15 +1,11 @@
 use std::collections::HashMap;
-use std::rc::Rc;
-
-use context::Env;
-use infer::Infer;
-use types::{Kind, KindType, Mono, Scheme, Type};
+use types::{Kind, Scheme};
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
-use vulpi_syntax::resolved::{Program, TypeDef};
 
 pub mod check;
 pub mod context;
+pub mod declare;
 pub mod error;
 pub mod infer;
 pub mod types;
@@ -25,7 +21,10 @@ pub enum Data {
 #[derive(Default)]
 pub struct Interface {
     pub types: HashMap<Symbol, Kind>,
-    pub values: HashMap<Data, types::Scheme>,
+
+    pub lets: HashMap<Symbol, Scheme>,
+    pub cons: HashMap<Symbol, Scheme>,
+    pub fields: HashMap<Symbol, Scheme>,
 }
 
 #[derive(Default)]
@@ -33,74 +32,32 @@ pub struct Modules {
     pub modules: HashMap<Id<id::Namespace>, Interface>,
 }
 
-pub fn declare_types(modules: &mut Modules, program: &Program) {
-    for typ in &program.types {
-        let name = typ.name.clone();
-
-        let values = typ
-            .params
-            .iter()
-            .map(|_| Rc::new(KindType::Star))
-            .rfold(Rc::new(KindType::Star), |x, y| Rc::new(KindType::Fun(y, x)));
-
-        modules
-            .modules
-            .entry(program.id)
-            .or_default()
-            .types
-            .insert(name.data, values);
+impl Modules {
+    pub fn declare_type(&mut self, id: Id<id::Namespace>, name: Symbol, kind: Kind) {
+        self.modules.entry(id).or_default().types.insert(name, kind);
     }
-}
 
-pub fn declare_values(mut env: Env, program: &Program) {
-    for typ in &program.types {
-        let params: Vec<_> = (0..typ.params.len())
-            .map(|i| Type::new(Mono::Generalized(i)))
-            .collect();
+    pub fn declare_let(&mut self, id: Id<id::Namespace>, name: Symbol, scheme: Scheme) {
+        self.modules
+            .entry(id)
+            .or_default()
+            .lets
+            .insert(name, scheme);
+    }
 
-        for (i, params) in typ.params.iter().enumerate() {
-            env.type_variables
-                .insert(params.data.clone(), (Rc::new(KindType::Star), i));
-        }
+    pub fn declare_cons(&mut self, id: Id<id::Namespace>, name: Symbol, scheme: Scheme) {
+        self.modules
+            .entry(id)
+            .or_default()
+            .cons
+            .insert(name, scheme);
+    }
 
-        let init = Type::new(Mono::Variable(program.id, typ.name.data.clone()));
-
-        let ret_type = params
-            .iter()
-            .fold(init, |x, y| Type::new(Mono::Application(x, y.clone())));
-
-        let variables: Vec<_> = typ.params.iter().map(|x| x.data.clone()).collect();
-
-        match &typ.def {
-            TypeDef::Enum(enum_) => {
-                for variant in &enum_.variants {
-                    let name = variant.name.clone();
-
-                    let types: Vec<_> = variant.args.iter().map(|x| x.infer(env.clone())).collect();
-
-                    let monotype = types.into_iter().rfold(ret_type.clone(), |x, y| {
-                        // TODO: Add unification of kinds here
-                        Type::new(Mono::Function(y.1, x))
-                    });
-
-                    let value = Scheme {
-                        variables: variables.clone(),
-                        monotype,
-                    };
-
-                    println!("{}", value);
-
-                    env.modules
-                        .borrow_mut()
-                        .modules
-                        .entry(typ.id)
-                        .or_default()
-                        .values
-                        .insert(Data::Constructor(name.data), value);
-                }
-            }
-            TypeDef::Record(_) => todo!(),
-            TypeDef::Synonym(_) => todo!(),
-        }
+    pub fn declare_field(&mut self, id: Id<id::Namespace>, name: Symbol, scheme: Scheme) {
+        self.modules
+            .entry(id)
+            .or_default()
+            .fields
+            .insert(name, scheme);
     }
 }

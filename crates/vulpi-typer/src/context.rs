@@ -10,11 +10,9 @@ use vulpi_report::{Diagnostic, Report};
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
 
-use crate::{
-    error::{TypeError, TypeErrorKind},
-    types::{Hole, HoleInner, Kind, Level, Mono, Scheme, Type},
-    Data, Modules,
-};
+use crate::error::{TypeError, TypeErrorKind};
+use crate::types::{Hole, HoleInner, Kind, Level, Mono, Scheme, Type};
+use crate::Modules;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Qualified {
@@ -83,14 +81,14 @@ impl Env {
             .cloned()
     }
 
-    pub fn get_global_value(&self, id: Id<id::Namespace>, name: &Data) -> Option<Scheme> {
+    pub fn set_global_type(&mut self, id: Id<id::Namespace>, name: Symbol, kind: Kind) {
         self.modules
-            .borrow()
+            .borrow_mut()
             .modules
-            .get(&id)?
-            .values
-            .get(name)
-            .cloned()
+            .entry(id)
+            .or_default()
+            .types
+            .insert(name, kind);
     }
 
     pub fn set_location(&self, range: Range<Byte>) {
@@ -173,10 +171,10 @@ impl Env {
         pub fn gen(ambient: Level, typ: Type, counter: &mut usize) {
             match &&*typ {
                 Mono::Hole(hole) => match hole.get() {
-                    HoleInner::Unbound(_, level) if level.0 > ambient.0 => {
+                    HoleInner::Unbound(n, level) if level.0 > ambient.0 => {
                         let lvl = *counter;
                         *counter += 1;
-                        hole.fill(Type::new(Mono::Generalized(lvl)));
+                        hole.fill(Type::new(Mono::Generalized(lvl, n)));
                     }
                     HoleInner::Unbound(_, _) => (),
                     HoleInner::Link(f) => gen(ambient, f, counter),

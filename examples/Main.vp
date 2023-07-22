@@ -1,11 +1,14 @@
 type Int = 
     | Int
 
+type String = 
+    | String
+
 type Result a b = 
-    | Ok (Result Result a)
+    | Ok a
     | Err b
 
-let ata : Result a b -> c
-    | Result.Ok  a => 1
+let ata (x: Result a b) (y: Result b a) : a
+    | Result.Ok  a => x
     | Result.Err b => 2
 

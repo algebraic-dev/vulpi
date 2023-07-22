@@ -1,8 +1,13 @@
 use std::fmt::Display;
 use std::{cell::RefCell, rc::Rc};
 
+use im_rc::HashSet;
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
+use vulpi_syntax::resolved;
+
+use crate::context::Env;
+use crate::error;
 
 /// A mono type that is reference counted.
 pub type Type = Rc<Mono>;
@@ -14,7 +19,7 @@ pub enum Mono {
     Variable(Id<id::Namespace>, Symbol),
 
     /// A type that is bound to some scheme. e.g. `a`
-    Generalized(usize),
+    Generalized(usize, Symbol),
 
     /// A hole is a type that is open to unification.
     Hole(Hole),
@@ -54,29 +59,49 @@ impl Display for KindType {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Mode {
+    None = 0,
+    Arrow,
+    App,
+}
+
 impl Mono {
     fn fmt_with_context(
         &self,
         ctx: &[Symbol],
         f: &mut std::fmt::Formatter<'_>,
+        mode: Mode,
     ) -> std::fmt::Result {
         match self {
-            Mono::Variable(x, symbol) => write!(f, "{}:{}", x.0, symbol.get()),
-            Mono::Generalized(n) => write!(f, "{}", ctx[*n].get()),
-            Mono::Hole(hole) => hole.get().fmt_with_context(ctx, f),
+            Mono::Variable(_, symbol) => write!(f, "{}", symbol.get()),
+            Mono::Generalized(_, s) => write!(f, "{}", s.get()),
+            Mono::Hole(hole) => hole.get().fmt_with_context(ctx, f, mode),
             Mono::Function(left, right) => {
-                write!(f, "(")?;
-                left.fmt_with_context(ctx, f)?;
+                if mode > Mode::None {
+                    write!(f, "(")?;
+                }
+
+                left.fmt_with_context(ctx, f, Mode::Arrow)?;
                 write!(f, " -> ")?;
-                right.fmt_with_context(ctx, f)?;
-                write!(f, ")")
+                right.fmt_with_context(ctx, f, Mode::None)?;
+
+                if mode > Mode::None {
+                    write!(f, ")")?;
+                }
+                Ok(())
             }
             Mono::Application(fun, arg) => {
-                write!(f, "(")?;
-                fun.fmt_with_context(ctx, f)?;
+                if mode == Mode::App {
+                    write!(f, "(")?;
+                }
+                fun.fmt_with_context(ctx, f, Mode::Arrow)?;
                 write!(f, " ")?;
-                arg.fmt_with_context(ctx, f)?;
-                write!(f, ")")
+                arg.fmt_with_context(ctx, f, Mode::App)?;
+                if mode == Mode::App {
+                    write!(f, ")")?;
+                }
+                Ok(())
             }
             Mono::Error => write!(f, "ERROR"),
         }
@@ -85,7 +110,7 @@ impl Mono {
 
 impl Display for Mono {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.fmt_with_context(&[], f)
+        self.fmt_with_context(&[], f, Mode::None)
     }
 }
 /// A scheme is a type that is polymorphic and binds variables.
@@ -96,6 +121,15 @@ pub struct Scheme {
 
     /// The target monotype
     pub monotype: Type,
+}
+
+impl From<Type> for Scheme {
+    fn from(value: Type) -> Self {
+        Self {
+            variables: vec![],
+            monotype: value,
+        }
+    }
 }
 
 impl Scheme {
@@ -109,7 +143,19 @@ impl Scheme {
 
 impl Display for Scheme {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.monotype.fmt_with_context(&self.variables, f)
+        write!(f, "forall ")?;
+
+        for (i, v) in self.variables.iter().enumerate() {
+            if i != 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{}", v.get())?;
+        }
+
+        write!(f, ". ")?;
+
+        self.monotype
+            .fmt_with_context(&self.variables, f, Mode::None)
     }
 }
 
@@ -142,12 +188,13 @@ impl HoleInner {
         &self,
         ctx: &[Symbol],
         f: &mut std::fmt::Formatter<'_>,
+        mode: Mode,
     ) -> std::fmt::Result {
         match self {
             HoleInner::Unbound(n, l) => write!(f, "!{}~{}", n.get(), l.0),
             HoleInner::Link(t) => {
                 write!(f, "^")?;
-                t.fmt_with_context(ctx, f)
+                t.fmt_with_context(ctx, f, mode)
             }
         }
     }
@@ -155,7 +202,7 @@ impl HoleInner {
 
 impl Display for HoleInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.fmt_with_context(&[], f)
+        self.fmt_with_context(&[], f, Mode::None)
     }
 }
 
@@ -192,7 +239,7 @@ impl Eq for Hole {}
 impl Mono {
     pub(crate) fn instantiate_with(self: Type, substitute: &[Type]) -> Type {
         match &&*self {
-            Mono::Generalized(n) => substitute[*n].clone(),
+            Mono::Generalized(n, _) => substitute[*n].clone(),
             Mono::Hole(hole) => match hole.get() {
                 HoleInner::Unbound(_, _) => self.clone(),
                 HoleInner::Link(f) => f.instantiate_with(substitute),
@@ -224,5 +271,39 @@ mod tests {
 
         assert_eq!(hole1, hole1.clone());
         assert_ne!(hole1, hole2);
+    }
+}
+
+pub fn free_vars(env: Env, tree: &resolved::Type) -> HashSet<Symbol> {
+    let mut map = HashSet::new();
+    free_variables_located(env, tree, &mut map);
+    map
+}
+
+pub fn free_variables_located(env: Env, tree: &resolved::Type, map: &mut HashSet<Symbol>) {
+    env.set_location(tree.range.clone());
+    free_variables(env, &tree.data, map);
+}
+
+fn free_variables(env: Env, tree: &resolved::TypeKind, map: &mut HashSet<Symbol>) {
+    match tree {
+        resolved::TypeKind::Upper(_) => (),
+        resolved::TypeKind::Lower(l) => {
+            map.insert(l.data.clone());
+        }
+        resolved::TypeKind::Arrow(resolved::TypeArrow { left, right, .. }) => {
+            free_variables_located(env.clone(), left, map);
+            free_variables_located(env, right, map);
+        }
+        resolved::TypeKind::Application(resolved::TypeApplication { fun, args }) => {
+            free_variables_located(env.clone(), fun, map);
+            for arg in args {
+                free_variables_located(env.clone(), arg, map);
+            }
+        }
+        resolved::TypeKind::Forall(_) => {
+            env.report(error::TypeErrorKind::CannotInferForall);
+        }
+        resolved::TypeKind::Error => (),
     }
 }

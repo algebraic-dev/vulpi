@@ -24,7 +24,10 @@ impl Infer for TypeKind {
             }
             TypeKind::Lower(l) => {
                 if let Some((kind, gen)) = env.type_variables.get(&l.data) {
-                    (kind.clone(), Type::new(Mono::Generalized(*gen)))
+                    (
+                        kind.clone(),
+                        Type::new(Mono::Generalized(*gen, l.data.clone())),
+                    )
                 } else {
                     env.report(crate::error::TypeErrorKind::CannotFindTypeVariable(
                         l.data.clone(),

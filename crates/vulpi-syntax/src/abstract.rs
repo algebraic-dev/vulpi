@@ -278,6 +278,7 @@ pub struct LetDecl {
     pub name: Ident,
     pub params: Vec<(Pattern, Type)>,
     pub cases: Vec<LetCase>,
+    pub ret: Option<Type>,
 }
 
 #[derive(Tree, Debug)]

@@ -240,6 +240,14 @@ impl<T: Resolve> Resolve for Spanned<T> {
     }
 }
 
+impl<T: Resolve> Resolve for Option<T> {
+    type Out = Option<T::Out>;
+
+    fn resolve(self, context: &mut Context) -> Self::Out {
+        self.map(|t| t.resolve(context))
+    }
+}
+
 impl Resolve for Ident {
     type Out = resolved::Ident;
 
@@ -440,7 +448,6 @@ impl Resolve for PatternKind {
                 context.scopes.add::<Variable>(name.clone());
             }
         }
-
         result
     }
 }
@@ -758,6 +765,7 @@ impl Resolve for LetDecl {
             name: self.name.resolve(context),
             params: self.params.resolve(context),
             cases: self.cases.resolve(context),
+            ret: self.ret.resolve(context),
         })
     }
 }

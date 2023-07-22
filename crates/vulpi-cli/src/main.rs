@@ -37,12 +37,12 @@ fn main() {
 
     let mut modules = vulpi_typer::Modules::default();
 
-    vulpi_typer::declare_types(&mut modules, &resolved);
+    vulpi_typer::declare::declare_types(&mut modules, &resolved);
 
     let modules = Rc::new(RefCell::new(modules));
     let env = Env::new(reporter.clone(), file, modules);
 
-    vulpi_typer::declare_values(env, &resolved);
+    vulpi_typer::declare::declare_values_types(env, &resolved);
 
     if reporter.has_errors() {
         eprintln!();

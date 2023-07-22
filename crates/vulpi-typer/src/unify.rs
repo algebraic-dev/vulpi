@@ -17,7 +17,7 @@ pub fn unify_kinds(env: Env, left: Kind, right: Kind) {
 pub fn unify(env: Env, left: Type, right: Type) {
     match (&*left, &*right) {
         (Mono::Variable(p, x), Mono::Variable(p1, y)) if p == p1 && x == y => (),
-        (Mono::Generalized(x), Mono::Generalized(y)) if x == y => todo!(),
+        (Mono::Generalized(x, _), Mono::Generalized(y, _)) if x == y => todo!(),
 
         (Mono::Hole(l), Mono::Hole(r)) if l == r => (),
 
@@ -56,7 +56,7 @@ pub fn unify_hole(env: Env, hole: Hole, val: Type, flip: bool) {
 pub fn occur(hole: Hole, typ: Type) -> bool {
     match &*typ {
         Mono::Variable(_, _) => false,
-        Mono::Generalized(_) => false,
+        Mono::Generalized(_, _) => false,
         Mono::Error => false,
         Mono::Hole(hole_inner) => *hole_inner == hole,
         Mono::Function(l, r) => occur(hole.clone(), l.clone()) || occur(hole, r.clone()),
