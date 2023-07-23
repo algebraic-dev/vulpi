@@ -1,5 +1,0 @@
-type Result a b = 
-    | Ok a
-    | Err b
-
-let ata (x: x) : Result x y = Result.Err x
