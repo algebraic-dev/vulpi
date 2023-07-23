@@ -2,7 +2,7 @@
 //! compilers, the lexing phase. This phase splits a source code into [Token]s that are like "words"
 //! that contain no connection to other "words". e.g
 //!
-//! ```rust
+//! ```hs
 //! // If we had a function called lex that given a source code returns a [Vec<Token>] then:
 //! lex("1 + 2")
 //! // Would return
@@ -16,7 +16,7 @@
 //! The layout parsing of Vulpi gets whitespace information and turns this information into a set of
 //! virtual braces and semicolons. e.g.
 //!
-//! ```
+//! ```hs
 //! do
 //!    a c
 //!    b
@@ -24,7 +24,7 @@
 //!
 //! Turns into
 //!
-//! ```
+//! ```hs
 //! do { a c; b; }
 //! ```
 //!
