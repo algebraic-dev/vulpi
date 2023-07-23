@@ -1,0 +1,15 @@
+suite/Main.vp:15:5: mismatched types: expected `()`, found `Int`
+
+   13 | let ata (x: Result a b) (y: Result b a) : () = do
+   14 |     let a = 2
+   15 |     a
+      |     ^
+   16 | 
+
+suite/Main.vp:17:16: mismatched types: expected `Int`, found `()`
+
+   15 |     a
+   16 | 
+   17 | let be : Int = ata (Ok Int.Int) (Ok String.String)
+      |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
