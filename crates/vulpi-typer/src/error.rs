@@ -15,6 +15,7 @@ pub enum TypeErrorKind {
     UnboundVariable(Symbol),
     WrongArity(usize, usize),
     CannotAccessType,
+    NotARecord,
     MismatchArityInPattern(usize, usize),
     ExtraPattern,
 }
@@ -53,6 +54,7 @@ impl IntoDiagnostic for TypeError {
             )
             .into(),
             TypeErrorKind::ExtraPattern => "extra pattern".to_string().into(),
+            TypeErrorKind::NotARecord => "not a record".to_string().into(),
         }
     }
 

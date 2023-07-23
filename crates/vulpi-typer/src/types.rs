@@ -45,6 +45,9 @@ pub enum Mono {
     /// A type that is bound to some scheme. e.g. `a`
     Generalized(usize, Symbol),
 
+    /// It's used for let decls
+    Bound(Symbol),
+
     /// A hole is a type that is open to unification.
     Hole(Hole),
 
@@ -103,7 +106,8 @@ impl Mono {
         match self {
             Mono::Unit => write!(f, "()"),
             Mono::Variable(_, symbol) => write!(f, "{}", symbol.get()),
-            Mono::Generalized(_, s) => write!(f, "{}", s.get()),
+            Mono::Bound(symbol) => write!(f, "{}", symbol.get()),
+            Mono::Generalized(n, s) => write!(f, "{}~{n}", s.get()),
             Mono::Hole(hole) => hole.get().fmt_with_context(ctx, f, mode),
             Mono::Function(left, right) => {
                 if mode > Mode::None {
@@ -262,24 +266,35 @@ impl PartialEq for Hole {
 impl Eq for Hole {}
 
 impl Mono {
-    pub(crate) fn instantiate_with(self: Type, substitute: &[Type]) -> Type {
+    pub(crate) fn to_bound(self: Type, vars: &[Symbol]) -> Type {
+        let vars = vars
+            .iter()
+            .map(|x| Type::new(Mono::Bound(x.clone())))
+            .collect::<Vec<_>>();
+
+        self.instantiate_with(&vars)
+    }
+
+    pub fn instantiate_with(self: Type, subst: &[Type]) -> Type {
         match &&*self {
             Mono::Unit => self.clone(),
-            Mono::Generalized(n, _) => substitute[*n].clone(),
+            Mono::Generalized(n, _) if *n < subst.len() => subst[*n].clone(),
+            Mono::Generalized(_, _) => self.clone(),
+            Mono::Bound(_) => self.clone(),
             Mono::Hole(hole) => match hole.get() {
                 HoleInner::Unbound(_, _) => self.clone(),
-                HoleInner::Link(f) => f.instantiate_with(substitute),
+                HoleInner::Link(f) => f.instantiate_with(subst),
             },
             Mono::Function(l, r) => {
-                let l = l.clone().instantiate_with(substitute);
-                let r = r.clone().instantiate_with(substitute);
+                let l = l.clone().instantiate_with(subst);
+                let r = r.clone().instantiate_with(subst);
                 Type::new(Mono::Function(l, r))
             }
             Mono::Error => self.clone(),
             Mono::Variable(_, _) => self.clone(),
             Mono::Application(f, a) => {
-                let f = f.clone().instantiate_with(substitute);
-                let a = a.clone().instantiate_with(substitute);
+                let f = f.clone().instantiate_with(subst);
+                let a = a.clone().instantiate_with(subst);
                 Type::new(Mono::Application(f, a))
             }
         }

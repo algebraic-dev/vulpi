@@ -439,6 +439,39 @@ impl Parser<'_> {
 
     // Expressions
 
+    pub fn record_field(&mut self) -> Result<RecordField> {
+        let name = self.lower()?;
+        let eq = self.expect(TokenData::Equal)?;
+        let expr = self.expr()?;
+        Ok(RecordField { name, eq, expr })
+    }
+
+    pub fn record_instance(&mut self, name: Path<Upper>) -> Result<RecordInstance> {
+        let left_brace = self.expect(TokenData::LBrace)?;
+        let fields = self.sep_by(TokenData::Comma, Self::record_field)?;
+        let right_brace = self.expect(TokenData::RBrace)?;
+        Ok(RecordInstance {
+            name,
+            left_brace,
+            fields,
+            right_brace,
+        })
+    }
+
+    pub fn record_update(&mut self, expr: Box<Expr>) -> Result<RecordUpdate> {
+        let with = self.expect(TokenData::With)?;
+        let left_brace = self.expect(TokenData::LBrace)?;
+        let fields = self.sep_by(TokenData::Comma, Self::record_field)?;
+        let right_brace = self.expect(TokenData::RBrace)?;
+        Ok(RecordUpdate {
+            expr,
+            with,
+            left_brace,
+            fields,
+            right_brace,
+        })
+    }
+
     pub fn let_sttm(&mut self) -> Result<LetSttm> {
         let let_ = self.expect(TokenData::Let)?;
         let pattern = self.pattern()?;
@@ -495,7 +528,19 @@ impl Parser<'_> {
 
     pub fn expr_atom_kind(&mut self) -> Result<ExprKind> {
         match self.kind() {
-            TokenData::UpperIdent | TokenData::LowerIdent => self.path_ident().map(ExprKind::Ident),
+            TokenData::UpperIdent | TokenData::LowerIdent => {
+                let path = self.path_ident()?;
+
+                if path.last.0.data.kind == TokenData::UpperIdent && self.at(TokenData::LBrace) {
+                    Ok(ExprKind::RecordInstance(self.record_instance(Path {
+                        segments: path.segments,
+                        last: Upper(path.last.0),
+                        span: path.span,
+                    })?))
+                } else {
+                    Ok(ExprKind::Ident(path))
+                }
+            }
             TokenData::LPar => self.parenthesis(Self::expr).map(ExprKind::Parenthesis),
             _ => self.literal().map(ExprKind::Literal),
         }
@@ -574,6 +619,13 @@ impl Parser<'_> {
                     colon,
                     ty: right,
                 }),
+            }))
+        } else if self.at(TokenData::With) {
+            let left_range = left.range.clone();
+            let right = self.spanned(|this| this.record_update(left))?;
+            Ok(Box::new(Spanned {
+                range: left_range.start..right.range.end.clone(),
+                data: ExprKind::RecordUpdate(right.data),
             }))
         } else {
             Ok(left)
@@ -824,7 +876,7 @@ impl Parser<'_> {
 
     pub fn record_decl(&mut self) -> Result<RecordDecl> {
         let left_brace = self.expect(TokenData::LBrace)?;
-        let fields = self.multiple(Self::field)?;
+        let fields = self.sep_by(TokenData::Comma, Self::field)?;
         let right_brace = self.expect(TokenData::RBrace)?;
 
         Ok(RecordDecl {

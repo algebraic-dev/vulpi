@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use vulpi_storage::{
     id::{Id, Namespace},
     interner::Symbol,
@@ -5,10 +7,10 @@ use vulpi_storage::{
 
 use vulpi_syntax::resolved::{
     AcessorExpr, AnnotationExpr, ApplicationExpr, Block, ExprKind, LambdaExpr, LetExpr,
-    LiteralKind, WhenExpr,
+    LiteralKind, RecordInstance, RecordUpdate, WhenExpr,
 };
 
-use crate::check::Check;
+use crate::{check::Check, types::KindType, Def, TypeRep};
 
 use crate::error::TypeErrorKind;
 use crate::types::{Mono, Type};
@@ -174,6 +176,53 @@ impl Infer for LetExpr {
     }
 }
 
+impl Infer for RecordUpdate {
+    type Out = Type;
+
+    fn infer(&self, env: crate::context::Env) -> Self::Out {
+        todo!()
+    }
+}
+
+impl Infer for RecordInstance {
+    type Out = Type;
+
+    fn infer(&self, mut env: crate::context::Env) -> Self::Out {
+        let name = &self.name;
+
+        let (params, res) = if let Some(rep) = env.get_global_type(name.canonical, &name.last) {
+            if let Def::Record(fields) = rep.def {
+                (
+                    rep.params.iter().map(|x| x.get()).collect::<Vec<_>>(),
+                    fields,
+                )
+            } else {
+                env.set_location(name.range.clone());
+                env.report(TypeErrorKind::NotARecord);
+                return Type::new(Mono::Error);
+            }
+        } else {
+            return Type::new(Mono::Error);
+        };
+
+        let args: Vec<_> = params.iter().map(|_| env.new_hole()).collect();
+
+        for field in res {
+            let typ = {
+                let borrow = env.modules.borrow();
+                borrow
+                    .get_field(field.canonical, &field.last)
+                    .unwrap()
+                    .clone()
+            };
+            let typ = env.instantiate(typ.clone());
+            println!("{}", typ)
+        }
+
+        todo!()
+    }
+}
+
 impl Infer for ExprKind {
     type Out = Type;
 
@@ -219,6 +268,8 @@ impl Infer for ExprKind {
             ExprKind::Block(block) => block.infer(env),
             ExprKind::Literal(lit) => lit.infer(env),
             ExprKind::Error => Type::new(Mono::Error),
+            ExprKind::RecordInstance(record) => record.infer(env),
+            ExprKind::RecordUpdate(record) => record.infer(env),
         }
     }
 }

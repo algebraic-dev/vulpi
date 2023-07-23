@@ -1,0 +1,7 @@
+suite/Use.vp:5:31: mismatched types: expected `Result x y`, found `Result x x`
+
+    3 |     | Err b
+    4 | 
+    5 | let ata (x: x) : Result x y = Result.Err x
+      |                               ^^^^^^^^^^^^
+

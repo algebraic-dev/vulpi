@@ -69,9 +69,9 @@ impl Infer for TypeKind {
     fn infer(&self, env: crate::context::Env) -> Self::Out {
         match self {
             TypeKind::Upper(upper) => {
-                if let Some(kind) = env.get_global_type(upper.canonical, &upper.last) {
+                if let Some(rep) = env.get_global_type(upper.canonical, &upper.last) {
                     let typ = Type::new(Mono::Variable(upper.canonical, upper.last.clone()));
-                    (kind, typ)
+                    (rep.kind, typ)
                 } else {
                     (Rc::new(KindType::Error), Type::new(Mono::Error))
                 }

@@ -649,23 +649,45 @@ impl Resolve for Block {
     }
 }
 
+impl Resolve for RecordInstance {
+    type Out = resolved::ExprKind;
+
+    fn resolve(self, context: &mut Context) -> Self::Out {
+        let canonical = context.find(&self.name, true, DataType::Type);
+        if let Ok(canonical) = canonical {
+            resolved::ExprKind::RecordInstance(resolved::RecordInstance {
+                name: canonical,
+                fields: self.fields.resolve(context),
+            })
+        } else {
+            resolved::ExprKind::Error
+        }
+    }
+}
+
+impl Resolve for RecordUpdate {
+    type Out = resolved::RecordUpdate;
+
+    fn resolve(self, context: &mut Context) -> Self::Out {
+        resolved::RecordUpdate {
+            expr: Box::new(self.expr.resolve(context)),
+            fields: self.fields.resolve(context),
+        }
+    }
+}
+
 impl Resolve for ExprKind {
     type Out = resolved::ExprKind;
 
     fn resolve(self, context: &mut Context) -> Self::Out {
         match self {
-            ExprKind::Ident(qualified) => {
-                if context.scopes.contains::<Variable>(&qualified.last.0)
-                    && qualified.segments.is_empty()
-                {
-                    return resolved::ExprKind::Variable(qualified.last.clone().into());
-                }
-
-                if let Ok(canonical) = context.find(&qualified, false, DataType::Let) {
-                    resolved::ExprKind::Function(canonical)
-                } else if let Ok(canonical) = context.find(&qualified, true, DataType::Constructor)
-                {
-                    resolved::ExprKind::Constructor(canonical)
+            ExprKind::Ident(name) => {
+                if context.scopes.contains::<Variable>(&name.last.0) && name.segments.is_empty() {
+                    resolved::ExprKind::Variable(name.last.clone().into())
+                } else if let Ok(canon) = context.find(&name, false, DataType::Let) {
+                    resolved::ExprKind::Function(canon)
+                } else if let Ok(canon) = context.find(&name, true, DataType::Constructor) {
+                    resolved::ExprKind::Constructor(canon)
                 } else {
                     resolved::ExprKind::Error
                 }
@@ -678,6 +700,8 @@ impl Resolve for ExprKind {
             ExprKind::Annotation(ann) => resolved::ExprKind::Annotation(ann.resolve(context)),
             ExprKind::Block(block) => resolved::ExprKind::Block(block.resolve(context)),
             ExprKind::Literal(lit) => resolved::ExprKind::Literal(lit.resolve(context)),
+            ExprKind::RecordInstance(rec) => rec.resolve(context),
+            ExprKind::RecordUpdate(rec) => resolved::ExprKind::RecordUpdate(rec.resolve(context)),
             ExprKind::Binary(_) => todo!(),
             ExprKind::If(_) => todo!(),
         }

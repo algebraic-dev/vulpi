@@ -42,7 +42,7 @@ test!("/suite/", |file_name| {
 
     vulpi_typer::declare::declare_values_types(env.clone(), &resolved);
 
-    vulpi_typer::declare::define_body(&env, &resolved);
+    vulpi_typer::declare::define_let_body(&env, &resolved);
 
     let mut end = Reader::default();
 

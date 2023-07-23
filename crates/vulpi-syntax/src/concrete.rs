@@ -270,6 +270,30 @@ pub struct LetExpr {
 }
 
 #[derive(Debug, Tree)]
+pub struct RecordField {
+    pub name: Lower,
+    pub eq: Token,
+    pub expr: Box<Expr>,
+}
+
+#[derive(Debug, Tree)]
+pub struct RecordInstance {
+    pub name: Path<Upper>,
+    pub left_brace: Token,
+    pub fields: Vec<(RecordField, Option<Token>)>,
+    pub right_brace: Token,
+}
+
+#[derive(Debug, Tree)]
+pub struct RecordUpdate {
+    pub left_brace: Token,
+    pub expr: Box<Expr>,
+    pub with: Token,
+    pub fields: Vec<(RecordField, Option<Token>)>,
+    pub right_brace: Token,
+}
+
+#[derive(Debug, Tree)]
 pub enum ExprKind {
     Lambda(LambdaExpr),
     Application(ApplicationExpr),
@@ -282,6 +306,8 @@ pub enum ExprKind {
     Annotation(AnnotationExpr),
     Do(DoExpr),
     Literal(Literal),
+    RecordInstance(RecordInstance),
+    RecordUpdate(RecordUpdate),
     Parenthesis(Parenthesis<Box<Expr>>),
 }
 
@@ -344,7 +370,7 @@ pub struct Field {
 #[derive(Debug, Tree)]
 pub struct RecordDecl {
     pub left_brace: Token,
-    pub fields: Vec<Field>,
+    pub fields: Vec<(Field, Option<Token>)>,
     pub right_brace: Token,
 }
 

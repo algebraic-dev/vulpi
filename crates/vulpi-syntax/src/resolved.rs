@@ -211,6 +211,18 @@ pub struct LetExpr {
 }
 
 #[derive(Tree, Debug)]
+pub struct RecordInstance {
+    pub fields: Vec<(Ident, Expr)>,
+    pub name: Qualified,
+}
+
+#[derive(Tree, Debug)]
+pub struct RecordUpdate {
+    pub fields: Vec<(Ident, Expr)>,
+    pub expr: Box<Expr>,
+}
+
+#[derive(Tree, Debug)]
 pub enum ExprKind {
     Variable(Ident),
 
@@ -225,6 +237,9 @@ pub enum ExprKind {
     Annotation(AnnotationExpr),
     Block(Block),
     Literal(Literal),
+
+    RecordInstance(RecordInstance),
+    RecordUpdate(RecordUpdate),
 
     Error,
 }

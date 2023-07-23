@@ -12,13 +12,7 @@ use vulpi_storage::interner::Symbol;
 
 use crate::error::{TypeError, TypeErrorKind};
 use crate::types::{Hole, HoleInner, Kind, Level, Mono, Scheme, Type};
-use crate::Modules;
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct Qualified {
-    pub path: Symbol,
-    pub name: Symbol,
-}
+use crate::{Modules, TypeRep};
 
 /// The env is responsible for storing types and variables.
 #[derive(Clone)]
@@ -67,7 +61,7 @@ impl Env {
         }
     }
 
-    pub fn get_global_type(&self, id: Id<id::Namespace>, name: &Symbol) -> Option<Kind> {
+    pub fn get_global_type(&self, id: Id<id::Namespace>, name: &Symbol) -> Option<TypeRep> {
         self.modules
             .borrow()
             .modules
@@ -77,7 +71,7 @@ impl Env {
             .cloned()
     }
 
-    pub fn set_global_type(&mut self, id: Id<id::Namespace>, name: Symbol, kind: Kind) {
+    pub fn set_global_type(&mut self, id: Id<id::Namespace>, name: Symbol, kind: TypeRep) {
         self.modules
             .borrow_mut()
             .modules

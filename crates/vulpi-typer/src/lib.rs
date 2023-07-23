@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use types::{Kind, Scheme, Type};
 use vulpi_storage::id::{self, Id};
 use vulpi_storage::interner::Symbol;
+use vulpi_syntax::resolved::Qualified;
 
 pub mod check;
 pub mod context;
@@ -20,8 +21,7 @@ pub enum Data {
 
 #[derive(Default)]
 pub struct Interface {
-    pub types: HashMap<Symbol, Kind>,
-
+    pub types: HashMap<Symbol, TypeRep>,
     pub lets: HashMap<Symbol, LetDef>,
     pub cons: HashMap<Symbol, ConsDef>,
     pub fields: HashMap<Symbol, Scheme>,
@@ -41,13 +41,26 @@ pub struct ConsDef {
     pub typ: Scheme,
 }
 
+#[derive(Clone)]
+pub enum Def {
+    Record(Vec<Qualified>),
+    Enum,
+}
+
+#[derive(Clone)]
+pub struct TypeRep {
+    pub kind: Kind,
+    pub def: Def,
+    pub params: Vec<Symbol>,
+}
+
 #[derive(Default)]
 pub struct Modules {
     pub modules: HashMap<Id<id::Namespace>, Interface>,
 }
 
 impl Modules {
-    pub fn declare_type(&mut self, id: Id<id::Namespace>, name: Symbol, kind: Kind) {
+    pub fn declare_type(&mut self, id: Id<id::Namespace>, name: Symbol, kind: TypeRep) {
         self.modules.entry(id).or_default().types.insert(name, kind);
     }
 
@@ -83,7 +96,7 @@ impl Modules {
         self.modules.get(&id).and_then(|x| x.cons.get(name))
     }
 
-    pub fn get_type(&self, id: Id<id::Namespace>, name: &Symbol) -> Option<&Kind> {
+    pub fn get_type(&self, id: Id<id::Namespace>, name: &Symbol) -> Option<&TypeRep> {
         self.modules.get(&id).and_then(|x| x.types.get(name))
     }
 

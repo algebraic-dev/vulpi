@@ -44,7 +44,7 @@ fn main() {
 
     vulpi_typer::declare::declare_values_types(env.clone(), &resolved);
 
-    vulpi_typer::declare::define_body(&env, &resolved);
+    vulpi_typer::declare::define_let_body(&env, &resolved);
 
     if reporter.has_errors() {
         eprintln!();

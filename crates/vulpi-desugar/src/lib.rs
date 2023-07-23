@@ -435,6 +435,36 @@ impl Desugar for concrete::DoExpr {
     }
 }
 
+impl Desugar for concrete::RecordField {
+    type Output = (abs::Ident, abs::Expr);
+
+    fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
+        (self.name.desugar(ctx), self.expr.desugar(ctx))
+    }
+}
+
+impl Desugar for concrete::RecordInstance {
+    type Output = abs::RecordInstance;
+
+    fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
+        abs::RecordInstance {
+            name: self.name.desugar(ctx),
+            fields: self.fields.iter().map(|x| x.0.desugar(ctx)).collect(),
+        }
+    }
+}
+
+impl Desugar for concrete::RecordUpdate {
+    type Output = abs::RecordUpdate;
+
+    fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
+        abs::RecordUpdate {
+            fields: self.fields.iter().map(|x| x.0.desugar(ctx)).collect(),
+            expr: Box::new(self.expr.desugar(ctx)),
+        }
+    }
+}
+
 impl Desugar for concrete::ExprKind {
     type Output = abs::ExprKind;
 
@@ -454,6 +484,8 @@ impl Desugar for concrete::ExprKind {
             ConcreteExpr::Annotation(d) => AbstractKind::Annotation(d.desugar(ctx)),
             ConcreteExpr::Do(d) => AbstractKind::Block(d.desugar(ctx)),
             ConcreteExpr::Literal(d) => AbstractKind::Literal(d.desugar(ctx)),
+            ConcreteExpr::RecordInstance(d) => AbstractKind::RecordInstance(d.desugar(ctx)),
+            ConcreteExpr::RecordUpdate(d) => AbstractKind::RecordUpdate(d.desugar(ctx)),
             ConcreteExpr::Parenthesis(d) => d.data.desugar(ctx).data,
         }
     }
@@ -538,7 +570,7 @@ impl Desugar for concrete::RecordDecl {
 
     fn desugar(&self, ctx: &mut DesugarCtx) -> Self::Output {
         abs::RecordDecl {
-            fields: self.fields.iter().map(|x| x.desugar(ctx)).collect(),
+            fields: self.fields.iter().map(|x| x.0.desugar(ctx)).collect(),
         }
     }
 }

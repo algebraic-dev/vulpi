@@ -10,12 +10,12 @@ use im_rc::HashSet;
 
 use vulpi_location::Spanned;
 use vulpi_storage::interner::Symbol;
-use vulpi_syntax::resolved::{Program, TypeDef, TypeKind};
+use vulpi_syntax::resolved::{Program, Qualified, TypeDef, TypeKind};
 
 use crate::context::Env;
 use crate::types::{free_variables_located, KindType, Mono, Scheme, Type};
 use crate::unify::{self};
-use crate::{ConsDef, LetDef, Modules};
+use crate::{ConsDef, Def, LetDef, Modules, TypeRep};
 
 /// Declare all types in the environment.
 // TODO: Improve kind inference.
@@ -24,8 +24,30 @@ pub fn declare_types(modules: &mut Modules, program: &Program) {
         // TODO: Check if parameters are unique.
 
         let name = typ.name.clone();
-        let values = make_kind_function(&typ.params);
-        modules.declare_type(program.id, name.data, values);
+        let kind = make_kind_function(&typ.params);
+
+        modules.declare_type(
+            program.id,
+            name.data,
+            TypeRep {
+                kind,
+                params: typ.params.iter().map(|x| x.data.clone()).collect(),
+                def: match &typ.def {
+                    TypeDef::Enum(_) => Def::Enum,
+                    TypeDef::Record(rec) => Def::Record(
+                        rec.fields
+                            .iter()
+                            .map(|x| Qualified {
+                                canonical: typ.id,
+                                last: x.name.data.clone(),
+                                range: x.name.range.clone(),
+                            })
+                            .collect(),
+                    ),
+                    TypeDef::Synonym(_) => todo!(),
+                },
+            },
+        );
     }
 }
 
@@ -75,7 +97,9 @@ fn declare_let_types(env: &Env, let_: &vulpi_syntax::resolved::LetDecl, program:
         free_variables_located(env.clone(), ret, &mut fvs);
     }
 
-    for (i, var) in fvs.iter().enumerate() {
+    let params: Vec<_> = fvs.into_iter().collect();
+
+    for (i, var) in params.iter().enumerate() {
         env.type_variables
             .insert(var.clone(), (Rc::new(KindType::Star), i));
     }
@@ -87,8 +111,6 @@ fn declare_let_types(env: &Env, let_: &vulpi_syntax::resolved::LetDecl, program:
     } else {
         env.new_hole()
     };
-
-    let params: Vec<_> = fvs.into_iter().collect();
 
     let args = infer_types(let_.params.iter().map(|x| &x.1), &env);
     let typ = make_function(args.clone(), &ret);
@@ -104,6 +126,77 @@ fn declare_let_types(env: &Env, let_: &vulpi_syntax::resolved::LetDecl, program:
             ret,
         },
     );
+}
+
+pub fn define_let_body(env: &Env, program: &Program) {
+    for let_ in &program.lets {
+        let mut env = env.clone();
+
+        let def = env
+            .modules
+            .borrow()
+            .get_let(program.id, &let_.name.data)
+            .unwrap()
+            .clone();
+
+        for (i, name) in def.params.iter().enumerate() {
+            env.type_variables
+                .insert(name.clone(), (Rc::new(KindType::Star), i));
+        }
+
+        for ((pat, _), typ_typ) in let_.params.iter().zip(&def.args) {
+            let (bindings, pat_typ) = pat.infer(env.clone());
+
+            unify::unify(env.clone(), typ_typ.clone().to_bound(&def.params), pat_typ);
+
+            for (k, t) in bindings {
+                env.add_variable(k, t.into());
+            }
+        }
+
+        let size = let_
+            .cases
+            .get(0)
+            .map(|x| x.patterns.len())
+            .unwrap_or_default();
+
+        for let_case in &let_.cases {
+            env.set_location(let_case.range.clone());
+
+            if let_case.patterns.len() != size {
+                env.report(TypeErrorKind::MismatchArityInPattern(
+                    size,
+                    let_case.patterns.len(),
+                ));
+                continue;
+            }
+
+            let mut env = env.clone();
+            let mut typ = def.ret.clone().to_bound(&def.params);
+
+            for pat in &let_case.patterns {
+                env.set_location(pat.range.clone());
+
+                let (bindings, pat_typ) = pat.infer(env.clone());
+
+                for (k, t) in bindings {
+                    env.add_variable(k, t.into());
+                }
+
+                match &*typ.clone().deref() {
+                    Mono::Function(arg, ty) => {
+                        unify::unify(env.clone(), pat_typ.clone(), arg.clone());
+                        typ = ty.clone();
+                    }
+                    _ => {
+                        env.report(TypeErrorKind::ExtraPattern);
+                    }
+                }
+            }
+
+            let_case.body.check(typ, env.clone());
+        }
+    }
 }
 
 fn declare_type_def(
@@ -139,8 +232,7 @@ fn declare_type_def(
 
                 unify::unify_kinds(env.clone(), kind, Rc::new(KindType::Star));
 
-                let monotype = Type::new(Mono::Function(ret_type.clone(), field_typ));
-                let value = Scheme::new(variables.clone(), monotype);
+                let value = Scheme::new(variables.clone(), field_typ);
 
                 env.modules
                     .borrow_mut()
@@ -148,76 +240,6 @@ fn declare_type_def(
             }
         }
         TypeDef::Synonym(_) => todo!(),
-    }
-}
-
-pub fn define_body(env: &Env, program: &Program) {
-    for let_ in &program.lets {
-        let mut env = env.clone();
-
-        let def = env
-            .modules
-            .borrow()
-            .get_let(program.id, &let_.name.data)
-            .unwrap()
-            .clone();
-
-        for (i, name) in def.params.into_iter().enumerate() {
-            env.type_variables
-                .insert(name.clone(), (Rc::new(KindType::Star), i));
-        }
-
-        for ((pat, _), typ_typ) in let_.params.iter().zip(&def.args) {
-            let (bindings, pat_typ) = pat.infer(env.clone());
-            unify::unify(env.clone(), typ_typ.clone(), pat_typ);
-
-            for (k, t) in bindings {
-                env.add_variable(k, t.into());
-            }
-        }
-
-        let size = let_
-            .cases
-            .get(0)
-            .map(|x| x.patterns.len())
-            .unwrap_or_default();
-
-        for let_case in &let_.cases {
-            env.set_location(let_case.range.clone());
-
-            if let_case.patterns.len() != size {
-                env.report(TypeErrorKind::MismatchArityInPattern(
-                    size,
-                    let_case.patterns.len(),
-                ));
-                continue;
-            }
-
-            let mut env = env.clone();
-            let mut typ = def.ret.clone();
-
-            for pat in &let_case.patterns {
-                env.set_location(pat.range.clone());
-
-                let (bindings, pat_typ) = pat.infer(env.clone());
-
-                for (k, t) in bindings {
-                    env.add_variable(k, t.into());
-                }
-
-                match &*typ.clone().deref() {
-                    Mono::Function(arg, ty) => {
-                        unify::unify(env.clone(), pat_typ.clone(), arg.clone());
-                        typ = ty.clone();
-                    }
-                    _ => {
-                        env.report(TypeErrorKind::ExtraPattern);
-                    }
-                }
-            }
-
-            let_case.body.check(typ, env.clone());
-        }
     }
 }
 
