@@ -124,6 +124,26 @@ impl<'a> Renderer<Classic<'a>> for Text {
     }
 }
 
+#[derive(Default)]
+pub struct Reader(String);
+
+impl ToString for Reader {
+    fn to_string(&self) -> String {
+        self.0.clone()
+    }
+}
+
+impl std::io::Write for Reader {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.push_str(std::str::from_utf8(buf).unwrap());
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 impl<'a> Renderer<Classic<'a>> for Diagnostic {
     fn render(&self, ctx: &Classic<'a>, writer: &mut impl std::io::Write) -> std::io::Result<()> {
         // At this point we are probably sure that the file exists, so we can unwrap.

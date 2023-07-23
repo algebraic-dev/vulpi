@@ -92,6 +92,7 @@ impl Infer for TypeKind {
             TypeKind::Arrow(t) => t.infer(env),
             TypeKind::Application(a) => a.infer(env),
             TypeKind::Forall(f) => f.infer(env),
+            TypeKind::Unit => (Rc::new(KindType::Star), Type::new(Mono::Unit)),
             TypeKind::Error => (Rc::new(KindType::Error), Type::new(Mono::Error)),
         }
     }

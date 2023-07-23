@@ -1,5 +1,5 @@
 use vulpi_location::Spanned;
-use vulpi_storage::interner::Symbol;
+
 use vulpi_syntax::concrete::LetMode;
 use vulpi_syntax::{concrete, r#abstract as abs};
 
@@ -143,11 +143,7 @@ impl Desugar for concrete::TypeKind {
             ConcreteType::Arrow(s) => AbstractType::Arrow(s.desugar(ctx)),
             ConcreteType::Application(s) => AbstractType::Application(s.desugar(ctx)),
             ConcreteType::Forall(s) => AbstractType::Forall(s.desugar(ctx)),
-            ConcreteType::Unit(r) => AbstractType::Upper(abs::Qualified {
-                segments: Vec::new(),
-                last: abs::Ident(Symbol::intern("Unit"), r.range.clone()),
-                range: r.range.clone(),
-            }),
+            ConcreteType::Unit(_) => AbstractType::Unit,
         }
     }
 }

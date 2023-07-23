@@ -59,7 +59,6 @@ impl Infer for PatApplication {
 
         if self.args.len() != scheme.arity {
             env.report(crate::error::TypeErrorKind::WrongArity(
-                self.func.last.clone(),
                 scheme.arity,
                 self.args.len(),
             ));

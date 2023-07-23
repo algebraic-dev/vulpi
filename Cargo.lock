@@ -517,6 +517,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "vulpi-tests"
+version = "0.1.0"
+dependencies = [
+ "vulpi-build",
+ "vulpi-desugar",
+ "vulpi-parser",
+ "vulpi-report",
+ "vulpi-resolver",
+ "vulpi-show",
+ "vulpi-storage",
+ "vulpi-syntax",
+ "vulpi-typer",
+]
+
+[[package]]
 name = "vulpi-typer"
 version = "0.1.0"
 dependencies = [

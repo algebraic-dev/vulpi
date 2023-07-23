@@ -345,6 +345,7 @@ impl Resolve for TypeKind {
             TypeKind::Arrow(a) => resolved::TypeKind::Arrow(a.resolve(context)),
             TypeKind::Application(a) => resolved::TypeKind::Application(a.resolve(context)),
             TypeKind::Forall(f) => resolved::TypeKind::Forall(f.resolve(context)),
+            TypeKind::Unit => resolved::TypeKind::Unit,
         }
     }
 }
@@ -370,14 +371,7 @@ impl Resolve for Literal {
                 .find_import(d.1.clone(), &DataType::Type(Symbol::intern("Float")), true)
                 .map(|x| resolved::LiteralKind::Float(d.resolve(context), x))
                 .unwrap_or(resolved::LiteralKind::Error),
-            LiteralKind::Unit => context
-                .find_import(
-                    self.range.clone(),
-                    &DataType::Type(Symbol::intern("Unit")),
-                    true,
-                )
-                .map(resolved::LiteralKind::Unit)
-                .unwrap_or(resolved::LiteralKind::Error),
+            LiteralKind::Unit => resolved::LiteralKind::Unit,
         };
 
         Spanned {

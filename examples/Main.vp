@@ -10,6 +10,5 @@ type Result a b =
 
 use Result
 
-let ata (x: Result a b) (y: Result b a) : a
-    | Ok a => 2
-
+let ata : Result a b -> () 
+    | Ok a, Ok b => ()

@@ -8,11 +8,11 @@ use vulpi_syntax::resolved::{
     LiteralKind, WhenExpr,
 };
 
-use crate::{
-    error::TypeErrorKind,
-    types::{Mono, Type},
-    unify,
-};
+use crate::check::Check;
+
+use crate::error::TypeErrorKind;
+use crate::types::{Mono, Type};
+use crate::unify;
 
 use super::Infer;
 
@@ -46,13 +46,16 @@ impl Infer for ApplicationExpr {
     fn infer(&self, env: crate::context::Env) -> Self::Out {
         let mut func_ty = self.func.infer(env.clone());
 
+        if self.args.len() > func_ty.clone().arity() {
+            env.report(TypeErrorKind::WrongArity(func_ty.arity(), self.args.len()));
+            return Type::new(Mono::Error);
+        }
+
         for arg in &self.args {
             env.set_location(arg.range.clone());
 
-            let arg = arg.infer(env.clone());
-
-            if let Mono::Function(left, right) = &*func_ty {
-                unify::unify(env.clone(), left.clone(), arg);
+            if let Mono::Function(left, right) = &*func_ty.deref() {
+                arg.check(left.clone(), env.clone());
                 func_ty = right.clone();
             } else {
                 env.report(TypeErrorKind::CannotApplyType);
@@ -106,14 +109,10 @@ impl Infer for WhenExpr {
                 env.add_variable(k, t.into());
             }
 
-            let body = arm.then.infer(env.clone());
-
-            unify::unify(env, body, ret_type.clone());
+            arm.then.check(ret_type.clone(), env);
         }
 
-        let scrutinee_typ = self.scrutinee.infer(env.clone());
-
-        unify::unify(env, scrutinee_typ, ret_type.clone());
+        self.scrutinee.check(typ, env);
 
         ret_type
     }
@@ -124,10 +123,7 @@ impl Infer for AnnotationExpr {
 
     fn infer(&self, env: crate::context::Env) -> Self::Out {
         let (_, ty) = self.ty.infer(env.clone());
-        let expr_ty = self.expr.infer(env.clone());
-
-        unify::unify(env, ty.clone(), expr_ty);
-
+        self.expr.check(ty.clone(), env);
         ty
     }
 }
@@ -156,7 +152,7 @@ impl Infer for LiteralKind {
             | LiteralKind::Integer(_, t)
             | LiteralKind::Char(_, t)
             | LiteralKind::Float(_, t) => Type::new(Mono::Variable(t.canonical, t.last.clone())),
-            LiteralKind::Unit(_) => Type::new(Mono::Unit),
+            LiteralKind::Unit => Type::new(Mono::Unit),
             LiteralKind::Error => Type::new(Mono::Error),
         }
     }
@@ -166,11 +162,9 @@ impl Infer for LetExpr {
     type Out = Type;
 
     fn infer(&self, mut env: crate::context::Env) -> Self::Out {
-        let value = self.value.infer(env.clone());
+        let (bindings, pat_ty) = self.name.infer(env.clone());
 
-        let (bindings, pat) = self.name.infer(env.clone());
-
-        unify::unify(env.clone(), value, pat);
+        self.value.check(pat_ty, env.clone());
 
         for (k, t) in bindings {
             env.add_variable(k, t.into());

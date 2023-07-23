@@ -97,6 +97,7 @@ pub enum TypeKind {
     Arrow(TypeArrow),
     Application(TypeApplication),
     Forall(TypeForall),
+    Unit,
 }
 
 pub type Type = Spanned<TypeKind>;

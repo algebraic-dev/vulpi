@@ -13,8 +13,10 @@ pub enum TypeErrorKind {
     CannotInferForall,
     CannotApplyType,
     UnboundVariable(Symbol),
-    WrongArity(Symbol, usize, usize),
+    WrongArity(usize, usize),
     CannotAccessType,
+    MismatchArityInPattern(usize, usize),
+    ExtraPattern,
 }
 
 pub struct TypeError {
@@ -39,14 +41,18 @@ impl IntoDiagnostic for TypeError {
             TypeErrorKind::UnboundVariable(symbol) => {
                 format!("unbound variable {}", symbol.get()).into()
             }
-            TypeErrorKind::WrongArity(symbol, expected, found) => format!(
-                "wrong number of arguments for `{}`: expected {}, found {}",
-                symbol.get(),
-                expected,
-                found
+            TypeErrorKind::WrongArity(expected, found) => format!(
+                "wrong number of arguments, expected {}, found {}",
+                expected, found
             )
             .into(),
             TypeErrorKind::CannotAccessType => "cannot access type".to_string().into(),
+            TypeErrorKind::MismatchArityInPattern(expected, found) => format!(
+                "wrong number of arguments in pattern, expected {}, found {}",
+                expected, found
+            )
+            .into(),
+            TypeErrorKind::ExtraPattern => "extra pattern".to_string().into(),
         }
     }
 

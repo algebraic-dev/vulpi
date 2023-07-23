@@ -3,6 +3,8 @@
 
 use std::rc::Rc;
 
+use crate::check::Check;
+use crate::error::TypeErrorKind;
 use crate::infer::Infer;
 use im_rc::HashSet;
 
@@ -67,6 +69,10 @@ fn declare_let_types(env: &Env, let_: &vulpi_syntax::resolved::LetDecl, program:
 
     for param in &let_.params {
         free_variables_located(env.clone(), &param.1, &mut fvs);
+    }
+
+    if let Some(ret) = &let_.ret {
+        free_variables_located(env.clone(), ret, &mut fvs);
     }
 
     for (i, var) in fvs.iter().enumerate() {
@@ -170,25 +176,47 @@ pub fn define_body(env: &Env, program: &Program) {
             }
         }
 
+        let size = let_
+            .cases
+            .get(0)
+            .map(|x| x.patterns.len())
+            .unwrap_or_default();
+
         for let_case in &let_.cases {
+            env.set_location(let_case.range.clone());
+
+            if let_case.patterns.len() != size {
+                env.report(TypeErrorKind::MismatchArityInPattern(
+                    size,
+                    let_case.patterns.len(),
+                ));
+                continue;
+            }
+
             let mut env = env.clone();
+            let mut typ = def.ret.clone();
 
-            let mut args = Vec::new();
+            for pat in &let_case.patterns {
+                env.set_location(pat.range.clone());
 
-            for (bindings, typ) in let_case.patterns.infer(env.clone()) {
+                let (bindings, pat_typ) = pat.infer(env.clone());
+
                 for (k, t) in bindings {
                     env.add_variable(k, t.into());
                 }
 
-                args.push(typ);
+                match &*typ.clone().deref() {
+                    Mono::Function(arg, ty) => {
+                        unify::unify(env.clone(), pat_typ.clone(), arg.clone());
+                        typ = ty.clone();
+                    }
+                    _ => {
+                        env.report(TypeErrorKind::ExtraPattern);
+                    }
+                }
             }
 
-            let body = let_case.body.infer(env.clone());
-
-            let typ = make_function(args, &body);
-
-            env.set_location(let_case.body.range.clone());
-            unify::unify(env.clone(), def.ret.clone(), typ);
+            let_case.body.check(typ, env.clone());
         }
     }
 }

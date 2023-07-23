@@ -70,6 +70,7 @@ pub enum TypeKind {
     Arrow(TypeArrow),
     Application(TypeApplication),
     Forall(TypeForall),
+    Unit,
     Error,
 }
 
@@ -83,7 +84,7 @@ pub enum LiteralKind {
     Integer(Ident, Qualified),
     Char(Ident, Qualified),
     Float(Ident, Qualified),
-    Unit(Qualified),
+    Unit,
     Error,
 }
 

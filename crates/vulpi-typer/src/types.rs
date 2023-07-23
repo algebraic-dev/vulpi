@@ -12,6 +12,30 @@ use crate::error;
 /// A mono type that is reference counted.
 pub type Type = Rc<Mono>;
 
+impl Mono {
+    pub fn deref(self: Rc<Mono>) -> Type {
+        match &*self {
+            Mono::Hole(hole) => match &*hole.0.borrow() {
+                HoleInner::Unbound(_, _) => self.clone(),
+                HoleInner::Link(r) => r.clone().deref(),
+            },
+            _ => self.clone(),
+        }
+    }
+
+    pub fn arity(self: Rc<Mono>) -> usize {
+        fn arity(typ: Rc<Mono>, args: &mut usize) {
+            if let Mono::Function(_, b) = &*typ.deref() {
+                *args += 1;
+                arity(b.clone(), args);
+            }
+        }
+        let mut args = 0;
+        arity(self, &mut args);
+        args
+    }
+}
+
 /// A mono type is a type that does not binds any polymorphic variables.
 #[derive(Debug)]
 pub enum Mono {
@@ -30,6 +54,7 @@ pub enum Mono {
     /// Application
     Application(Type, Type),
 
+    /// Unit type
     Unit,
 
     /// Error type. It's a sentinel value that unifies with everything.
@@ -194,11 +219,8 @@ impl HoleInner {
         mode: Mode,
     ) -> std::fmt::Result {
         match self {
-            HoleInner::Unbound(n, l) => write!(f, "!{}~{}", n.get(), l.0),
-            HoleInner::Link(t) => {
-                write!(f, "~")?;
-                t.fmt_with_context(ctx, f, mode)
-            }
+            HoleInner::Unbound(n, _) => write!(f, "{}", n.get()),
+            HoleInner::Link(t) => t.fmt_with_context(ctx, f, mode),
         }
     }
 }
@@ -309,5 +331,6 @@ fn free_variables(env: Env, tree: &resolved::TypeKind, map: &mut HashSet<Symbol>
             env.report(error::TypeErrorKind::CannotInferForall);
         }
         resolved::TypeKind::Error => (),
+        resolved::TypeKind::Unit => (),
     }
 }
