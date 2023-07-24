@@ -1,0 +1,8 @@
+effect Exception e {
+    raise e : String 
+}
+
+let catch (try: () -> {Exception e | f} o) (catch: e -> {f} o) : {f} o =
+    handle try () when
+        raise out   => catch out
+        otherwise x => x

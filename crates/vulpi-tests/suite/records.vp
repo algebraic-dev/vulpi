@@ -1,0 +1,12 @@
+type User (t: * -> *) = {
+    name: String
+    data: t Int
+}
+
+let main = do
+    let user = User {
+        name: "ata",
+        data: [1, 2, 3]
+    }
+
+    let updated = user { name: "lel" }

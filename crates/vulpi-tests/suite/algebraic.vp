@@ -1,0 +1,14 @@
+type Result a b =
+    | Ok a
+    | Err b
+
+type True
+type False
+
+type Is a = 
+    | T : Is True
+    | F : Is False
+
+let main : Is True = Is.T
+
+

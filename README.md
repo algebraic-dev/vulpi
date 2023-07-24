@@ -10,8 +10,6 @@
 - [ ] Parser
     - [ ] Types
         - [ ] Algebraic Data Types
-            - [ ] Instance
-            - [ ] Update
             - [ ] Declaration
             - [ ] Generalized Version
             - [ ] Kinds
@@ -28,7 +26,6 @@
             - [ ] Constraint Syntax
         - [ ] Abstract Data Types
         - [ ] Type Synonyms
-        - [ ] Type Functions
         - [ ] Tuple
     - [ ] Let declarations
         - [ ] Let cases

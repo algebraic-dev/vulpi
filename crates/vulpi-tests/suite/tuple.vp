@@ -1,0 +1,1 @@
+let tuple : (String, Int) = ("Ata", 2)
