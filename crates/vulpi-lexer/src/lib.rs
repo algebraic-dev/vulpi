@@ -74,27 +74,13 @@ pub enum LexState {
 /// A state that can be stored and recovered further in the lexing process.
 #[derive(Clone)]
 pub struct State {
-    /// The current index in the source code
-    pub index: usize,
-
-    /// The start of the current token selection.
-    pub start: usize,
-
-    /// The current column
-    pub column: usize,
-
-    /// The current line
-    pub line: usize,
-
-    /// The current file
-    pub file: FileId,
-
-    /// The layout parsing stack that stores the columns that are currently open.
-    pub layout: Vec<usize>,
-
-    /// The current lexing state. It's useful to make something like a automata with more
-    /// things.
-    pub lex_state: LexState,
+    index: usize,
+    start: usize,
+    column: usize,
+    line: usize,
+    file: FileId,
+    layout: Vec<usize>,
+    lex_state: LexState,
 }
 
 /// The lexer struct that contains the input and the current state. This struct is the entry point
@@ -227,6 +213,10 @@ impl<'a> Lexer<'a> {
             "do" => {
                 self.state.lex_state = LexState::PushLayout;
                 TokenData::Do
+            }
+            "where" => {
+                self.state.lex_state = LexState::PushLayout;
+                TokenData::Where
             }
             "let" => TokenData::Let,
             "when" => TokenData::When,

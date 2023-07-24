@@ -22,6 +22,7 @@ pub enum TokenData {
     Do,     // 'do' keyword
     In,     // 'in' keyword
     Forall, // 'forall' keyword
+    Where,  // 'where' keyword
 
     String, // String literal
     Int,    // Integer literal
@@ -160,6 +161,9 @@ impl Display for Token {
             Type => "type".to_string(),
             Pub => "pub".to_string(),
             Do => "do".to_string(),
+            Where => "where".to_string(),
+            Forall => "forall".to_string(),
+            In => "in".to_string(),
             LBrace => "{{".to_string(),
             RBrace => "}}".to_string(),
             LPar => "(".to_string(),
@@ -169,8 +173,6 @@ impl Display for Token {
             LeftArrow => "<-".to_string(),
             RightArrow => "->".to_string(),
             FatArrow => "=>".to_string(),
-            In => "in".to_string(),
-            Forall => "forall".to_string(),
             BackSlash => "\\".to_string(),
             PipeRight => "|>".to_string(),
             Char => format!("'{}'", self.value.data.get()),
