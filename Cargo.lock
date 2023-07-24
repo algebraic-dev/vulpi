@@ -18,10 +18,23 @@ dependencies = [
 [[package]]
 name = "vulpi-lexer"
 version = "0.1.0"
+dependencies = [
+ "vulpi-intern",
+ "vulpi-location",
+ "vulpi-syntax",
+]
 
 [[package]]
 name = "vulpi-location"
 version = "0.1.0"
+
+[[package]]
+name = "vulpi-syntax"
+version = "0.1.0"
+dependencies = [
+ "vulpi-intern",
+ "vulpi-location",
+]
 
 [[package]]
 name = "vulpi-tests"
