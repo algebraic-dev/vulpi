@@ -7,5 +7,9 @@ name = "vulpi-lexer"
 version = "0.1.0"
 
 [[package]]
+name = "vulpi-location"
+version = "0.1.0"
+
+[[package]]
 name = "vulpi-tests"
 version = "0.1.0"

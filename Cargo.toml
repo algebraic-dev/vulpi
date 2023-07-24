@@ -1,5 +1,5 @@
 [workspace]
 
-members = ["crates/vulpi-tests", "crates/vulpi-lexer"]
+members = ["crates/vulpi-tests", "crates/vulpi-lexer", "crates/vulpi-location"]
 
 resolver = "1"
