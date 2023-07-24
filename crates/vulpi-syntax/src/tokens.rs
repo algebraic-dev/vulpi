@@ -94,6 +94,16 @@ pub struct Token {
     pub value: Spanned<Symbol>,
 }
 
+impl Token {
+    pub fn is(&self, kind: TokenData) -> bool {
+        self.kind == kind
+    }
+
+    pub fn data(&self) -> String {
+        self.value.data.get()
+    }
+}
+
 impl Debug for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Token").field(&self.kind).finish()
