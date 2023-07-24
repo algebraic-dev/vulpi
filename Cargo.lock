@@ -29,6 +29,10 @@ name = "vulpi-location"
 version = "0.1.0"
 
 [[package]]
+name = "vulpi-report"
+version = "0.1.0"
+
+[[package]]
 name = "vulpi-syntax"
 version = "0.1.0"
 dependencies = [

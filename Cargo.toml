@@ -6,6 +6,7 @@ members = [
     "crates/vulpi-location",
     "crates/vulpi-intern",
     "crates/vulpi-syntax",
+    "crates/vulpi-report",
 ]
 
 resolver = "1"
