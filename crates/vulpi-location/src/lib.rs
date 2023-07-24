@@ -1,6 +1,8 @@
 //! This module exposes a lot of structures that locate things inside a source code. It's really
 //! useful to generate error messages.
 
+use std::fmt::Debug;
+
 /// A new-type for a usize. It's used to locate a byte inside a source code.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Byte(pub usize);
@@ -11,6 +13,12 @@ pub struct Span {
     pub file: FileId,
     pub start: Byte,
     pub end: Byte,
+}
+
+impl Debug for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}~{:?}", self.start.0, self.end.0)
+    }
 }
 
 impl Span {
@@ -51,7 +59,7 @@ impl<T> Spanned<T> {
     }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for Spanned<T> {
+impl<T: Debug> Debug for Spanned<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Spanned").field(&self.data).finish()
     }
