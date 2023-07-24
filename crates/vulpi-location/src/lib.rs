@@ -72,5 +72,5 @@ impl<T> Spanned<T> {
 }
 
 /// The identifier of a file.
-#[derive(Clone)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct FileId(pub usize);
