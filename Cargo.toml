@@ -8,6 +8,7 @@ members = [
     "crates/vulpi-syntax",
     "crates/vulpi-report",
     "crates/vulpi-vfs",
+    "crates/vulpi-parser",
 
 ]
 

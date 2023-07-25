@@ -30,10 +30,15 @@ name = "vulpi-location"
 version = "0.1.0"
 
 [[package]]
+name = "vulpi-parser"
+version = "0.1.0"
+
+[[package]]
 name = "vulpi-report"
 version = "0.1.0"
 dependencies = [
  "vulpi-location",
+ "vulpi-vfs",
  "yansi",
 ]
 
@@ -52,6 +57,9 @@ version = "0.1.0"
 [[package]]
 name = "vulpi-vfs"
 version = "0.1.0"
+dependencies = [
+ "vulpi-location",
+]
 
 [[package]]
 name = "yansi"
