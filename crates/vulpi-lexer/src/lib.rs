@@ -39,10 +39,14 @@
 //!     - Less: We emit a block end
 //!
 
+pub mod error;
+mod literals;
+
 use std::{iter::Peekable, str::Chars};
 
 use vulpi_intern::Symbol;
 use vulpi_location::{Byte, FileId, Span, Spanned};
+use vulpi_report::{Diagnostic, Report};
 use vulpi_syntax::tokens::{Comment, Token, TokenData};
 
 /// Checks if a char is a valid identifier part.
@@ -81,6 +85,7 @@ pub struct State {
     file: FileId,
     layout: Vec<usize>,
     lex_state: LexState,
+    reporter: Report,
 }
 
 /// The lexer struct that contains the input and the current state. This struct is the entry point
@@ -92,7 +97,7 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str, file: FileId) -> Self {
+    pub fn new(input: &'a str, file: FileId, reporter: Report) -> Self {
         Self {
             peekable: input.chars().peekable(),
             input,
@@ -104,6 +109,7 @@ impl<'a> Lexer<'a> {
                 column: 0,
                 layout: vec![],
                 lex_state: LexState::Common,
+                reporter,
             },
         }
     }
@@ -116,7 +122,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Advances one char modifying the storable [State].
     fn advance(&mut self) -> Option<char> {
         let char = self.peekable.next()?;
         self.state.index += char.len_utf8();
@@ -131,24 +136,29 @@ impl<'a> Lexer<'a> {
         Some(char)
     }
 
-    /// Sets the current index to the start index.
     fn save(&mut self) {
         self.state.start = self.state.index;
     }
 
-    /// Creates a new spanned token using the selected part of the code.
-    fn spanned<T>(&self, token: T) -> Spanned<T> {
-        Spanned::new(
-            token,
-            Span {
-                file: self.state.file.clone(),
-                start: Byte(self.state.start),
-                end: Byte(self.state.index),
-            },
-        )
+    fn span(&self) -> Span {
+        Span {
+            file: self.state.file,
+            start: Byte(self.state.start),
+            end: Byte(self.state.index),
+        }
     }
 
-    /// Accumulates chars while the predicate is true.
+    fn report(&mut self, message: error::ErrorKind) {
+        self.state.reporter.report(Diagnostic::new(error::Error {
+            location: self.span(),
+            message,
+        }));
+    }
+
+    fn spanned<T>(&self, token: T) -> Spanned<T> {
+        Spanned::new(token, self.span())
+    }
+
     fn accumulate(&mut self, predicate: fn(&char) -> bool) {
         while let Some(char) = self.peekable.peek() {
             if predicate(char) {
@@ -235,7 +245,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn classify_token(&mut self, line: usize) -> TokenData {
+    fn classify_token(&mut self, line: usize) -> (TokenData, Symbol) {
         if line != self.state.line {
             let column = self.state.column;
             let last = self.state.layout.last();
@@ -245,13 +255,13 @@ impl<'a> Lexer<'a> {
                 Some(last_column) if column > *last_column => (),
                 Some(last_column) if column < *last_column => {
                     self.state.layout.pop();
-                    return TokenData::End;
+                    return (TokenData::End, Symbol::intern(""));
                 }
-                Some(_) => return TokenData::Sep,
+                Some(_) => return (TokenData::End, Symbol::intern("")),
             }
         }
 
-        if let Some(char) = self.advance() {
+        let result = if let Some(char) = self.advance() {
             match char {
                 '{' => TokenData::LBrace,
                 '}' => TokenData::RBrace,
@@ -349,16 +359,7 @@ impl<'a> Lexer<'a> {
                         TokenData::Int
                     }
                 }
-                '"' => {
-                    self.accumulate(|char| *char != '"');
-
-                    if let Some('"') = self.peekable.peek() {
-                        self.advance();
-                        TokenData::String
-                    } else {
-                        TokenData::Error
-                    }
-                }
+                '"' => return self.string(),
                 'A'..='Z' => {
                     self.accumulate(is_identifier_char);
                     TokenData::UpperIdent
@@ -373,7 +374,10 @@ impl<'a> Lexer<'a> {
             TokenData::End
         } else {
             TokenData::Eof
-        }
+        };
+
+        let symbol = Symbol::intern(&self.input[self.state.start..self.state.index]);
+        (result, symbol)
     }
 
     pub fn pop_layout(&mut self) {
@@ -387,22 +391,20 @@ impl<'a> Lexer<'a> {
         let (comments, whitespace) = self.lex_comments();
         self.save();
 
-        let kind = match self.state.lex_state {
+        let (kind, value) = match self.state.lex_state {
             LexState::Common => self.classify_token(line),
 
             LexState::PushLayout => {
                 self.state.layout.push(self.state.column);
                 self.state.lex_state = LexState::Common;
-                TokenData::Begin
+                (TokenData::Begin, Symbol::intern(""))
             }
         };
         Token {
             comments,
             whitespace,
             kind,
-            value: self.spanned(Symbol::intern(
-                &self.input[self.state.start..self.state.index],
-            )),
+            value: self.spanned(value),
         }
     }
 }
@@ -417,28 +419,26 @@ impl<'a> Iterator for Lexer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use vulpi_report::hash::HashReporter;
+
     use super::*;
 
     #[test]
     fn test_lex() {
         let mut lexer = Lexer::new(
             "
-            let x = do
-            1
-             2 ATA
-            3 4 (do 3 42
-                    5
-                    6) 
-              5
-            5
+            let x = 
+                \"a\\\"ta\"
             ",
             FileId(0),
+            Report::new(HashReporter::new()),
         );
 
         let mut token = lexer.bump();
 
         while token.kind != TokenData::Eof {
             token = lexer.bump();
+            println!("{:?} '{}'", token.kind, token.data());
             assert!(token.kind != TokenData::Error);
         }
     }

@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 
+
 vulpi-intern = { path = "../vulpi-intern" }
 vulpi-location = { path = "../vulpi-location" }
 vulpi-syntax = { path = "../vulpi-syntax" }
+vulpi-report = { path = "../vulpi-report" }
