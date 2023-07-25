@@ -32,6 +32,13 @@ version = "0.1.0"
 [[package]]
 name = "vulpi-parser"
 version = "0.1.0"
+dependencies = [
+ "vulpi-intern",
+ "vulpi-lexer",
+ "vulpi-location",
+ "vulpi-report",
+ "vulpi-syntax",
+]
 
 [[package]]
 name = "vulpi-report"
