@@ -1,8 +1,6 @@
 //! This is the parser of the vulpi language. It takes a stream of tokens and produces a tree of
 //! nodes. It's a classical LL(1) parser with a recursive descent and pratt parsing.
 
-use std::ops::Range;
-
 use error::ParserError;
 use vulpi_lexer::Lexer;
 use vulpi_location::{Byte, FileId, Span, Spanned};
@@ -13,6 +11,7 @@ pub mod error;
 
 pub type Result<T> = std::result::Result<T, error::ParserError>;
 
+/// The parser main structure.
 pub struct Parser<'a> {
     pub lexer: Lexer<'a>,
 
@@ -47,6 +46,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Advances a single token in the stream.
     pub fn bump(&mut self) -> Token {
         self.eaten = true;
 
@@ -59,10 +59,12 @@ impl<'a> Parser<'a> {
         ret
     }
 
+    /// Returns the current token.
     pub fn peek(&self) -> &Token {
         &self.current
     }
 
+    /// Removes a token if it matches the given one.
     pub fn expect(&mut self, token: TokenData) -> Result<Token> {
         if self.peek().kind == token {
             Ok(self.bump())
@@ -71,7 +73,9 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn expect_recover(&mut self, token: TokenData) -> Token {
+    /// Removes a token if it matches the given one but does not finishes the parsing process if
+    /// it doesn't.
+    pub fn eat(&mut self, token: TokenData) -> Token {
         if self.peek().kind != token {
             let unexpected_err = self.unexpected_err();
             self.report(unexpected_err);
@@ -79,11 +83,14 @@ impl<'a> Parser<'a> {
         self.bump()
     }
 
+    /// Reports an error and advances a token.
     pub fn report(&mut self, err: ParserError) {
         self.reporter.report(Diagnostic::new(err));
         self.bump();
     }
 
+    /// Removes a token if it matches the given one but does not finishes the parsing process if
+    /// it doesn't, instead it pops the current layout in order to continue parsing.
     pub fn expect_or_pop_layout(&mut self, token: TokenData) -> Result<()> {
         if self.peek().kind == token {
             self.bump();
@@ -101,18 +108,22 @@ impl<'a> Parser<'a> {
         error::ParserError::UnexpectedToken(self.peek().clone(), self.peek().value.range.clone())
     }
 
+    /// Returns true if the current token matches the given one.
     pub fn at(&self, token: TokenData) -> bool {
         self.peek().kind == token
     }
 
+    /// Returns true if the next token matches the given one.
     pub fn then(&self, token: TokenData) -> bool {
         self.next.kind == token
     }
 
+    /// Returns true if the current token matches any of the given ones.
     pub fn at_any(&self, tokens: &[TokenData]) -> bool {
         tokens.iter().any(|token| self.at(*token))
     }
 
+    /// Returns a list of tokens until the next one matches any of the given ones.
     pub fn recover(&mut self, at_any: &[TokenData]) -> Vec<Token> {
         let mut tokens = Vec::new();
 
@@ -123,6 +134,9 @@ impl<'a> Parser<'a> {
         tokens
     }
 
+    /// It tries to parse the given function and returns the result if it succeeds. Otherwise, if
+    /// it doesnt have consumed any token, it returns [None]. If it has consumed a token, it
+    /// returns an error.
     pub fn test<T>(&mut self, fun: impl FnOnce(&mut Self) -> Result<T>) -> Result<Option<T>> {
         self.eaten = false;
         let result = fun(self);
@@ -134,14 +148,17 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Returns the current span.
     pub fn span(&self) -> Span {
         self.peek().value.range.clone()
     }
 
+    /// Returns the current token kind.
     pub fn kind(&self) -> TokenData {
         self.peek().kind
     }
 
+    /// Creates a span around a function call.
     pub fn spanned<T>(&mut self, fun: impl FnOnce(&mut Self) -> Result<T>) -> Result<Spanned<T>> {
         let start = self.span();
         let value = fun(self)?;
@@ -150,6 +167,7 @@ impl<'a> Parser<'a> {
         Ok(Spanned::new(value, start.mix(end)))
     }
 
+    /// Parses a list of elements separated by a given token.
     pub fn sep_by<T>(
         &mut self,
         sep: TokenData,
@@ -180,7 +198,8 @@ impl<'a> Parser<'a> {
         Ok(values)
     }
 
-    pub fn multiple<T>(&mut self, mut fun: impl FnMut(&mut Self) -> Result<T>) -> Result<Vec<T>> {
+    /// Parses a list of elements.
+    pub fn many<T>(&mut self, mut fun: impl FnMut(&mut Self) -> Result<T>) -> Result<Vec<T>> {
         let mut values = Vec::new();
 
         while let Some(result) = self.test(&mut fun)? {
@@ -188,10 +207,5 @@ impl<'a> Parser<'a> {
         }
 
         Ok(values)
-    }
-
-    pub fn with_span(&mut self, start: Range<Byte>) -> Range<Byte> {
-        let end = self.last_pos.clone();
-        start.start..end.end
     }
 }
