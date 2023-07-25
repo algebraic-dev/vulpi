@@ -50,28 +50,28 @@ use vulpi_report::{Diagnostic, Report};
 use vulpi_syntax::tokens::{Comment, Token, TokenData};
 
 /// Checks if a char is a valid identifier part.
-pub fn is_identifier_char(char: &char) -> bool {
+fn is_identifier_char(char: &char) -> bool {
     char.is_alphanumeric() || matches!(char, |'_'| '!' | '?' | '\'')
 }
 
 /// Checks if a char is a whitespace, tab or something like that.
-pub fn is_whitespace(char: &char) -> bool {
+fn is_whitespace(char: &char) -> bool {
     matches!(char, '\t' | '\x0C' | '\r' | ' ')
 }
 
 /// Checks if a char is a whitespace, tab or something like that.
-pub fn is_whitespace_or_line_break(char: &char) -> bool {
+fn is_whitespace_or_line_break(char: &char) -> bool {
     matches!(char, '\n') || is_whitespace(char)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Either<T, U> {
+enum Either<T, U> {
     Left(T),
     Right(U),
 }
 
 #[derive(Clone)]
-pub enum LexState {
+enum LexState {
     Common,
     PushLayout,
 }

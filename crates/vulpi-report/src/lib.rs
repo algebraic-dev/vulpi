@@ -55,6 +55,8 @@ impl From<String> for Text {
     }
 }
 
+/// A position in the source code that has or not a message. It's used to generate underlined parts
+/// with messages.
 pub struct Marker {
     pub position: Span,
     pub subtitle: Option<Text>,
@@ -77,6 +79,7 @@ pub trait IntoDiagnostic {
     fn location(&self) -> Span;
 }
 
+/// A diagnostic with reference counting. It is a wrapper around a [IntoDiagnostic] trait object.
 #[derive(Clone)]
 pub struct Diagnostic(Rc<dyn IntoDiagnostic>);
 
