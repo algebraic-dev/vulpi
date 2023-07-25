@@ -5,6 +5,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use vulpi_location::{FileId, Span};
 
+pub mod hash;
 pub mod renderer;
 
 /// A type for representing the severity of a [Diagnostic].
