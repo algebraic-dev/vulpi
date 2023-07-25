@@ -5,9 +5,12 @@ use error::ParserError;
 use vulpi_lexer::Lexer;
 use vulpi_location::{Byte, FileId, Span, Spanned};
 use vulpi_report::{Diagnostic, Report};
+
+use vulpi_syntax::concrete::Parenthesis;
 use vulpi_syntax::tokens::{Token, TokenData};
 
 pub mod error;
+pub mod identifier;
 
 pub type Result<T> = std::result::Result<T, error::ParserError>;
 
@@ -207,5 +210,23 @@ impl<'a> Parser<'a> {
         }
 
         Ok(values)
+    }
+
+    pub fn with_span(&mut self, start: Span) -> Span {
+        let end = self.last_pos.clone();
+        start.mix(end)
+    }
+}
+
+impl<'a> Parser<'a> {
+    pub fn parenthesis<T>(
+        &mut self,
+        parse: impl Fn(&mut Self) -> Result<T>,
+    ) -> Result<Parenthesis<T>> {
+        let left = self.expect(TokenData::LPar)?;
+        let data = parse(self)?;
+        let right = self.expect(TokenData::RPar)?;
+
+        Ok(Parenthesis { left, data, right })
     }
 }
