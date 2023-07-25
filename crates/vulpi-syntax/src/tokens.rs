@@ -23,6 +23,7 @@ pub enum TokenData {
     In,     // 'in' keyword
     Forall, // 'forall' keyword
     Where,  // 'where' keyword
+    Mod,    // 'mod' keyword
 
     String, // String literal
     Int,    // Integer literal
@@ -178,6 +179,7 @@ impl Display for Token {
             Char => format!("'{}'", self.value.data.get()),
             Unit => "()".to_string(),
             Wildcard => "_".to_string(),
+            Mod => "mod".to_string(),
         };
 
         write!(f, "{}", data)
