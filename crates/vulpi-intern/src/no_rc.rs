@@ -1,6 +1,7 @@
 //! A simple string interner with no reference counting so it lives until the end of the program.
 
 use lazy_static::lazy_static;
+use vulpi_show::Show;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -26,6 +27,11 @@ impl Symbol {
     }
 }
 
+impl Show for Symbol {
+    fn show(&self) -> vulpi_show::TreeDisplay {
+        vulpi_show::TreeDisplay::label(&format!("Symbol: {}", self.get()))
+    }
+}
 #[derive(Default)]
 struct Interner {
     id_to_string: RwLock<Vec<String>>,
