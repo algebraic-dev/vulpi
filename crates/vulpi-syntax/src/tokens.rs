@@ -1,7 +1,7 @@
 //! This module declares a bunch of tokens that are units of meaning in the language. There are a
 //! bunch of them that are virtual token.
 
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 use vulpi_intern::Symbol;
 use vulpi_location::Spanned;
