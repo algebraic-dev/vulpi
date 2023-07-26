@@ -8,7 +8,7 @@ pub enum Visibility {
 use super::{
     expr::{Expr, PatternArm},
     kind::Kind,
-    r#type::Type,
+    r#type::{Effects, Type},
     tree::Pattern,
     Lower, Parenthesis, Path, Upper,
 };
@@ -36,7 +36,7 @@ pub struct LetDecl {
     pub let_: Token,
     pub name: Lower,
     pub binders: Vec<Binder>,
-    pub typ: Option<(Token, Box<Type>)>,
+    pub ret: Option<(Token, Effects, Box<Type>)>,
     pub body: LetMode,
 }
 

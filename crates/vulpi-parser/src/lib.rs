@@ -11,6 +11,7 @@ use vulpi_syntax::tokens::{Token, TokenData};
 
 pub mod error;
 pub mod identifier;
+pub mod r#type;
 
 pub type Result<T> = std::result::Result<T, error::ParserError>;
 
@@ -157,7 +158,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Returns the current token kind.
-    pub fn kind(&self) -> TokenData {
+    pub fn token(&self) -> TokenData {
         self.peek().kind
     }
 
