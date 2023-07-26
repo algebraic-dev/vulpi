@@ -3,61 +3,60 @@
 
 # Tasks
 
-- [ ] Lexer
-    - [ ] Layout Parsing
-    - [ ] Escape
+- [x] Lexer
+    - [x] Layout Parsing
+    - [x] Escape
     - [ ] Interpolation
 - [ ] Parser
-    - [ ] Types
-        - [ ] Algebraic Data Types
-            - [ ] Declaration
+    - [x] Types
+        - [x] Algebraic Data Types
+            - [x] Declaration
             - [ ] Generalized Version
-            - [ ] Kinds
-        - [ ] Records
-            - [ ] Instance
-            - [ ] Update
-            - [ ] Declaration
-            - [ ] Projection
-        - [ ] Effects
-            - [ ] Declaration
-            - [ ] Handler
+            - [X] Kinds
+        - [x] Records
+            - [x] Instance
+            - [x] Update
+            - [x] Declaration
+            - [x] Projection
+        - [x] Effects
+            - [x] Declaration
+            - [x] Handler
         - [ ] Traits
             - [ ] Implementation
             - [ ] Constraint Syntax
         - [ ] Abstract Data Types
-        - [ ] Type Synonyms
-        - [ ] Tuple
-    - [ ] Let declarations
-        - [ ] Let cases
-    - [ ] Patterns
+        - [x] Type Synonyms
+        - [x] Tuple
+    - [x] Let declarations
+        - [x] Let cases
+    - [x] Patterns
         - [ ] Record Pattern
-        - [ ] ADT Pattern
-        - [ ] Guards
-        - [ ] Or Pattern
-    - [ ] Blocks
-    - [ ] Modules
-    - [ ] Public / Private things
+        - [x] ADT Pattern
+        - [x] Guards
+        - [x] Or Pattern
+    - [x] Blocks
+    - [x] Modules
+    - [x] Public / Private things
     - [ ] Deriving Syntax
-    - [ ] Expressions
-        - [ ] Operators
+    - [x] Expressions
+        - [x] Operators
             - [ ] Section Patterns
             - [ ] Function applications In Half
-            - [ ] Pipe and Composition
-            - [ ] Precedence
-        - [ ] Type ascription
-        - [ ] Tuples
-        - [ ] Function Call
-        - [ ] Let Expression
-        - [ ] Lambda Expression
-        - [ ] Do Expression
-        - [ ] When Expression
-        - [ ] If Expression
-        - [ ] Record Expression
-        - [ ] Tuple Expression
+            - [x] Pipe and Composition
+            - [x] Precedence
+        - [x] Type ascription
+        - [x] Function Call
+        - [x] Let Expression
+        - [x] Lambda Expression
+        - [x] Do Expression
+        - [x] When Expression
+        - [x] If Expression
+        - [x] Record Expression
+        - [x] Tuple Expression
         - [ ] List Expression
-        - [ ] Unit expression
+        - [x] Unit expression
     - [ ] Attributes
-    - [ ] Import
+    - [x] Import
 - [ ] Resolution
     - [ ] Visibility resolution
     - [ ] Name resolution
