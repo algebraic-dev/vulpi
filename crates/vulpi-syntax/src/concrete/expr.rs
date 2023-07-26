@@ -149,6 +149,8 @@ pub struct CasesExpr {
     pub arms: Vec<PatternArm>,
 }
 
+pub type Tuple = Parenthesis<Vec<(Box<Spanned<ExprKind>>, Option<Token>)>>;
+
 #[derive(Show)]
 pub enum ExprKind {
     Lambda(LambdaExpr),
@@ -173,7 +175,8 @@ pub enum ExprKind {
     RecordInstance(RecordInstance),
     RecordUpdate(RecordUpdate),
 
-    Parenthesis(Parenthesis<Box<Expr>>),
+    Parenthesis(Parenthesis<(Box<Spanned<ExprKind>>, Option<Token>)>),
+    Tuple(Tuple),
 }
 
 pub type Expr = Spanned<ExprKind>;

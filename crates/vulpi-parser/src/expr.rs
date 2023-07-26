@@ -69,7 +69,7 @@ impl<'a> Parser<'a> {
         while !self.at(TokenData::End) {
             let stmt = parse(self)?;
 
-            let sep = if self.at(TokenData::Sep) {
+            if self.at(TokenData::Sep) {
                 Some(self.bump())
             } else {
                 None
@@ -102,7 +102,19 @@ impl<'a> Parser<'a> {
                     }
                 }
             }
-            TokenData::LPar => self.parenthesis(Self::expr).map(ExprKind::Parenthesis),
+            TokenData::LPar => {
+                let exprs = self.parenthesis(|this| this.sep_by(TokenData::Comma, Self::expr))?;
+
+                if exprs.data.is_empty() {
+                    todo!()
+                } else if exprs.data.len() == 1 {
+                    Ok(ExprKind::Parenthesis(
+                        exprs.map(|x| x.into_iter().next().unwrap()),
+                    ))
+                } else {
+                    Ok(ExprKind::Tuple(exprs))
+                }
+            }
             _ => self.literal().map(ExprKind::Literal),
         }
     }

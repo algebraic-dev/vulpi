@@ -76,7 +76,20 @@ impl<'a> Parser<'a> {
             TokenData::LowerIdent => self.type_variable().map(TypeKind::TypeVariable),
             TokenData::UpperIdent => self.path(Self::upper).map(TypeKind::Upper),
             TokenData::Unit => Ok(TypeKind::Unit(self.bump())),
-            TokenData::LPar => self.parenthesis(Self::typ).map(TypeKind::Parenthesis),
+            TokenData::LPar => {
+                let exprs = self.parenthesis(|this| this.sep_by(TokenData::Comma, Self::typ))?;
+
+                if exprs.data.is_empty() {
+                    todo!()
+                } else if exprs.data.len() == 1 {
+                    Ok(TypeKind::Parenthesis(
+                        exprs.map(|x| x.into_iter().next().unwrap()),
+                    ))
+                } else {
+                    Ok(TypeKind::Tuple(exprs))
+                }
+            }
+
             _ => self.unexpected(),
         }
     }

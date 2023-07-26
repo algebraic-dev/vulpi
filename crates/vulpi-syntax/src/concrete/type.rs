@@ -37,7 +37,8 @@ pub struct TypeForall {
 
 #[derive(Show)]
 pub enum TypeKind {
-    Parenthesis(Parenthesis<Box<Type>>),
+    Parenthesis(Parenthesis<(Box<Type>, Option<Token>)>),
+    Tuple(Parenthesis<Vec<(Box<Type>, Option<Token>)>>),
     Upper(Path<Upper>),
     TypeVariable(Lower),
     Arrow(TypeArrow),

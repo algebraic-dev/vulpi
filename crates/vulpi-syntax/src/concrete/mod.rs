@@ -83,3 +83,15 @@ pub struct Parenthesis<T> {
     pub data: T,
     pub right: Token,
 }
+
+impl<T> Parenthesis<T> {
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Parenthesis<U> {
+        let Parenthesis { left, data, right } = self;
+
+        Parenthesis {
+            left,
+            data: f(data),
+            right,
+        }
+    }
+}
