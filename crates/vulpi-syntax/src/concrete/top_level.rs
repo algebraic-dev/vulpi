@@ -36,7 +36,7 @@ pub struct LetDecl {
     pub let_: Token,
     pub name: Lower,
     pub binders: Vec<Binder>,
-    pub ret: Option<(Token, Effects, Box<Type>)>,
+    pub ret: Option<(Token, Option<Effects>, Box<Type>)>,
     pub body: LetMode,
 }
 
@@ -70,7 +70,7 @@ pub struct ExplicitTypeBinder {
 }
 
 pub enum TypeBinder {
-    Implicit(Token),
+    Implicit(Lower),
     Explicit(Parenthesis<ExplicitTypeBinder>),
 }
 
@@ -120,9 +120,11 @@ pub struct EffectField {
 }
 
 pub struct EffectDecl {
+    pub visibility: Visibility,
     pub effect: Token,
     pub name: Upper,
     pub binders: Vec<TypeBinder>,
+    pub where_: Token,
     pub fields: Vec<(EffectField, Option<Token>)>,
 }
 
@@ -131,6 +133,7 @@ pub enum TopLevel {
     Type(Box<TypeDecl>),
     Use(Box<UseDecl>),
     Module(Box<ModuleDecl>),
+    Effect(Box<EffectDecl>),
     Error(Vec<Token>),
 }
 

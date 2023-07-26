@@ -26,6 +26,7 @@ pub enum TokenData {
     Mod,    // 'mod' keyword
     Handle, // 'handle' keyword
     Cases,  // 'request' keyword
+    Effect, // 'effect' keyword
 
     String, // String literal
     Int,    // Integer literal
@@ -184,6 +185,7 @@ impl Display for Token {
             Mod => "mod".to_string(),
             Handle => "handle".to_string(),
             Cases => "cases".to_string(),
+            Effect => "effect".to_string(),
         };
 
         write!(f, "{}", data)

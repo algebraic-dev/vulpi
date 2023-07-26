@@ -267,7 +267,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    pub fn when_case(&mut self) -> Result<PatternArm> {
+    pub fn pattern_arm(&mut self) -> Result<PatternArm> {
         let patterns = self.sep_by(TokenData::Comma, Self::pattern)?;
         let arrow = self.expect(TokenData::FatArrow)?;
         let expr = self.expr()?;
@@ -295,7 +295,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenData::Begin)?;
 
         let cases = self
-            .sep_by(TokenData::Sep, Self::when_case)?
+            .sep_by(TokenData::Sep, Self::pattern_arm)?
             .into_iter()
             .map(|x| x.0)
             .collect();
@@ -341,12 +341,31 @@ impl<'a> Parser<'a> {
     pub fn cases_expr(&mut self) -> Result<Box<Expr>> {
         let cases = self.expect(TokenData::Cases)?;
         self.expect(TokenData::Begin)?;
-        let arms = self.sep_by(TokenData::Sep, Self::when_case)?;
+        let arms = self.sep_by(TokenData::Sep, Self::pattern_arm)?;
         self.expect_or_pop_layout(TokenData::End)?;
         let range = self.with_span(cases.value.range.clone());
         Ok(Box::new(Spanned {
             range,
             data: ExprKind::Cases(CasesExpr { cases, arms }),
+        }))
+    }
+
+    pub fn handler_expr(&mut self) -> Result<Box<Expr>> {
+        let handle = self.expect(TokenData::Handle)?;
+        let expr = self.expr()?;
+        let with = self.expect(TokenData::With)?;
+        let handler = self.expr()?;
+
+        let range = self.with_span(handle.value.range.clone());
+
+        Ok(Box::new(Spanned {
+            range,
+            data: ExprKind::Handler(HandlerExpr {
+                handle,
+                expr,
+                with,
+                handler,
+            }),
         }))
     }
 
@@ -358,6 +377,7 @@ impl<'a> Parser<'a> {
             TokenData::When => self.when_expr(),
             TokenData::If => self.if_expr(),
             TokenData::Cases => self.cases_expr(),
+            TokenData::Handle => self.handler_expr(),
             _ => self.expr_annotation(),
         }
     }

@@ -59,7 +59,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn type_effects(&mut self) -> Result<Effects> {
+    pub fn type_effects(&mut self) -> Result<Effects> {
         let left_brace = self.expect(TokenData::LBrace)?;
         let effects = self.sep_by(TokenData::Comma, Self::typ)?;
         let right_brace = self.expect(TokenData::RBrace)?;
@@ -81,7 +81,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn type_atom(&mut self) -> Result<Box<Type>> {
+    pub fn type_atom(&mut self) -> Result<Box<Type>> {
         self.spanned(Self::type_atom_raw).map(Box::new)
     }
 

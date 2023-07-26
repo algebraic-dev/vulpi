@@ -14,6 +14,7 @@ pub mod expr;
 pub mod identifier;
 pub mod literal;
 pub mod pattern;
+pub mod top_level;
 pub mod r#type;
 
 pub type Result<T> = std::result::Result<T, error::ParserError>;
