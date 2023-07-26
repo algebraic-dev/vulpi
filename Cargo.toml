@@ -1,15 +1,16 @@
 [workspace]
 
 members = [
-    "crates/vulpi-tests",
+    "crates/vulpi-intern",
     "crates/vulpi-lexer",
     "crates/vulpi-location",
-    "crates/vulpi-intern",
-    "crates/vulpi-syntax",
-    "crates/vulpi-report",
-    "crates/vulpi-vfs",
+    "crates/vulpi-macros",
     "crates/vulpi-parser",
-
+    "crates/vulpi-report",
+    "crates/vulpi-show",
+    "crates/vulpi-syntax",
+    "crates/vulpi-tests",
+    "crates/vulpi-vfs",
 ]
 
 resolver = "1"
