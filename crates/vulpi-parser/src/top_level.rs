@@ -129,14 +129,19 @@ impl<'a> Parser<'a> {
         let type_ = self.expect(TokenData::Type)?;
         let name = self.upper()?;
         let binders = self.many(Self::type_binder)?;
-        let eq = self.expect(TokenData::Equal)?;
-        let def = self.type_def()?;
+
+        let def = if self.at(TokenData::Equal) {
+            let eq = self.expect(TokenData::Equal)?;
+            let def = self.type_def()?;
+            Some((eq, def))
+        } else {
+            None
+        };
 
         Ok(TypeDecl {
             type_,
             name,
             binders,
-            eq,
             def,
             visibility,
         })

@@ -132,18 +132,6 @@ pub struct HandlerExpr {
 }
 
 #[derive(Show)]
-pub struct RequestArm {
-    pub patterns: Vec<Pattern>,
-    pub arrow: Option<(Token, Lower)>,
-}
-
-#[derive(Show)]
-pub struct RequestExpr {
-    pub cases: Token,
-    pub arms: Vec<PatternArm>,
-}
-
-#[derive(Show)]
 pub struct CasesExpr {
     pub cases: Token,
     pub arms: Vec<PatternArm>,

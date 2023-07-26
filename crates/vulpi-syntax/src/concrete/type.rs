@@ -4,7 +4,7 @@ use vulpi_macros::Show;
 use crate::concrete::Lower;
 use crate::tokens::Token;
 
-use super::{Parenthesis, Path, Upper};
+use super::{top_level::TypeBinder, Parenthesis, Path, Upper};
 
 #[derive(Show)]
 pub struct Effects {
@@ -30,7 +30,7 @@ pub struct TypeApplication {
 #[derive(Show)]
 pub struct TypeForall {
     pub forall: Token,
-    pub params: Vec<Lower>,
+    pub params: Vec<TypeBinder>,
     pub dot: Token,
     pub body: Box<Type>,
 }
@@ -39,7 +39,7 @@ pub struct TypeForall {
 pub enum TypeKind {
     Parenthesis(Parenthesis<(Box<Type>, Option<Token>)>),
     Tuple(Parenthesis<Vec<(Box<Type>, Option<Token>)>>),
-    Upper(Path<Upper>),
+    Type(Path<Upper>),
     TypeVariable(Lower),
     Arrow(TypeArrow),
     Application(TypeApplication),

@@ -47,7 +47,7 @@ impl<'a> Parser<'a> {
 
     fn type_forall(&mut self) -> Result<TypeForall> {
         let forall = self.expect(TokenData::Forall)?;
-        let left = self.many(Self::lower)?;
+        let left = self.many(Self::type_binder)?;
         let dot = self.expect(TokenData::Dot)?;
         let right = self.typ()?;
 
@@ -74,7 +74,7 @@ impl<'a> Parser<'a> {
     fn type_atom_raw(&mut self) -> Result<TypeKind> {
         match self.token() {
             TokenData::LowerIdent => self.type_variable().map(TypeKind::TypeVariable),
-            TokenData::UpperIdent => self.path(Self::upper).map(TypeKind::Upper),
+            TokenData::UpperIdent => self.path(Self::upper).map(TypeKind::Type),
             TokenData::Unit => Ok(TypeKind::Unit(self.bump())),
             TokenData::LPar => {
                 let exprs = self.parenthesis(|this| this.sep_by(TokenData::Comma, Self::typ))?;

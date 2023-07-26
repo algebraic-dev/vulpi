@@ -100,8 +100,7 @@ pub struct TypeDecl {
     pub type_: Token,
     pub name: Upper,
     pub binders: Vec<TypeBinder>,
-    pub eq: Token,
-    pub def: TypeDef,
+    pub def: Option<(Token, TypeDef)>,
 }
 
 #[derive(Show)]
