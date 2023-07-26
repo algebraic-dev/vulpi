@@ -24,7 +24,7 @@
         - [ ] Traits
             - [ ] Implementation
             - [ ] Constraint Syntax
-        - [ ] Abstract Data Types
+        - [x] Abstract Data Types
         - [x] Type Synonyms
         - [x] Tuple
     - [x] Let declarations
