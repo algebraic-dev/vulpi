@@ -228,6 +228,11 @@ impl<'a> Lexer<'a> {
                 self.state.lex_state = LexState::PushLayout;
                 TokenData::Where
             }
+            "cases" => {
+                self.state.lex_state = LexState::PushLayout;
+                TokenData::Cases
+            }
+            "handle" => TokenData::Handle,
             "mod" => TokenData::Mod,
             "let" => TokenData::Let,
             "when" => TokenData::When,

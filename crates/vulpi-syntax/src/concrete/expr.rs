@@ -61,7 +61,7 @@ pub struct IfExpr {
 }
 
 pub struct PatternArm {
-    pub patterns: Vec<Pattern>,
+    pub patterns: Vec<(Box<Pattern>, Option<Token>)>,
     pub arrow: Token,
     pub expr: Box<Expr>,
     pub guard: Option<(Token, Box<Expr>)>,
@@ -103,9 +103,8 @@ pub struct RecordInstance {
 }
 
 pub struct RecordUpdate {
-    pub left_brace: Token,
     pub expr: Box<Expr>,
-    pub with: Token,
+    pub left_brace: Token,
     pub fields: Vec<(RecordField, Option<Token>)>,
     pub right_brace: Token,
 }
@@ -127,6 +126,11 @@ pub struct RequestExpr {
     pub arms: Vec<PatternArm>,
 }
 
+pub struct CasesExpr {
+    pub cases: Token,
+    pub arms: Vec<(PatternArm, Option<Token>)>,
+}
+
 pub enum ExprKind {
     Lambda(LambdaExpr),
     Application(ApplicationExpr),
@@ -140,6 +144,7 @@ pub enum ExprKind {
     Literal(Literal),
 
     Handler(HandlerExpr),
+    Cases(CasesExpr),
 
     Annotation(AnnotationExpr),
     RecordInstance(RecordInstance),

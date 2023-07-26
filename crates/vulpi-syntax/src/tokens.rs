@@ -24,6 +24,8 @@ pub enum TokenData {
     Forall, // 'forall' keyword
     Where,  // 'where' keyword
     Mod,    // 'mod' keyword
+    Handle, // 'handle' keyword
+    Cases,  // 'request' keyword
 
     String, // String literal
     Int,    // Integer literal
@@ -180,6 +182,8 @@ impl Display for Token {
             Unit => "()".to_string(),
             Wildcard => "_".to_string(),
             Mod => "mod".to_string(),
+            Handle => "handle".to_string(),
+            Cases => "cases".to_string(),
         };
 
         write!(f, "{}", data)

@@ -10,8 +10,10 @@ use vulpi_syntax::concrete::Parenthesis;
 use vulpi_syntax::tokens::{Token, TokenData};
 
 pub mod error;
+pub mod expr;
 pub mod identifier;
 pub mod literal;
+pub mod pattern;
 pub mod r#type;
 
 pub type Result<T> = std::result::Result<T, error::ParserError>;
