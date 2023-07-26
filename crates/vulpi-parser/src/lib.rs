@@ -11,6 +11,7 @@ use vulpi_syntax::tokens::{Token, TokenData};
 
 pub mod error;
 pub mod identifier;
+pub mod literal;
 pub mod r#type;
 
 pub type Result<T> = std::result::Result<T, error::ParserError>;
