@@ -9,3 +9,6 @@ edition = "2021"
 
 vulpi-location = { path = "../vulpi-location" }
 vulpi-intern = { path = "../vulpi-intern" }
+
+vulpi-show = { path = "../vulpi-show" }
+vulpi-macros = { path = "../vulpi-macros" }

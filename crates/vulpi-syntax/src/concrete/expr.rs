@@ -1,11 +1,13 @@
 use pattern::Pattern;
 use tree::{DoExpr, Literal, Type};
 use vulpi_location::Spanned;
+use vulpi_macros::Show;
 
 use crate::tokens::Token;
 
 use super::*;
 
+#[derive(Show)]
 pub enum Operator {
     Add(Token),
     Sub(Token),
@@ -27,6 +29,7 @@ pub enum Operator {
     Pipe(Token),
 }
 
+#[derive(Show)]
 pub struct LambdaExpr {
     pub lambda: Token,
     pub patterns: Vec<Box<Pattern>>,
@@ -34,23 +37,27 @@ pub struct LambdaExpr {
     pub expr: Box<Expr>,
 }
 
+#[derive(Show)]
 pub struct ApplicationExpr {
     pub func: Box<Expr>,
     pub args: Vec<Box<Expr>>,
 }
 
+#[derive(Show)]
 pub struct ProjectionExpr {
     pub expr: Box<Expr>,
     pub dot: Token,
     pub field: Lower,
 }
 
+#[derive(Show)]
 pub struct BinaryExpr {
     pub left: Box<Expr>,
     pub op: Operator,
     pub right: Box<Expr>,
 }
 
+#[derive(Show)]
 pub struct IfExpr {
     pub if_: Token,
     pub cond: Box<Expr>,
@@ -60,6 +67,7 @@ pub struct IfExpr {
     pub else_expr: Box<Expr>,
 }
 
+#[derive(Show)]
 pub struct PatternArm {
     pub patterns: Vec<(Box<Pattern>, Option<Token>)>,
     pub arrow: Token,
@@ -67,6 +75,7 @@ pub struct PatternArm {
     pub guard: Option<(Token, Box<Expr>)>,
 }
 
+#[derive(Show)]
 pub struct WhenExpr {
     pub when: Token,
     pub scrutinee: Box<Expr>,
@@ -74,12 +83,14 @@ pub struct WhenExpr {
     pub arms: Vec<PatternArm>,
 }
 
+#[derive(Show)]
 pub struct AnnotationExpr {
     pub expr: Box<Expr>,
     pub colon: Token,
     pub ty: Box<Type>,
 }
 
+#[derive(Show)]
 pub struct LetExpr {
     pub let_: Token,
     pub pattern: Box<Pattern>,
@@ -89,12 +100,14 @@ pub struct LetExpr {
     pub value: Box<Expr>,
 }
 
+#[derive(Show)]
 pub struct RecordField {
     pub name: Lower,
     pub eq: Token,
     pub expr: Box<Expr>,
 }
 
+#[derive(Show)]
 pub struct RecordInstance {
     pub name: Path<Upper>,
     pub left_brace: Token,
@@ -102,6 +115,7 @@ pub struct RecordInstance {
     pub right_brace: Token,
 }
 
+#[derive(Show)]
 pub struct RecordUpdate {
     pub expr: Box<Expr>,
     pub left_brace: Token,
@@ -109,6 +123,7 @@ pub struct RecordUpdate {
     pub right_brace: Token,
 }
 
+#[derive(Show)]
 pub struct HandlerExpr {
     pub handle: Token,
     pub expr: Box<Expr>,
@@ -116,21 +131,25 @@ pub struct HandlerExpr {
     pub handler: Box<Expr>,
 }
 
+#[derive(Show)]
 pub struct RequestArm {
     pub patterns: Vec<Pattern>,
     pub arrow: Option<(Token, Lower)>,
 }
 
+#[derive(Show)]
 pub struct RequestExpr {
     pub cases: Token,
     pub arms: Vec<PatternArm>,
 }
 
+#[derive(Show)]
 pub struct CasesExpr {
     pub cases: Token,
     pub arms: Vec<(PatternArm, Option<Token>)>,
 }
 
+#[derive(Show)]
 pub enum ExprKind {
     Lambda(LambdaExpr),
     Application(ApplicationExpr),

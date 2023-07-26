@@ -78,6 +78,9 @@ dependencies = [
 [[package]]
 name = "vulpi-location"
 version = "0.1.0"
+dependencies = [
+ "vulpi-show",
+]
 
 [[package]]
 name = "vulpi-macros"
@@ -119,6 +122,8 @@ version = "0.1.0"
 dependencies = [
  "vulpi-intern",
  "vulpi-location",
+ "vulpi-macros",
+ "vulpi-show",
 ]
 
 [[package]]

@@ -5,6 +5,7 @@ use std::fmt::{Debug, Display};
 
 use vulpi_intern::Symbol;
 use vulpi_location::Spanned;
+use vulpi_show::{Show, TreeDisplay};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenData {
@@ -99,6 +100,12 @@ pub struct Token {
     pub value: Spanned<Symbol>,
 }
 
+impl Show for Token {
+    fn show(&self) -> vulpi_show::TreeDisplay {
+        TreeDisplay::label("Token").with(TreeDisplay::label(&self.to_string()))
+    }
+}
+
 impl Token {
     pub fn is(&self, kind: TokenData) -> bool {
         self.kind == kind
@@ -115,11 +122,11 @@ impl Debug for Token {
     }
 }
 
-impl Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ToString for Token {
+    fn to_string(&self) -> String {
         use TokenData::*;
 
-        let data = match self.kind {
+        match self.kind {
             String => format!("\"{}\"", self.value.data.get()),
             Int => format!("{}", self.value.data.get()),
             Float => format!("{}", self.value.data.get()),
@@ -186,8 +193,6 @@ impl Display for Token {
             Handle => "handle".to_string(),
             Cases => "cases".to_string(),
             Effect => "effect".to_string(),
-        };
-
-        write!(f, "{}", data)
+        }
     }
 }

@@ -3,6 +3,8 @@
 
 use std::fmt::Debug;
 
+use vulpi_show::{Show, TreeDisplay};
+
 /// A new-type for a usize. It's used to locate a byte inside a source code.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Byte(pub usize);
@@ -13,6 +15,15 @@ pub struct Span {
     pub file: FileId,
     pub start: Byte,
     pub end: Byte,
+}
+
+impl Show for Span {
+    fn show(&self) -> vulpi_show::TreeDisplay {
+        TreeDisplay::label("Span").with(TreeDisplay::label(&format!(
+            "{}~{}",
+            self.start.0, self.end.0
+        )))
+    }
 }
 
 impl Debug for Span {
@@ -48,6 +59,17 @@ impl Span {
 pub struct Spanned<T> {
     pub data: T,
     pub range: Span,
+}
+
+impl<T: Show> Show for Spanned<T> {
+    fn show(&self) -> vulpi_show::TreeDisplay {
+        TreeDisplay::label("Spanned")
+            .with(TreeDisplay::label(&format!(
+                "{}~{}",
+                self.range.start.0, self.range.end.0
+            )))
+            .with(self.data.show())
+    }
 }
 
 impl<T> Spanned<T> {
