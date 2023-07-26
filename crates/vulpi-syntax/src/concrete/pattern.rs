@@ -24,6 +24,7 @@ pub struct PatApplication {
 pub enum PatternKind {
     Wildcard(Token),
     Constructor(Path<Upper>),
+    Effect(Path<Lower>),
     Variable(Lower),
     Literal(Literal),
     Annotation(PatAscription),

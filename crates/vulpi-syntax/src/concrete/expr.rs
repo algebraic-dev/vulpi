@@ -110,6 +110,23 @@ pub struct RecordUpdate {
     pub right_brace: Token,
 }
 
+pub struct HandlerExpr {
+    pub handle: Token,
+    pub expr: Box<Expr>,
+    pub with: Token,
+    pub handler: Box<Expr>,
+}
+
+pub struct RequestArm {
+    pub patterns: Vec<Pattern>,
+    pub arrow: Option<(Token, Lower)>,
+}
+
+pub struct RequestExpr {
+    pub cases: Token,
+    pub arms: Vec<PatternArm>,
+}
+
 pub enum ExprKind {
     Lambda(LambdaExpr),
     Application(ApplicationExpr),
@@ -121,6 +138,8 @@ pub enum ExprKind {
     When(WhenExpr),
     Do(DoExpr),
     Literal(Literal),
+
+    Handler(HandlerExpr),
 
     Annotation(AnnotationExpr),
     RecordInstance(RecordInstance),
