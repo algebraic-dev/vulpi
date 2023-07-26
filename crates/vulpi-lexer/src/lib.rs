@@ -232,6 +232,7 @@ impl<'a> Lexer<'a> {
                 self.state.lex_state = LexState::PushLayout;
                 TokenData::Cases
             }
+            "effect" => TokenData::Effect,
             "handle" => TokenData::Handle,
             "mod" => TokenData::Mod,
             "let" => TokenData::Let,
@@ -261,9 +262,9 @@ impl<'a> Lexer<'a> {
                 Some(last_column) if column > *last_column => (),
                 Some(last_column) if column < *last_column => {
                     self.state.layout.pop();
-                    return (TokenData::End, Symbol::intern(""));
+                    return (TokenData::End, Symbol::intern("end"));
                 }
-                Some(_) => return (TokenData::End, Symbol::intern("")),
+                Some(_) => return (TokenData::Sep, Symbol::intern("sep")),
             }
         }
 
@@ -419,7 +420,11 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        Some(self.bump())
+        if self.state.index >= self.input.len() {
+            None
+        } else {
+            Some(self.bump())
+        }
     }
 }
 
