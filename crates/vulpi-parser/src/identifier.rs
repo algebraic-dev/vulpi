@@ -30,13 +30,18 @@ impl<'a> Parser<'a> {
 
     pub fn path_ident(&mut self) -> Result<Path<Ident>> {
         self.path(|parser| match parser.peek().kind {
-            TokenData::UpperIdent | TokenData::LowerIdent => Ok(Ident(parser.bump())),
+            TokenData::LowerIdent => Ok(Ident::Lower(parser.lower()?)),
+            TokenData::UpperIdent => Ok(Ident::Upper(parser.upper()?)),
             _ => parser.unexpected(),
         })
     }
 
     pub fn path_upper(&mut self) -> Result<Path<Upper>> {
         self.path(|parser| parser.upper())
+    }
+
+    pub fn path_lower(&mut self) -> Result<Path<Lower>> {
+        self.path(|parser| parser.lower())
     }
 
     pub fn lower(&mut self) -> Result<Lower> {

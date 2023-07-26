@@ -129,6 +129,14 @@ dependencies = [
 [[package]]
 name = "vulpi-tests"
 version = "0.1.0"
+dependencies = [
+ "vulpi-lexer",
+ "vulpi-location",
+ "vulpi-parser",
+ "vulpi-report",
+ "vulpi-show",
+ "vulpi-vfs",
+]
 
 [[package]]
 name = "vulpi-vfs"

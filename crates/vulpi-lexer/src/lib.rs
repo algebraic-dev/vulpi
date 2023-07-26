@@ -90,6 +90,7 @@ pub struct State {
 
 /// The lexer struct that contains the input and the current state. This struct is the entry point
 /// for the lexer.
+#[derive(Clone)]
 pub struct Lexer<'a> {
     peekable: Peekable<Chars<'a>>,
     input: &'a str,
@@ -404,7 +405,7 @@ impl<'a> Lexer<'a> {
             LexState::PushLayout => {
                 self.state.layout.push(self.state.column);
                 self.state.lex_state = LexState::Common;
-                (TokenData::Begin, Symbol::intern(""))
+                (TokenData::Begin, Symbol::intern("begin"))
             }
         };
         Token {

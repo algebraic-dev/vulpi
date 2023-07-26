@@ -25,6 +25,11 @@ use vulpi_location::Span;
 
 use crate::tokens::Token;
 
+pub enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
 #[derive(Show)]
 pub struct Upper(pub Token);
 
@@ -32,13 +37,44 @@ pub struct Upper(pub Token);
 pub struct Lower(pub Token);
 
 #[derive(Show)]
-pub struct Ident(pub Token);
+pub enum Ident {
+    Upper(Upper),
+    Lower(Lower),
+}
 
 #[derive(Show)]
 pub struct Path<T> {
     pub segments: Vec<(Upper, Token)>,
     pub last: T,
     pub span: Span,
+}
+
+impl Path<Ident> {
+    pub fn diferentiate(self) -> Either<Path<Upper>, Path<Lower>> {
+        let Path {
+            segments,
+            last,
+            span,
+        } = self;
+
+        let segments = segments
+            .into_iter()
+            .map(|(upper, dot)| (upper, dot))
+            .collect();
+
+        match last {
+            Ident::Upper(upper) => Either::Left(Path {
+                segments,
+                last: upper,
+                span,
+            }),
+            Ident::Lower(lower) => Either::Right(Path {
+                segments,
+                last: lower,
+                span,
+            }),
+        }
+    }
 }
 
 #[derive(Show)]

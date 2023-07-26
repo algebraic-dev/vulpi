@@ -2,7 +2,7 @@ use crate::{Parser, Result};
 
 use vulpi_location::Spanned;
 use vulpi_syntax::{
-    concrete::{tree::*, Path, Upper},
+    concrete::{tree::*, Either, Path, Upper},
     tokens::TokenData,
 };
 
@@ -58,26 +58,16 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn statement(&mut self) -> Statement {
-        match self.spanned(Self::statement_kind) {
-            Ok(ok) => ok,
-            Err(err) => {
-                self.report(err);
-                let tkns = self.recover(&[TokenData::Sep, TokenData::End]);
-                Statement {
-                    range: tkns[0].value.range.clone(),
-                    data: StatementKind::Error(tkns),
-                }
-            }
-        }
+    pub fn statement(&mut self) -> Result<Statement> {
+        self.spanned(Self::statement_kind)
     }
 
-    pub fn block(&mut self) -> Result<Block> {
+    pub fn block<T>(&mut self, parse: impl Fn(&mut Self) -> Result<T>) -> Result<Vec<T>> {
         self.expect(TokenData::Begin)?;
         let mut statements = Vec::new();
 
         while !self.at(TokenData::End) {
-            let stmt = self.statement();
+            let stmt = parse(self)?;
 
             let sep = if self.at(TokenData::Sep) {
                 Some(self.bump())
@@ -85,11 +75,11 @@ impl<'a> Parser<'a> {
                 None
             };
 
-            statements.push((stmt, sep));
+            statements.push(stmt);
         }
 
         self.expect_or_pop_layout(TokenData::End)?;
-        Ok(Block { statements })
+        Ok(statements)
     }
 
     pub fn expr_atom_kind(&mut self) -> Result<ExprKind> {
@@ -97,14 +87,19 @@ impl<'a> Parser<'a> {
             TokenData::UpperIdent | TokenData::LowerIdent => {
                 let path = self.path_ident()?;
 
-                if path.last.0.kind == TokenData::UpperIdent && self.at(TokenData::LBrace) {
-                    Ok(ExprKind::RecordInstance(self.record_instance(Path {
-                        segments: path.segments,
-                        last: Upper(path.last.0),
-                        span: path.span,
-                    })?))
-                } else {
-                    Ok(ExprKind::Ident(path))
+                match path.diferentiate() {
+                    Either::Left(upper) => {
+                        if self.at(TokenData::LBrace) {
+                            return Ok(ExprKind::RecordInstance(self.record_instance(upper)?));
+                        }
+                        Ok(ExprKind::Constructor(upper))
+                    }
+                    Either::Right(lower) => {
+                        if lower.segments.is_empty() {
+                            return Ok(ExprKind::Variable(lower.last));
+                        }
+                        Ok(ExprKind::Function(lower))
+                    }
                 }
             }
             TokenData::LPar => self.parenthesis(Self::expr).map(ExprKind::Parenthesis),
@@ -200,11 +195,14 @@ impl<'a> Parser<'a> {
 
     pub fn expr_do(&mut self) -> Result<Box<Expr>> {
         let do_ = self.expect(TokenData::Do)?;
-        let block = self.block()?;
+        let statements = self.block(Self::statement)?;
         let range = self.with_span(do_.value.range.clone());
         Ok(Box::new(Spanned {
             range,
-            data: ExprKind::Do(DoExpr { do_, block }),
+            data: ExprKind::Do(DoExpr {
+                do_,
+                block: Block { statements },
+            }),
         }))
     }
 
@@ -269,8 +267,7 @@ impl<'a> Parser<'a> {
 
     pub fn pattern_arm(&mut self) -> Result<PatternArm> {
         let patterns = self.sep_by(TokenData::Comma, Self::pattern)?;
-        let arrow = self.expect(TokenData::FatArrow)?;
-        let expr = self.expr()?;
+
         let guard = if self.at(TokenData::If) {
             let if_ = self.bump();
             let cond = self.expr()?;
@@ -279,6 +276,8 @@ impl<'a> Parser<'a> {
             None
         };
 
+        let arrow = self.expect(TokenData::FatArrow)?;
+        let expr = self.expr()?;
         Ok(PatternArm {
             patterns,
             arrow,
@@ -292,15 +291,7 @@ impl<'a> Parser<'a> {
         let scrutinee = self.expr_atom()?;
         let is = self.expect(TokenData::Is)?;
 
-        self.expect(TokenData::Begin)?;
-
-        let cases = self
-            .sep_by(TokenData::Sep, Self::pattern_arm)?
-            .into_iter()
-            .map(|x| x.0)
-            .collect();
-
-        self.expect(TokenData::End)?;
+        let cases = self.block(Self::pattern_arm)?.into_iter().collect();
 
         let range = self.with_span(when.value.range.clone());
 
@@ -340,9 +331,7 @@ impl<'a> Parser<'a> {
 
     pub fn cases_expr(&mut self) -> Result<Box<Expr>> {
         let cases = self.expect(TokenData::Cases)?;
-        self.expect(TokenData::Begin)?;
-        let arms = self.sep_by(TokenData::Sep, Self::pattern_arm)?;
-        self.expect_or_pop_layout(TokenData::End)?;
+        let arms = self.block(Self::pattern_arm)?;
         let range = self.with_span(cases.value.range.clone());
         Ok(Box::new(Spanned {
             range,

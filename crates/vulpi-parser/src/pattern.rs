@@ -1,5 +1,8 @@
 use vulpi_location::Spanned;
-use vulpi_syntax::{concrete::pattern::*, tokens::TokenData};
+use vulpi_syntax::{
+    concrete::{pattern::*, Either},
+    tokens::TokenData,
+};
 
 use crate::{Parser, Result};
 
@@ -8,7 +11,13 @@ impl<'a> Parser<'a> {
         match self.token() {
             TokenData::Wildcard => Ok(PatternKind::Wildcard(self.bump())),
             TokenData::LowerIdent => self.lower().map(PatternKind::Variable),
-            TokenData::UpperIdent => self.path_upper().map(PatternKind::Constructor),
+            TokenData::UpperIdent => {
+                let path = self.path_ident()?;
+                match path.diferentiate() {
+                    Either::Left(upper) => Ok(PatternKind::Constructor(upper)),
+                    Either::Right(_) => todo!(),
+                }
+            }
             TokenData::LPar => self
                 .parenthesis(Self::pattern)
                 .map(PatternKind::Parenthesis),
@@ -35,6 +44,20 @@ impl<'a> Parser<'a> {
                 } else {
                     Ok(PatternKind::Application(result))
                 }
+            })
+            .map(Box::new)
+        } else if self.at(TokenData::LBrace) {
+            self.spanned(|this| {
+                let left_brace = this.bump();
+                let func = this.path_lower()?;
+                let args = this.many(Self::pattern_atom)?;
+                let right_brace = this.expect(TokenData::RBrace)?;
+                Ok(PatternKind::EffectApp(PatEffectApp {
+                    left_brace,
+                    func,
+                    args,
+                    right_brace,
+                }))
             })
             .map(Box::new)
         } else {

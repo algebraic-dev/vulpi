@@ -146,14 +146,18 @@ pub struct RequestExpr {
 #[derive(Show)]
 pub struct CasesExpr {
     pub cases: Token,
-    pub arms: Vec<(PatternArm, Option<Token>)>,
+    pub arms: Vec<PatternArm>,
 }
 
 #[derive(Show)]
 pub enum ExprKind {
     Lambda(LambdaExpr),
     Application(ApplicationExpr),
-    Ident(Path<Ident>),
+
+    Variable(Lower),
+    Constructor(Path<Upper>),
+    Function(Path<Lower>),
+
     Acessor(ProjectionExpr),
     Binary(BinaryExpr),
     Let(LetExpr),

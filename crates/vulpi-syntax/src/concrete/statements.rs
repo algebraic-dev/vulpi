@@ -24,7 +24,7 @@ pub type Statement = Spanned<StatementKind>;
 
 #[derive(Show)]
 pub struct Block {
-    pub statements: Vec<(Statement, Option<Token>)>,
+    pub statements: Vec<Statement>,
 }
 
 #[derive(Show)]

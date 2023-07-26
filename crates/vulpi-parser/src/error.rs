@@ -11,7 +11,7 @@ impl IntoDiagnostic for ParserError {
     fn message(&self) -> vulpi_report::Text {
         match self {
             ParserError::UnexpectedToken(token, _) => {
-                format!("unexpected token '{}'", token.data()).into()
+                format!("unexpected token '{:?}'", token.kind).into()
             }
         }
     }

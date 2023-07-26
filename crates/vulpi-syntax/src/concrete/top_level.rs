@@ -121,12 +121,13 @@ pub struct UseDecl {
 #[derive(Show)]
 pub struct ModuleInline {
     pub where_: Token,
-    pub top_level: Vec<(TopLevel, Option<Token>)>,
+    pub top_levels: Vec<(TopLevel, Option<Token>)>,
 }
 
 #[derive(Show)]
 pub struct ModuleDecl {
-    pub when: Token,
+    pub visibility: Visibility,
+    pub mod_: Token,
     pub name: Upper,
     pub part: Option<ModuleInline>,
 }

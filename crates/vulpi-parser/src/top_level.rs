@@ -208,12 +208,39 @@ impl<'a> Parser<'a> {
         })
     }
 
+    pub fn mod_decl(&mut self) -> Result<ModuleDecl> {
+        let visibility = self.visibility()?;
+        let mod_ = self.expect(TokenData::Mod)?;
+        let name = self.upper()?;
+
+        let part = if self.at(TokenData::Where) {
+            let where_ = self.expect(TokenData::Where)?;
+            self.expect(TokenData::Begin)?;
+
+            let top_levels = self.sep_by(TokenData::Sep, Self::top_level)?;
+
+            self.expect(TokenData::End)?;
+
+            Some(ModuleInline { where_, top_levels })
+        } else {
+            None
+        };
+
+        Ok(ModuleDecl {
+            visibility,
+            mod_,
+            name,
+            part,
+        })
+    }
+
     pub fn top_level(&mut self) -> Result<TopLevel> {
         match self.token() {
             TokenData::Let => self.let_decl().map(Box::new).map(TopLevel::Let),
             TokenData::Type => self.type_decl().map(Box::new).map(TopLevel::Type),
             TokenData::Use => self.use_decl().map(Box::new).map(TopLevel::Use),
             TokenData::Effect => self.effect_decl().map(Box::new).map(TopLevel::Effect),
+            TokenData::Mod => self.mod_decl().map(Box::new).map(TopLevel::Module),
             _ => self.unexpected(),
         }
     }

@@ -128,10 +128,10 @@ impl ToString for Token {
 
         match self.kind {
             String => format!("\"{}\"", self.value.data.get()),
-            Int => format!("{}", self.value.data.get()),
-            Float => format!("{}", self.value.data.get()),
-            LowerIdent => format!("{}", self.value.data.get()),
-            UpperIdent => format!("{}", self.value.data.get()),
+            Int => format!("int({})", self.value.data.get()),
+            Float => format!("float({})", self.value.data.get()),
+            LowerIdent => format!("lower {}", self.value.data.get()),
+            UpperIdent => format!("upper {}", self.value.data.get()),
             Colon => ":".to_string(),
             Semicolon => ";".to_string(),
             Comma => ",".to_string(),
@@ -186,7 +186,7 @@ impl ToString for Token {
             FatArrow => "=>".to_string(),
             BackSlash => "\\".to_string(),
             PipeRight => "|>".to_string(),
-            Char => format!("'{}'", self.value.data.get()),
+            Char => format!("char('{}')", self.value.data.get()),
             Unit => "()".to_string(),
             Wildcard => "_".to_string(),
             Mod => "mod".to_string(),
