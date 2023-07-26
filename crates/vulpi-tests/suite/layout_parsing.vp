@@ -7,5 +7,6 @@ let add1 (n: Int) = n + 1
 
 -- Tests if an error causes the layout to collapse
 let test : Int = do
-    (add1
-    2)
+    (
+        add1
+        2)
