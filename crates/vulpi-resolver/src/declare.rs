@@ -29,7 +29,7 @@ impl<'a> Context<'a> {
         Self {
             reporter,
             module_tree,
-            counter: Rc::new(RefCell::new(0)),
+            counter: Rc::new(RefCell::new(1)),
         }
     }
 

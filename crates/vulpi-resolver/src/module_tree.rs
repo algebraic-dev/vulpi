@@ -20,11 +20,14 @@ impl Show for ModuleTree {
     fn show(&self) -> vulpi_show::TreeDisplay {
         let mut display = vulpi_show::TreeDisplay::label(&format!("ModuleTree: {}", self.id.0));
 
+        let namespace = self.namespace.show();
+        let child = TreeDisplay::label("child");
+
         for (name, module) in &self.modules {
             display = display.with(TreeDisplay::label(&name.get()).with(module.show()));
         }
 
-        display
+        display.with(namespace).with(child)
     }
 }
 
@@ -47,8 +50,11 @@ impl ModuleTree {
         let (head, tail) = name.split_first().unwrap();
 
         if tail.is_empty() {
-            self.modules.insert(head.clone(), ModuleTree::new(id));
-            Some(self.modules.get_mut(head).unwrap())
+            Some(
+                self.modules
+                    .entry(head.clone())
+                    .or_insert_with(|| ModuleTree::new(id)),
+            )
         } else {
             let module = self.modules.get_mut(head).unwrap();
             module.add(tail, id)
