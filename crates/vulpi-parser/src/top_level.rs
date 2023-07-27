@@ -181,11 +181,13 @@ impl<'a> Parser<'a> {
     }
 
     pub fn effect_field(&mut self) -> Result<EffectField> {
+        let visibility = self.visibility()?;
         let name = self.lower()?;
         let args = self.many(Self::type_atom)?;
         let colon = self.expect(TokenData::Colon)?;
         let ret = self.typ()?;
         Ok(EffectField {
+            visibility,
             name,
             args,
             colon,

@@ -4,7 +4,7 @@ use vulpi_syntax::tokens::Token;
 
 #[derive(Debug)]
 pub enum ParserError {
-    UnexpectedToken(Token, Span),
+    UnexpectedToken(Box<Token>, Span),
 }
 
 impl IntoDiagnostic for ParserError {

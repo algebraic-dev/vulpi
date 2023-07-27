@@ -114,7 +114,10 @@ impl<'a> Parser<'a> {
     }
 
     fn unexpected_err(&mut self) -> ParserError {
-        error::ParserError::UnexpectedToken(self.peek().clone(), self.peek().value.range.clone())
+        error::ParserError::UnexpectedToken(
+            Box::new(self.peek().clone()),
+            self.peek().value.range.clone(),
+        )
     }
 
     /// Returns true if the current token matches the given one.

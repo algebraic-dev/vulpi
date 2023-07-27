@@ -8,6 +8,7 @@ pub mod statements;
 pub mod top_level;
 pub mod r#type;
 
+use vulpi_intern::Symbol;
 use vulpi_macros::Show;
 
 /// Module that exposes the entire tree
@@ -33,8 +34,20 @@ pub enum Either<L, R> {
 #[derive(Show)]
 pub struct Upper(pub Token);
 
+impl Upper {
+    pub fn symbol(&self) -> Symbol {
+        self.0.value.data.clone()
+    }
+}
+
 #[derive(Show)]
 pub struct Lower(pub Token);
+
+impl Lower {
+    pub fn symbol(&self) -> Symbol {
+        self.0.value.data.clone()
+    }
+}
 
 #[derive(Show)]
 pub enum Ident {

@@ -2,7 +2,7 @@ use vulpi_macros::Show;
 
 use crate::tokens::Token;
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum Visibility {
     Public(Token),
     Private,
@@ -133,6 +133,7 @@ pub struct ModuleDecl {
 
 #[derive(Show)]
 pub struct EffectField {
+    pub visibility: Visibility,
     pub name: Lower,
     pub args: Vec<Box<Type>>,
     pub colon: Token,
@@ -163,4 +164,33 @@ pub enum TopLevel {
 pub struct Program {
     pub top_levels: Vec<TopLevel>,
     pub eof: Token,
+}
+
+impl Program {
+    pub fn modules(&self) -> impl Iterator<Item = &ModuleDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match top_level {
+                TopLevel::Module(module) => Some(&**module),
+                _ => None,
+            })
+    }
+
+    pub fn types(&self) -> impl Iterator<Item = &TypeDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match top_level {
+                TopLevel::Type(type_) => Some(&**type_),
+                _ => None,
+            })
+    }
+
+    pub fn effects(&self) -> impl Iterator<Item = &EffectDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match top_level {
+                TopLevel::Effect(effect) => Some(&**effect),
+                _ => None,
+            })
+    }
 }
