@@ -7,10 +7,12 @@
 use std::{cell::RefCell, rc::Rc};
 
 use vulpi_intern::Symbol;
-use vulpi_report::Report;
+use vulpi_location::Span;
+use vulpi_report::{Diagnostic, Report};
 use vulpi_syntax::concrete::tree::*;
 
 use crate::{
+    error::{ResolverError, ResolverErrorKind},
     module_tree::ModuleTree,
     namespace::{self, Item, ModuleId, Qualified, Value},
 };
@@ -45,6 +47,10 @@ impl<'a> Context<'a> {
         }
     }
 
+    fn report(&mut self, error: crate::error::ResolverError) {
+        self.reporter.report(Diagnostic::new(error));
+    }
+
     fn derive<'c>(&'c mut self, name: &[Symbol]) -> Context<'c> {
         let mut counter = self.counter.borrow_mut();
         let id = *counter;
@@ -63,12 +69,30 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn add_value(&mut self, name: Symbol, value: Item<Value>) {
-        self.module_tree.namespace.values.insert(name, value);
+    pub fn add_value(&mut self, span: Span, name: Symbol, value: Item<Value>) {
+        let old = self
+            .module_tree
+            .namespace
+            .values
+            .insert(name.clone(), value);
+
+        if old.is_some() {
+            self.report(ResolverError {
+                span,
+                kind: ResolverErrorKind::Redeclarated(name),
+            })
+        }
     }
 
-    pub fn add_type(&mut self, name: Symbol, value: Item<Qualified>) {
-        self.module_tree.namespace.types.insert(name, value);
+    pub fn add_type(&mut self, span: Span, name: Symbol, value: Item<Qualified>) {
+        let old = self.module_tree.namespace.types.insert(name.clone(), value);
+
+        if old.is_some() {
+            self.report(ResolverError {
+                span,
+                kind: ResolverErrorKind::Redeclarated(name),
+            })
+        }
     }
 }
 
@@ -88,6 +112,7 @@ impl From<Visibility> for namespace::Visibility {
 impl Declare for EffectDecl {
     fn declare(&self, ctx: &mut Context) {
         ctx.add_type(
+            self.name.0.value.range.clone(),
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
@@ -99,6 +124,7 @@ impl Declare for EffectDecl {
 
         for field in &self.fields {
             ctx.add_value(
+                field.0.name.0.value.range.clone(),
                 field.0.name.symbol(),
                 Item {
                     visibility: field.0.visibility.clone().into(),
@@ -125,6 +151,7 @@ impl Declare for SumDecl {
     fn declare(&self, ctx: &mut Context) {
         for constructor in self.constructors.iter() {
             ctx.add_value(
+                constructor.name.0.value.range.clone(),
                 constructor.name.symbol(),
                 Item {
                     visibility: namespace::Visibility::Public,
@@ -139,6 +166,7 @@ impl Declare for RecordDecl {
     fn declare(&self, ctx: &mut Context) {
         for (field, _) in self.fields.iter() {
             ctx.add_value(
+                field.name.0.value.range.clone(),
                 field.name.symbol(),
                 Item {
                     visibility: namespace::Visibility::Public,
@@ -162,6 +190,7 @@ impl Declare for TypeDef {
 impl Declare for TypeDecl {
     fn declare(&self, ctx: &mut Context) {
         ctx.add_type(
+            self.name.0.value.range.clone(),
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
@@ -180,6 +209,7 @@ impl Declare for TypeDecl {
 impl Declare for LetDecl {
     fn declare(&self, ctx: &mut Context) {
         ctx.add_value(
+            self.name.0.value.range.clone(),
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
