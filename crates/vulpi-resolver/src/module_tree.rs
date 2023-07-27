@@ -62,11 +62,21 @@ impl ModuleTree {
     }
 
     /// Finds a subtree in the tree.
-    pub fn find(&mut self, name: &[Symbol]) -> Option<&mut ModuleTree> {
+    pub fn find_mut(&mut self, name: &[Symbol]) -> Option<&mut ModuleTree> {
         let mut current = self;
 
         for symbol in name {
             current = current.modules.get_mut(symbol)?;
+        }
+
+        Some(current)
+    }
+
+    pub fn find(&self, name: &[Symbol]) -> Option<&ModuleTree> {
+        let mut current = self;
+
+        for symbol in name {
+            current = current.modules.get(symbol)?;
         }
 
         Some(current)

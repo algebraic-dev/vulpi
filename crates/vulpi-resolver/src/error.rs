@@ -4,6 +4,7 @@ use vulpi_report::IntoDiagnostic;
 
 pub enum ResolverErrorKind {
     Redeclarated(Symbol),
+    NotFound(Vec<Symbol>),
 }
 
 pub struct ResolverError {
@@ -17,6 +18,11 @@ impl IntoDiagnostic for ResolverError {
             ResolverErrorKind::Redeclarated(name) => {
                 format!("Redeclarated name: {}", name.get()).into()
             }
+            ResolverErrorKind::NotFound(name) => format!(
+                "name not found: {}",
+                name.iter().map(|s| s.get()).collect::<Vec<_>>().join(".")
+            )
+            .into(),
         }
     }
 

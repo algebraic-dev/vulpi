@@ -23,6 +23,7 @@ type Counter = Rc<RefCell<usize>>;
 pub struct Context<'a> {
     pub reporter: Report,
     pub module_tree: &'a mut ModuleTree,
+    pub name: Vec<Symbol>,
     pub counter: Counter,
 }
 
@@ -31,6 +32,7 @@ impl<'a> Context<'a> {
         Self {
             reporter,
             module_tree,
+            name: Vec::new(),
             counter: Rc::new(RefCell::new(1)),
         }
     }
@@ -39,10 +41,12 @@ impl<'a> Context<'a> {
         reporter: Report,
         module_tree: &'a mut ModuleTree,
         counter: Counter,
+        name: Vec<Symbol>,
     ) -> Self {
         Self {
             reporter,
             module_tree,
+            name,
             counter,
         }
     }
@@ -51,15 +55,27 @@ impl<'a> Context<'a> {
         self.reporter.report(Diagnostic::new(error));
     }
 
-    fn derive<'c>(&'c mut self, name: &[Symbol]) -> Context<'c> {
+    fn derive(&mut self, new_name: Symbol) -> Context {
+        let id = self.genenerate_id();
+
+        let mut name = self.name.clone();
+        name.push(new_name);
+
+        self.module_tree.add(&name, id).unwrap();
+
+        Context::new_with_counter(
+            self.reporter.clone(),
+            self.module_tree,
+            self.counter.clone(),
+            name,
+        )
+    }
+
+    fn genenerate_id(&mut self) -> ModuleId {
         let mut counter = self.counter.borrow_mut();
         let id = *counter;
         *counter += 1;
-        let id = ModuleId(id);
-
-        let tree = self.module_tree.add(name, id).unwrap();
-
-        Context::new_with_counter(self.reporter.clone(), tree, self.counter.clone())
+        ModuleId(id)
     }
 
     pub fn qualified_name(&self, name: Symbol) -> namespace::Qualified {
@@ -72,6 +88,8 @@ impl<'a> Context<'a> {
     pub fn add_value(&mut self, span: Span, name: Symbol, value: Item<Value>) {
         let old = self
             .module_tree
+            .find_mut(&self.name)
+            .unwrap()
             .namespace
             .values
             .insert(name.clone(), value);
@@ -85,13 +103,29 @@ impl<'a> Context<'a> {
     }
 
     pub fn add_type(&mut self, span: Span, name: Symbol, value: Item<Qualified>) {
-        let old = self.module_tree.namespace.types.insert(name.clone(), value);
+        let old = self
+            .module_tree
+            .find_mut(&self.name)
+            .unwrap()
+            .namespace
+            .types
+            .insert(name.clone(), value);
 
         if old.is_some() {
             self.report(ResolverError {
                 span,
                 kind: ResolverErrorKind::Redeclarated(name),
             })
+        }
+    }
+
+    fn merge(&mut self, namespace: namespace::Namespace) {
+        for (key, value) in namespace.values {
+            self.add_value(value.span.clone(), key, value);
+        }
+
+        for (key, value) in namespace.types {
+            self.add_type(value.span.clone(), key, value);
         }
     }
 }
@@ -116,11 +150,12 @@ impl Declare for EffectDecl {
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
+                span: self.name.0.value.range.clone(),
                 item: ctx.qualified_name(self.name.symbol()),
             },
         );
 
-        let ctx = &mut ctx.derive(&[self.name.symbol()]);
+        let ctx = &mut ctx.derive(self.name.symbol());
 
         for field in &self.fields {
             ctx.add_value(
@@ -128,6 +163,7 @@ impl Declare for EffectDecl {
                 field.0.name.symbol(),
                 Item {
                     visibility: field.0.visibility.clone().into(),
+                    span: field.0.name.0.value.range.clone(),
                     item: Value::Effect(ctx.qualified_name(field.0.name.symbol())),
                 },
             );
@@ -137,7 +173,7 @@ impl Declare for EffectDecl {
 
 impl Declare for ModuleDecl {
     fn declare(&self, ctx: &mut Context) {
-        let ctx = &mut ctx.derive(&[self.name.symbol()]);
+        let ctx = &mut ctx.derive(self.name.symbol());
 
         if let Some(module) = &self.part {
             for top_level in &module.top_levels {
@@ -155,6 +191,7 @@ impl Declare for SumDecl {
                 constructor.name.symbol(),
                 Item {
                     visibility: namespace::Visibility::Public,
+                    span: constructor.name.0.value.range.clone(),
                     item: Value::Constructor(ctx.qualified_name(constructor.name.symbol())),
                 },
             );
@@ -170,6 +207,7 @@ impl Declare for RecordDecl {
                 field.name.symbol(),
                 Item {
                     visibility: namespace::Visibility::Public,
+                    span: field.name.0.value.range.clone(),
                     item: Value::Field(ctx.qualified_name(field.name.symbol())),
                 },
             );
@@ -194,11 +232,12 @@ impl Declare for TypeDecl {
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
+                span: self.name.0.value.range.clone(),
                 item: ctx.qualified_name(self.name.symbol()),
             },
         );
 
-        let ctx = &mut ctx.derive(&[self.name.symbol()]);
+        let ctx = &mut ctx.derive(self.name.symbol());
 
         if let Some(some) = &self.def {
             some.1.declare(ctx);
@@ -213,6 +252,7 @@ impl Declare for LetDecl {
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
+                span: self.name.0.value.range.clone(),
                 item: Value::Function(ctx.qualified_name(self.name.symbol())),
             },
         );
@@ -244,6 +284,65 @@ impl Declare for Program {
     fn declare(&self, ctx: &mut Context) {
         for top_level in &self.top_levels {
             top_level.declare(ctx);
+        }
+    }
+}
+
+pub trait ImportResolve {
+    fn resolve_imports(&self, ctx: &mut Context);
+}
+
+impl ImportResolve for ModuleDecl {
+    fn resolve_imports(&self, ctx: &mut Context) {
+        let ctx = &mut ctx.derive(self.name.symbol());
+
+        if let Some(module) = &self.part {
+            for top_level in &module.top_levels {
+                top_level.0.resolve_imports(ctx);
+            }
+        }
+    }
+}
+
+impl ImportResolve for UseDecl {
+    fn resolve_imports(&self, ctx: &mut Context) {
+        let vec: Vec<_> = (&self.path).into();
+
+        let Some(sub_tree) = ctx.module_tree.find(&vec) else {
+            return ctx.report(ResolverError {
+                span: self.path.span.clone(),
+                kind: ResolverErrorKind::NotFound(vec),
+            });
+        };
+
+        if let Some(alias) = &self.alias {
+            ctx.add_value(
+                alias.alias.0.value.range.clone(),
+                alias.alias.symbol(),
+                Item {
+                    visibility: namespace::Visibility::Public,
+                    span: alias.alias.0.value.range.clone(),
+                    item: Value::Module(sub_tree.id),
+                },
+            )
+        } else {
+            ctx.merge(sub_tree.namespace.clone());
+        }
+    }
+}
+
+impl ImportResolve for TopLevel {
+    fn resolve_imports(&self, ctx: &mut Context) {
+        if let TopLevel::Use(use_) = self {
+            use_.resolve_imports(ctx);
+        }
+    }
+}
+
+impl ImportResolve for Program {
+    fn resolve_imports(&self, ctx: &mut Context) {
+        for top_level in &self.top_levels {
+            top_level.resolve_imports(ctx);
         }
     }
 }
