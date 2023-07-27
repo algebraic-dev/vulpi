@@ -4,7 +4,6 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
-use vulpi_macros::Show;
 use vulpi_show::{Show, TreeDisplay};
 
 use crate::namespace::{ModuleId, Namespace};
