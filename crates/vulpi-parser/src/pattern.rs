@@ -71,7 +71,7 @@ impl<'a> Parser<'a> {
             let pipe = self.bump();
             let right = self.pattern()?;
             Ok(Box::new(Spanned {
-                range: left.range.clone().mix(right.range.clone()),
+                span: left.span.clone().mix(right.span.clone()),
                 data: PatternKind::Or(PatOr { left, pipe, right }),
             }))
         } else {

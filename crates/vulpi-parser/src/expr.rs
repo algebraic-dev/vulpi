@@ -129,9 +129,9 @@ impl<'a> Parser<'a> {
         if args.is_empty() {
             Ok(func)
         } else {
-            let range = func.range.clone().mix(args.last().unwrap().range.clone());
+            let range = func.span.clone().mix(args.last().unwrap().span.clone());
             Ok(Box::new(Spanned {
-                range,
+                span: range,
                 data: ExprKind::Application(ApplicationExpr { func, args }),
             }))
         }
@@ -150,10 +150,10 @@ impl<'a> Parser<'a> {
 
             let right = self.expr_binary(upper)?;
 
-            let range = left.range.clone().mix(right.range.clone());
+            let range = left.span.clone().mix(right.span.clone());
 
             left = Box::new(Spanned {
-                range,
+                span: range,
                 data: ExprKind::Binary(BinaryExpr { left, op, right }),
             });
         }
@@ -186,7 +186,7 @@ impl<'a> Parser<'a> {
             let colon = self.bump();
             let right = self.typ()?;
             Ok(Box::new(Spanned {
-                range: left.range.clone().mix(right.range.clone()),
+                span: left.span.clone().mix(right.span.clone()),
                 data: ExprKind::Annotation(AnnotationExpr {
                     expr: left,
                     colon,
@@ -194,10 +194,10 @@ impl<'a> Parser<'a> {
                 }),
             }))
         } else if self.at(TokenData::LBrace) {
-            let left_range = left.range.clone();
+            let left_range = left.span.clone();
             let right = self.spanned(|this| this.record_update(left))?;
             Ok(Box::new(Spanned {
-                range: left_range.mix(right.range.clone()),
+                span: left_range.mix(right.span.clone()),
                 data: ExprKind::RecordUpdate(right.data),
             }))
         } else {
@@ -208,9 +208,9 @@ impl<'a> Parser<'a> {
     pub fn expr_do(&mut self) -> Result<Box<Expr>> {
         let do_ = self.expect(TokenData::Do)?;
         let statements = self.block(Self::statement)?;
-        let range = self.with_span(do_.value.range.clone());
+        let range = self.with_span(do_.value.span.clone());
         Ok(Box::new(Spanned {
-            range,
+            span: range,
             data: ExprKind::Do(DoExpr {
                 do_,
                 block: Block { statements },
@@ -223,9 +223,9 @@ impl<'a> Parser<'a> {
         let pattern = self.many(Self::pattern)?;
         let arrow = self.expect(TokenData::FatArrow)?;
         let expr = self.expr()?;
-        let range = self.with_span(lambda.value.range.clone());
+        let range = self.with_span(lambda.value.span.clone());
         Ok(Box::new(Spanned {
-            range,
+            span: range,
             data: ExprKind::Lambda(LambdaExpr {
                 lambda,
                 patterns: pattern,
@@ -240,9 +240,9 @@ impl<'a> Parser<'a> {
         if self.at(TokenData::Dot) {
             let dot = self.bump();
             let field = self.lower()?;
-            let range = self.with_span(left.range.clone());
+            let range = self.with_span(left.span.clone());
             Ok(Box::new(Spanned {
-                range,
+                span: range,
                 data: ExprKind::Acessor(ProjectionExpr {
                     expr: left,
                     dot,
@@ -262,10 +262,10 @@ impl<'a> Parser<'a> {
         let in_ = self.expect(TokenData::In)?;
         let body = self.expr()?;
 
-        let range = self.with_span(let_.value.range.clone());
+        let range = self.with_span(let_.value.span.clone());
 
         Ok(Box::new(Spanned {
-            range,
+            span: range,
             data: ExprKind::Let(LetExpr {
                 let_,
                 pattern,
@@ -305,10 +305,10 @@ impl<'a> Parser<'a> {
 
         let cases = self.block(Self::pattern_arm)?.into_iter().collect();
 
-        let range = self.with_span(when.value.range.clone());
+        let range = self.with_span(when.value.span.clone());
 
         Ok(Box::new(Spanned {
-            range,
+            span: range,
             data: ExprKind::When(WhenExpr {
                 when,
                 scrutinee,
@@ -326,10 +326,10 @@ impl<'a> Parser<'a> {
         let else_ = self.expect(TokenData::Else)?;
         let else_expr = self.expr()?;
 
-        let range = self.with_span(if_.value.range.clone());
+        let range = self.with_span(if_.value.span.clone());
 
         Ok(Box::new(Spanned {
-            range,
+            span: range,
             data: ExprKind::If(IfExpr {
                 if_,
                 cond,
@@ -344,9 +344,9 @@ impl<'a> Parser<'a> {
     pub fn cases_expr(&mut self) -> Result<Box<Expr>> {
         let cases = self.expect(TokenData::Cases)?;
         let arms = self.block(Self::pattern_arm)?;
-        let range = self.with_span(cases.value.range.clone());
+        let range = self.with_span(cases.value.span.clone());
         Ok(Box::new(Spanned {
-            range,
+            span: range,
             data: ExprKind::Cases(CasesExpr { cases, arms }),
         }))
     }
@@ -357,10 +357,10 @@ impl<'a> Parser<'a> {
         let with = self.expect(TokenData::With)?;
         let handler = self.expr()?;
 
-        let range = self.with_span(handle.value.range.clone());
+        let range = self.with_span(handle.value.span.clone());
 
         Ok(Box::new(Spanned {
-            range,
+            span: range,
             data: ExprKind::Handler(HandlerExpr {
                 handle,
                 expr,
@@ -388,9 +388,9 @@ impl<'a> Parser<'a> {
         if self.at(TokenData::PipeRight) {
             let pipe_right = self.bump();
             let right = self.expr()?;
-            let range = self.with_span(left.range.clone());
+            let range = self.with_span(left.span.clone());
             Ok(Box::new(Spanned {
-                range,
+                span: range,
                 data: ExprKind::Binary(BinaryExpr {
                     left,
                     op: Operator::Pipe(pipe_right),

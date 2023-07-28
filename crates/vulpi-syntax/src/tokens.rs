@@ -114,6 +114,10 @@ impl Token {
     pub fn data(&self) -> String {
         self.value.data.get()
     }
+
+    pub fn symbol(&self) -> Symbol {
+        self.value.data.clone()
+    }
 }
 
 impl Debug for Token {

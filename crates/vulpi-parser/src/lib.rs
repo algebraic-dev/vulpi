@@ -62,7 +62,7 @@ impl<'a> Parser<'a> {
         std::mem::swap(&mut self.current, &mut self.next);
         std::mem::swap(&mut ret, &mut self.next);
 
-        self.last_pos = ret.value.range.clone();
+        self.last_pos = ret.value.span.clone();
 
         ret
     }
@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
     fn unexpected_err(&mut self) -> ParserError {
         error::ParserError::UnexpectedToken(
             Box::new(self.peek().clone()),
-            self.peek().value.range.clone(),
+            self.peek().value.span.clone(),
         )
     }
 
@@ -162,7 +162,7 @@ impl<'a> Parser<'a> {
 
     /// Returns the current span.
     pub fn span(&self) -> Span {
-        self.peek().value.range.clone()
+        self.peek().value.span.clone()
     }
 
     /// Returns the current token kind.

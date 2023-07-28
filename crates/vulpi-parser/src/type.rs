@@ -1,7 +1,7 @@
 use vulpi_location::Spanned;
 use vulpi_syntax::concrete::{
     r#type::*,
-    tree::{Kind, KindKind},
+    tree::{Kind, KindType},
     Lower,
 };
 use vulpi_syntax::tokens::TokenData;
@@ -9,10 +9,10 @@ use vulpi_syntax::tokens::TokenData;
 use crate::{Parser, Result};
 
 impl<'a> Parser<'a> {
-    fn kind_atom_raw(&mut self) -> Result<KindKind> {
+    fn kind_atom_raw(&mut self) -> Result<KindType> {
         match self.token() {
-            TokenData::Star => Ok(KindKind::Star(self.bump())),
-            TokenData::LPar => Ok(KindKind::Parenthesis(self.parenthesis(Self::kind)?)),
+            TokenData::Star => Ok(KindType::Star(self.bump())),
+            TokenData::LPar => Ok(KindType::Parenthesis(self.parenthesis(Self::kind)?)),
             _ => self.unexpected(),
         }
     }
@@ -29,8 +29,8 @@ impl<'a> Parser<'a> {
             let right = self.kind()?;
 
             Ok(Box::new(Spanned {
-                range: left.range.clone().mix(right.range.clone()),
-                data: KindKind::Arrow(left, arrow, right),
+                span: left.span.clone().mix(right.span.clone()),
+                data: KindType::Arrow(left, arrow, right),
             }))
         } else {
             Ok(left)
@@ -106,11 +106,11 @@ impl<'a> Parser<'a> {
         if args.is_empty() {
             Ok(func)
         } else {
-            let start = func.range.clone();
-            let end = args.last().unwrap().range.clone();
+            let start = func.span.clone();
+            let end = args.last().unwrap().span.clone();
 
             Ok(Box::new(Spanned {
-                range: start.mix(end),
+                span: start.mix(end),
                 data: TypeKind::Application(TypeApplication { func, args }),
             }))
         }
@@ -131,7 +131,7 @@ impl<'a> Parser<'a> {
             let right = self.type_arrow()?;
 
             Ok(Box::new(Spanned {
-                range: left.range.clone().mix(right.range.clone()),
+                span: left.span.clone().mix(right.span.clone()),
                 data: TypeKind::Arrow(TypeArrow {
                     left,
                     arrow,
