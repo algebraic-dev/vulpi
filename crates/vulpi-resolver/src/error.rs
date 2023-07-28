@@ -5,6 +5,12 @@ use vulpi_report::IntoDiagnostic;
 pub enum ResolverErrorKind {
     Redeclarated(Symbol),
     NotFound(Vec<Symbol>),
+    InvalidPath(Vec<Symbol>),
+    IsAModule,
+    ExpectedConstructor,
+    ExpectedRecordType,
+    ExpectedEffect,
+    ExpectedFunction,
 }
 
 pub struct ResolverError {
@@ -16,13 +22,23 @@ impl IntoDiagnostic for ResolverError {
     fn message(&self) -> vulpi_report::Text {
         match &self.kind {
             ResolverErrorKind::Redeclarated(name) => {
-                format!("Redeclarated name: {}", name.get()).into()
+                format!("redeclarated name: {}", name.get()).into()
             }
             ResolverErrorKind::NotFound(name) => format!(
                 "name not found: {}",
                 name.iter().map(|s| s.get()).collect::<Vec<_>>().join(".")
             )
             .into(),
+            ResolverErrorKind::InvalidPath(name) => format!(
+                "invalid path: {}",
+                name.iter().map(|s| s.get()).collect::<Vec<_>>().join(".")
+            )
+            .into(),
+            ResolverErrorKind::IsAModule => "is a module".into(),
+            ResolverErrorKind::ExpectedConstructor => "expected constructor".into(),
+            ResolverErrorKind::ExpectedEffect => "expected effect".into(),
+            ResolverErrorKind::ExpectedFunction => "expected function".into(),
+            ResolverErrorKind::ExpectedRecordType => "expected record type".into(),
         }
     }
 

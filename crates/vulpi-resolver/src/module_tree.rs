@@ -6,28 +6,25 @@ use std::collections::HashMap;
 use vulpi_intern::Symbol;
 use vulpi_show::{Show, TreeDisplay};
 
-use crate::namespace::{ModuleId, Namespace};
+use crate::namespace::ModuleId;
 
 /// A tree for modules. It starts with a single root module and then it can have multiple children
 /// modules.
 pub struct ModuleTree {
     pub id: ModuleId,
-    pub namespace: Namespace,
     pub modules: HashMap<Symbol, ModuleTree>,
 }
 
 impl Show for ModuleTree {
     fn show(&self) -> vulpi_show::TreeDisplay {
         let mut display = vulpi_show::TreeDisplay::label(&format!("ModuleTree: {}", self.id.0));
-
-        let namespace = self.namespace.show();
         let child = TreeDisplay::label("child");
 
         for (name, module) in &self.modules {
             display = display.with(TreeDisplay::label(&name.get()).with(module.show()));
         }
 
-        display.with(namespace).with(child)
+        display.with(child)
     }
 }
 
@@ -35,7 +32,6 @@ impl ModuleTree {
     pub fn new(id: ModuleId) -> Self {
         Self {
             id,
-            namespace: Namespace::default(),
             modules: HashMap::new(),
         }
     }

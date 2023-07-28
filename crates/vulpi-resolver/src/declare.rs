@@ -4,60 +4,61 @@
 //! resolution phase that will solve all the imports and then return another [Solver] that is the
 //! last one.
 
-use std::{cell::RefCell, rc::Rc};
+use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::{Diagnostic, Report};
-use vulpi_syntax::concrete::tree::*;
+use vulpi_syntax::{concrete::tree::*, r#abstract::Qualified};
 
 use crate::{
     error::{ResolverError, ResolverErrorKind},
     module_tree::ModuleTree,
-    namespace::{self, Item, ModuleId, Qualified, Value},
+    namespace::{self, Item, ModuleId, Namespace, TypeValue, Value},
 };
-
-/// A shared counter for the module IDs.
-type Counter = Rc<RefCell<usize>>;
 
 pub struct Context<'a> {
     pub reporter: Report,
     pub module_tree: &'a mut ModuleTree,
+    pub namespaces: &'a mut Vec<namespace::Namespace>,
     pub name: Vec<Symbol>,
-    pub counter: Counter,
 }
 
 impl<'a> Context<'a> {
-    pub fn new(reporter: Report, module_tree: &'a mut ModuleTree) -> Self {
+    pub fn new(
+        reporter: Report,
+        module_tree: &'a mut ModuleTree,
+        namespaces: &'a mut Vec<namespace::Namespace>,
+    ) -> Self {
         Self {
             reporter,
             module_tree,
+            namespaces,
             name: Vec::new(),
-            counter: Rc::new(RefCell::new(1)),
         }
     }
 
     fn new_with_counter(
         reporter: Report,
         module_tree: &'a mut ModuleTree,
-        counter: Counter,
+        namespaces: &'a mut Vec<namespace::Namespace>,
         name: Vec<Symbol>,
     ) -> Self {
         Self {
             reporter,
             module_tree,
+            namespaces,
             name,
-            counter,
         }
     }
 
-    fn report(&mut self, error: crate::error::ResolverError) {
+    pub fn report(&self, error: crate::error::ResolverError) {
         self.reporter.report(Diagnostic::new(error));
     }
 
     fn derive(&mut self, new_name: Symbol) -> Context {
-        let id = self.genenerate_id();
-        self.derive_with_module_id(new_name, id)
+        let id = self.namespaces.len();
+        self.derive_with_module_id(new_name, ModuleId(id))
     }
 
     fn derive_with_module_id(&mut self, new_name: Symbol, id: ModuleId) -> Context {
@@ -65,37 +66,30 @@ impl<'a> Context<'a> {
         name.push(new_name);
 
         self.module_tree.add(&name, id).unwrap();
+        self.namespaces.push(namespace::Namespace::default());
 
         Context::new_with_counter(
             self.reporter.clone(),
             self.module_tree,
-            self.counter.clone(),
+            self.namespaces,
             name,
         )
     }
 
     fn genenerate_id(&mut self) -> ModuleId {
-        let mut counter = self.counter.borrow_mut();
-        let id = *counter;
-        *counter += 1;
-        ModuleId(id)
+        ModuleId(self.namespaces.len())
     }
 
-    pub fn qualified_name(&self, name: Symbol) -> namespace::Qualified {
-        namespace::Qualified {
-            path: self.module_tree.id,
+    pub fn qualified_name(&self, name: Symbol) -> Qualified {
+        Qualified {
+            path: self.module_tree.find(&self.name).unwrap().id.0,
             name,
         }
     }
 
     pub fn add_value(&mut self, span: Span, name: Symbol, value: Item<Value>) {
-        let old = self
-            .module_tree
-            .find_mut(&self.name)
-            .unwrap()
-            .namespace
-            .values
-            .insert(name.clone(), value);
+        let id = self.module_tree.find_mut(&self.name).unwrap().id;
+        let old = self.namespaces[id.0].values.insert(name.clone(), value);
 
         if old.is_some() {
             self.report(ResolverError {
@@ -105,14 +99,9 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn add_type(&mut self, span: Span, name: Symbol, value: Item<Qualified>) {
-        let old = self
-            .module_tree
-            .find_mut(&self.name)
-            .unwrap()
-            .namespace
-            .types
-            .insert(name.clone(), value);
+    pub fn add_type(&mut self, span: Span, name: Symbol, value: Item<TypeValue>) {
+        let id = self.module_tree.find_mut(&self.name).unwrap().id;
+        let old = self.namespaces[id.0].types.insert(name.clone(), value);
 
         if old.is_some() {
             self.report(ResolverError {
@@ -130,6 +119,56 @@ impl<'a> Context<'a> {
         for (key, value) in namespace.types {
             self.add_type(value.span.clone(), key, value);
         }
+    }
+
+    fn find_val<T: Clone>(
+        &self,
+        span: Span,
+        module: &ModuleId,
+        mut name: &[Symbol],
+        fun: fn(&Namespace) -> &HashMap<Symbol, T>,
+    ) -> Option<T> {
+        let mut module = &self.namespaces[module.0];
+
+        while let Some((head, tail)) = name.split_first() {
+            name = tail;
+            if let Value::Module(id) = &module.values[head].item {
+                module = &self.namespaces[id.0];
+                break;
+            }
+        }
+
+        if name.len() == 1 {
+            fun(module).get(&name[0]).cloned().or_else(|| {
+                self.report(ResolverError {
+                    span,
+                    kind: ResolverErrorKind::NotFound(name.to_vec()),
+                });
+                None
+            })
+        } else if name.is_empty() {
+            self.report(ResolverError {
+                span,
+                kind: ResolverErrorKind::IsAModule,
+            });
+            None
+        } else {
+            self.report(ResolverError {
+                span,
+                kind: ResolverErrorKind::InvalidPath(name.to_vec()),
+            });
+            None
+        }
+    }
+
+    pub(crate) fn find_type(&self, span: Span, name: &[Symbol]) -> Option<Item<TypeValue>> {
+        let current = self.module_tree.find(&self.name).unwrap().id;
+        self.find_val(span, &current, name, |x| &x.types)
+    }
+
+    pub(crate) fn find_value(&self, span: Span, name: &[Symbol]) -> Option<Item<Value>> {
+        let current = self.module_tree.find(&self.name).unwrap().id;
+        self.find_val(span, &current, name, |x| &x.values)
     }
 }
 
@@ -149,12 +188,12 @@ impl From<Visibility> for namespace::Visibility {
 impl Declare for EffectDecl {
     fn declare(&self, ctx: &mut Context) {
         ctx.add_type(
-            self.name.0.value.range.clone(),
+            self.name.0.value.span.clone(),
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
-                span: self.name.0.value.range.clone(),
-                item: ctx.qualified_name(self.name.symbol()),
+                span: self.name.0.value.span.clone(),
+                item: TypeValue::Effect(ctx.qualified_name(self.name.symbol())),
             },
         );
 
@@ -162,11 +201,11 @@ impl Declare for EffectDecl {
 
         for field in &self.fields {
             ctx.add_value(
-                field.0.name.0.value.range.clone(),
+                field.0.name.0.value.span.clone(),
                 field.0.name.symbol(),
                 Item {
                     visibility: field.0.visibility.clone().into(),
-                    span: field.0.name.0.value.range.clone(),
+                    span: field.0.name.0.value.span.clone(),
                     item: Value::Effect(ctx.qualified_name(field.0.name.symbol())),
                 },
             );
@@ -179,11 +218,11 @@ impl Declare for ModuleDecl {
         let id = old_ctx.genenerate_id();
 
         old_ctx.add_value(
-            self.name.0.value.range.clone(),
+            self.name.0.value.span.clone(),
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
-                span: self.name.0.value.range.clone(),
+                span: self.name.0.value.span.clone(),
                 item: Value::Module(id),
             },
         );
@@ -202,11 +241,11 @@ impl Declare for SumDecl {
     fn declare(&self, ctx: &mut Context) {
         for constructor in self.constructors.iter() {
             ctx.add_value(
-                constructor.name.0.value.range.clone(),
+                constructor.name.0.value.span.clone(),
                 constructor.name.symbol(),
                 Item {
                     visibility: namespace::Visibility::Public,
-                    span: constructor.name.0.value.range.clone(),
+                    span: constructor.name.0.value.span.clone(),
                     item: Value::Constructor(ctx.qualified_name(constructor.name.symbol())),
                 },
             );
@@ -218,11 +257,11 @@ impl Declare for RecordDecl {
     fn declare(&self, ctx: &mut Context) {
         for (field, _) in self.fields.iter() {
             ctx.add_value(
-                field.name.0.value.range.clone(),
+                field.name.0.value.span.clone(),
                 field.name.symbol(),
                 Item {
                     visibility: namespace::Visibility::Public,
-                    span: field.name.0.value.range.clone(),
+                    span: field.name.0.value.span.clone(),
                     item: Value::Field(ctx.qualified_name(field.name.symbol())),
                 },
             );
@@ -243,12 +282,23 @@ impl Declare for TypeDef {
 impl Declare for TypeDecl {
     fn declare(&self, ctx: &mut Context) {
         ctx.add_type(
-            self.name.0.value.range.clone(),
+            self.name.0.value.span.clone(),
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
-                span: self.name.0.value.range.clone(),
-                item: ctx.qualified_name(self.name.symbol()),
+                span: self.name.0.value.span.clone(),
+                item: match self.def {
+                    Some((_, TypeDef::Sum(_))) => {
+                        TypeValue::Enum(ctx.qualified_name(self.name.symbol()))
+                    }
+                    Some((_, TypeDef::Record(_))) => {
+                        TypeValue::Record(ctx.qualified_name(self.name.symbol()))
+                    }
+                    Some((_, TypeDef::Synonym(_))) => {
+                        todo!("Synonym types are not ready!")
+                    }
+                    _ => TypeValue::Abstract(ctx.qualified_name(self.name.symbol())),
+                },
             },
         );
 
@@ -263,11 +313,11 @@ impl Declare for TypeDecl {
 impl Declare for LetDecl {
     fn declare(&self, ctx: &mut Context) {
         ctx.add_value(
-            self.name.0.value.range.clone(),
+            self.name.0.value.span.clone(),
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
-                span: self.name.0.value.range.clone(),
+                span: self.name.0.value.span.clone(),
                 item: Value::Function(ctx.qualified_name(self.name.symbol())),
             },
         );
@@ -320,16 +370,17 @@ impl ImportResolve for UseDecl {
 
         if let Some(alias) = &self.alias {
             ctx.add_value(
-                alias.alias.0.value.range.clone(),
+                alias.alias.0.value.span.clone(),
                 alias.alias.symbol(),
                 Item {
                     visibility: namespace::Visibility::Public,
-                    span: alias.alias.0.value.range.clone(),
+                    span: alias.alias.0.value.span.clone(),
                     item: Value::Module(sub_tree.id),
                 },
             )
         } else {
-            ctx.merge(sub_tree.namespace.clone());
+            let namespace = ctx.namespaces[sub_tree.id.0].clone();
+            ctx.merge(namespace);
         }
     }
 }

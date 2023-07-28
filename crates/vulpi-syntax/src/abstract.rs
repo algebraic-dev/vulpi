@@ -4,15 +4,16 @@ use vulpi_macros::Show;
 
 use vulpi_show::{Show, TreeDisplay};
 
+#[derive(Clone, Debug)]
 pub struct Qualified {
-    pub path: Symbol,
+    pub path: usize,
     pub name: Symbol,
 }
 
 impl Show for Qualified {
     fn show(&self) -> TreeDisplay {
         TreeDisplay::label("Qualified")
-            .with(TreeDisplay::label(&self.path.get()))
+            .with(TreeDisplay::label(&self.path.to_string()))
             .with(TreeDisplay::label(&self.name.get()))
     }
 }
@@ -66,6 +67,8 @@ pub enum TypeKind {
     TypeVariable(Symbol),
     Type(Qualified),
     Unit,
+
+    Error,
 }
 
 pub type Type = Box<Spanned<TypeKind>>;
@@ -126,7 +129,7 @@ pub struct PatApplication {
 }
 
 #[derive(Show)]
-pub struct PatEffectApp {
+pub struct PatEffect {
     pub func: Qualified,
     pub args: Vec<Pattern>,
 }
@@ -139,7 +142,9 @@ pub enum PatternKind {
     Annotation(PatAscription),
     Or(PatOr),
     Application(PatApplication),
-    EffectApp(PatEffectApp),
+    Effect(PatEffect),
+
+    Error,
 }
 
 pub type Pattern = Box<Spanned<PatternKind>>;
@@ -231,6 +236,7 @@ pub enum ExprKind {
     Variable(Symbol),
     Constructor(Qualified),
     Function(Qualified),
+    Effect(Qualified),
 
     Projection(ProjectionExpr),
     Let(LetExpr),
@@ -245,6 +251,8 @@ pub enum ExprKind {
     Cases(CasesExpr),
     Tuple(Tuple),
     Unit,
+
+    Error,
 }
 
 pub type Expr = Box<Spanned<ExprKind>>;

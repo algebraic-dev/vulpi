@@ -1,8 +1,9 @@
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_macros::Show;
+use vulpi_syntax::r#abstract::Qualified;
 
 /// An identifier for a module.
 #[derive(Clone, Copy, Show, Debug)]
@@ -24,21 +25,59 @@ pub enum Value {
     Field(Qualified),
 }
 
+#[derive(Clone)]
+pub enum TypeValue {
+    Enum(Qualified),
+    Effect(Qualified),
+    Record(Qualified),
+    Abstract(Qualified),
+}
+
+impl TypeValue {
+    pub fn qualified(&self) -> &Qualified {
+        match self {
+            TypeValue::Enum(qualified) => qualified,
+            TypeValue::Effect(qualified) => qualified,
+            TypeValue::Record(qualified) => qualified,
+            TypeValue::Abstract(qualified) => qualified,
+        }
+    }
+}
+
+impl vulpi_show::Show for TypeValue {
+    fn show(&self) -> vulpi_show::TreeDisplay {
+        match self {
+            TypeValue::Enum(qualified) => {
+                vulpi_show::TreeDisplay::label(&format!("Enum: {:?}", qualified))
+            }
+            TypeValue::Effect(qualified) => {
+                vulpi_show::TreeDisplay::label(&format!("Effect: {:?}", qualified))
+            }
+            TypeValue::Record(qualified) => {
+                vulpi_show::TreeDisplay::label(&format!("Record: {:?}", qualified))
+            }
+            TypeValue::Abstract(qualified) => {
+                vulpi_show::TreeDisplay::label(&format!("Abstract: {:?}", qualified))
+            }
+        }
+    }
+}
+
 impl vulpi_show::Show for Value {
     fn show(&self) -> vulpi_show::TreeDisplay {
         match self {
             Value::Module(id) => vulpi_show::TreeDisplay::label(&format!("Module: {}", id.0)),
             Value::Function(qualified) => {
-                vulpi_show::TreeDisplay::label(&format!("Function: {}", qualified))
+                vulpi_show::TreeDisplay::label(&format!("Function: {:?}", qualified))
             }
             Value::Effect(qualified) => {
-                vulpi_show::TreeDisplay::label(&format!("Effect: {}", qualified))
+                vulpi_show::TreeDisplay::label(&format!("Effect: {:?}", qualified))
             }
             Value::Constructor(qualified) => {
-                vulpi_show::TreeDisplay::label(&format!("Constructor: {}", qualified))
+                vulpi_show::TreeDisplay::label(&format!("Constructor: {:?}", qualified))
             }
             Value::Field(qualified) => {
-                vulpi_show::TreeDisplay::label(&format!("Field: {}", qualified))
+                vulpi_show::TreeDisplay::label(&format!("Field: {:?}", qualified))
             }
         }
     }
@@ -57,29 +96,11 @@ impl<T: vulpi_show::Show> vulpi_show::Show for Item<T> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Qualified {
-    pub path: ModuleId,
-    pub name: Symbol,
-}
-
-impl Display for Qualified {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.path.0, self.name.get())
-    }
-}
-
-impl vulpi_show::Show for Qualified {
-    fn show(&self) -> vulpi_show::TreeDisplay {
-        vulpi_show::TreeDisplay::label(&format!("Qualified: {}", self))
-    }
-}
-
 /// A [Namespace] is a bunch of [Name] mapped to [Qualified] definitions. It's used in the first
 /// step of the resolution process to map all the names to their definitions. After that, it's
 /// thrown away and a [] is created.
 #[derive(Default, Show, Clone)]
 pub struct Namespace {
     pub values: HashMap<Symbol, Item<Value>>,
-    pub types: HashMap<Symbol, Item<Qualified>>,
+    pub types: HashMap<Symbol, Item<TypeValue>>,
 }
