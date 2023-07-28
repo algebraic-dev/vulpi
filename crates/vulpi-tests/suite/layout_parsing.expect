@@ -1,0 +1,19 @@
+└ModuleTree: 0
+   ├Namespace
+   │  ├values
+   │  │  └HashMap
+   │  │     ├Entry
+   │  │     │  ├Symbol: add1
+   │  │     │  └Private 
+   │  │     │     └Function: 0.add1
+   │  │     ├Entry
+   │  │     │  ├Symbol: test
+   │  │     │  └Private 
+   │  │     │     └Function: 0.test
+   │  │     └Entry
+   │  │        ├Symbol: main
+   │  │        └Private 
+   │  │           └Function: 0.main
+   │  └types
+   │     └HashMap
+   └child

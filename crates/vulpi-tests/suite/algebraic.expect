@@ -1,0 +1,8 @@
+suite/algebraic.vp:9:9: unexpected token 'Colon'
+
+    7 | 
+    8 | type Is a = 
+    9 |     | T : Is True
+      |         ^
+   10 |     | F : Is False
+

@@ -123,6 +123,26 @@ pub struct ModuleInline {
     pub top_levels: Vec<(TopLevel, Option<Token>)>,
 }
 
+impl ModuleInline {
+    pub fn modules(&self) -> impl Iterator<Item = &ModuleDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match &top_level.0 {
+                TopLevel::Module(module) => Some(&**module),
+                _ => None,
+            })
+    }
+
+    pub fn uses(&self) -> impl Iterator<Item = &UseDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match &top_level.0 {
+                TopLevel::Use(use_) => Some(&**use_),
+                _ => None,
+            })
+    }
+}
+
 #[derive(Show)]
 pub struct ModuleDecl {
     pub visibility: Visibility,
@@ -176,20 +196,11 @@ impl Program {
             })
     }
 
-    pub fn types(&self) -> impl Iterator<Item = &TypeDecl> {
+    pub fn uses(&self) -> impl Iterator<Item = &UseDecl> {
         self.top_levels
             .iter()
             .filter_map(|top_level| match top_level {
-                TopLevel::Type(type_) => Some(&**type_),
-                _ => None,
-            })
-    }
-
-    pub fn effects(&self) -> impl Iterator<Item = &EffectDecl> {
-        self.top_levels
-            .iter()
-            .filter_map(|top_level| match top_level {
-                TopLevel::Effect(effect) => Some(&**effect),
+                TopLevel::Use(use_) => Some(&**use_),
                 _ => None,
             })
     }

@@ -1,0 +1,43 @@
+└ModuleTree: 0
+   ├MyOwn
+   │  └ModuleTree: 1
+   │     ├Result
+   │     │  └ModuleTree: 2
+   │     │     ├Namespace
+   │     │     │  ├values
+   │     │     │  │  └HashMap
+   │     │     │  │     ├Entry
+   │     │     │  │     │  ├Symbol: Ok
+   │     │     │  │     │  └Public 
+   │     │     │  │     │     └Constructor: 0.Ok
+   │     │     │  │     └Entry
+   │     │     │  │        ├Symbol: Err
+   │     │     │  │        └Public 
+   │     │     │  │           └Constructor: 0.Err
+   │     │     │  └types
+   │     │     │     └HashMap
+   │     │     └child
+   │     ├Namespace
+   │     │  ├values
+   │     │  │  └HashMap
+   │     │  └types
+   │     │     └HashMap
+   │     │        └Entry
+   │     │           ├Symbol: Result
+   │     │           └Private 
+   │     │              └Qualified: 0.Result
+   │     └child
+   ├Namespace
+   │  ├values
+   │  │  └HashMap
+   │  │     ├Entry
+   │  │     │  ├Symbol: main
+   │  │     │  └Private 
+   │  │     │     └Function: 0.main
+   │  │     └Entry
+   │  │        ├Symbol: MyOwn
+   │  │        └Private 
+   │  │           └Module: 1
+   │  └types
+   │     └HashMap
+   └child

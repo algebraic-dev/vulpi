@@ -14,3 +14,4 @@ vulpi-parser = { path = "../vulpi-parser" }
 vulpi-report = { path = "../vulpi-report" }
 vulpi-show = { path = "../vulpi-show" }
 vulpi-vfs = { path = "../vulpi-vfs" }
+vulpi-resolver = { path = "../vulpi-resolver" }

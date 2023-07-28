@@ -1,0 +1,15 @@
+└ModuleTree: 0
+   ├Namespace
+   │  ├values
+   │  │  └HashMap
+   │  │     ├Entry
+   │  │     │  ├Symbol: inc
+   │  │     │  └Private 
+   │  │     │     └Function: 0.inc
+   │  │     └Entry
+   │  │        ├Symbol: main
+   │  │        └Private 
+   │  │           └Function: 0.main
+   │  └types
+   │     └HashMap
+   └child

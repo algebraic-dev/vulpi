@@ -57,7 +57,10 @@ impl<'a> Context<'a> {
 
     fn derive(&mut self, new_name: Symbol) -> Context {
         let id = self.genenerate_id();
+        self.derive_with_module_id(new_name, id)
+    }
 
+    fn derive_with_module_id(&mut self, new_name: Symbol, id: ModuleId) -> Context {
         let mut name = self.name.clone();
         name.push(new_name);
 
@@ -172,8 +175,20 @@ impl Declare for EffectDecl {
 }
 
 impl Declare for ModuleDecl {
-    fn declare(&self, ctx: &mut Context) {
-        let ctx = &mut ctx.derive(self.name.symbol());
+    fn declare(&self, old_ctx: &mut Context) {
+        let id = old_ctx.genenerate_id();
+
+        old_ctx.add_value(
+            self.name.0.value.range.clone(),
+            self.name.symbol(),
+            Item {
+                visibility: self.visibility.clone().into(),
+                span: self.name.0.value.range.clone(),
+                item: Value::Module(id),
+            },
+        );
+
+        let ctx = &mut &mut old_ctx.derive_with_module_id(self.name.symbol(), id);
 
         if let Some(module) = &self.part {
             for top_level in &module.top_levels {
@@ -292,18 +307,6 @@ pub trait ImportResolve {
     fn resolve_imports(&self, ctx: &mut Context);
 }
 
-impl ImportResolve for ModuleDecl {
-    fn resolve_imports(&self, ctx: &mut Context) {
-        let ctx = &mut ctx.derive(self.name.symbol());
-
-        if let Some(module) = &self.part {
-            for top_level in &module.top_levels {
-                top_level.0.resolve_imports(ctx);
-            }
-        }
-    }
-}
-
 impl ImportResolve for UseDecl {
     fn resolve_imports(&self, ctx: &mut Context) {
         let vec: Vec<_> = (&self.path).into();
@@ -339,9 +342,29 @@ impl ImportResolve for TopLevel {
     }
 }
 
+impl ImportResolve for ModuleDecl {
+    fn resolve_imports(&self, ctx: &mut Context) {
+        let ctx = &mut ctx.derive(self.name.symbol());
+
+        if let Some(module) = &self.part {
+            for top_level in module.modules() {
+                top_level.resolve_imports(ctx);
+            }
+
+            for top_level in module.uses() {
+                top_level.resolve_imports(ctx);
+            }
+        }
+    }
+}
+
 impl ImportResolve for Program {
     fn resolve_imports(&self, ctx: &mut Context) {
-        for top_level in &self.top_levels {
+        for top_level in self.modules() {
+            top_level.resolve_imports(ctx);
+        }
+
+        for top_level in self.uses() {
             top_level.resolve_imports(ctx);
         }
     }
