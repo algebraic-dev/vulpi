@@ -3,11 +3,10 @@ use error::{ResolverError, ResolverErrorKind};
 use namespace::{Item, TypeValue, Value};
 use vulpi_intern::Symbol;
 use vulpi_location::{Span, Spanned};
-use vulpi_syntax::{
-    concrete::{tree::*, Lower, Path, Upper},
-    r#abstract as abs,
-    r#abstract::Qualified,
-};
+
+use vulpi_syntax::concrete::{tree::*, Lower, Path, Upper};
+use vulpi_syntax::r#abstract as abs;
+use vulpi_syntax::r#abstract::Qualified;
 
 pub mod declare;
 pub mod error;
@@ -17,13 +16,13 @@ pub mod namespace;
 pub trait Resolve {
     type Output;
 
-    fn resolve(self, ctx: &Context) -> Self::Output;
+    fn resolve(self, ctx: &mut Context) -> Self::Output;
 }
 
 impl<T: Resolve> Resolve for Vec<T> {
     type Output = Vec<T::Output>;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         self.into_iter().map(|x| x.resolve(ctx)).collect()
     }
 }
@@ -31,7 +30,7 @@ impl<T: Resolve> Resolve for Vec<T> {
 impl<T: Resolve> Resolve for Spanned<T> {
     type Output = Spanned<T::Output>;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         Spanned::new(self.data.resolve(ctx), self.span)
     }
 }
@@ -39,7 +38,7 @@ impl<T: Resolve> Resolve for Spanned<T> {
 impl<T: Resolve> Resolve for Box<T> {
     type Output = Box<T::Output>;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         Box::new((*self).resolve(ctx))
     }
 }
@@ -47,7 +46,7 @@ impl<T: Resolve> Resolve for Box<T> {
 impl<T: Resolve> Resolve for Option<T> {
     type Output = Option<T::Output>;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         self.map(|x| x.resolve(ctx))
     }
 }
@@ -55,7 +54,7 @@ impl<T: Resolve> Resolve for Option<T> {
 impl Resolve for KindType {
     type Output = abs::KindType;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
             KindType::Star(_) => abs::KindType::Star,
             KindType::Parenthesis(n) => n.data.resolve(ctx).data,
@@ -69,7 +68,7 @@ impl Resolve for KindType {
 impl Resolve for Effects {
     type Output = abs::Effects;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::Effects {
             effects: self.effects.into_iter().map(|x| x.0.resolve(ctx)).collect(),
         }
@@ -79,7 +78,7 @@ impl Resolve for Effects {
 impl Resolve for TypeArrow {
     type Output = abs::PiType;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::PiType {
             left: self.left.resolve(ctx),
             effects: self.effects.resolve(ctx),
@@ -91,7 +90,7 @@ impl Resolve for TypeArrow {
 impl Resolve for TypeApplication {
     type Output = abs::TypeApplication;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::TypeApplication {
             func: self.func.resolve(ctx),
             args: self.args.resolve(ctx),
@@ -102,7 +101,7 @@ impl Resolve for TypeApplication {
 impl Resolve for TypeForall {
     type Output = abs::TypeForall;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::TypeForall {
             params: self.params.resolve(ctx),
             body: self.body.resolve(ctx),
@@ -113,7 +112,7 @@ impl Resolve for TypeForall {
 impl Resolve for TypeKind {
     type Output = abs::TypeKind;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
             TypeKind::Type(n) => {
                 let vec: Vec<_> = (&n).into();
@@ -122,8 +121,8 @@ impl Resolve for TypeKind {
                     None => abs::TypeKind::Error,
                 }
             }
-            TypeKind::Parenthesis(n) => n.data.0.resolve(ctx).data,
             TypeKind::TypeVariable(n) => abs::TypeKind::TypeVariable(n.symbol()),
+            TypeKind::Parenthesis(n) => n.data.0.resolve(ctx).data,
             TypeKind::Arrow(n) => abs::TypeKind::Pi(n.resolve(ctx)),
             TypeKind::Application(n) => abs::TypeKind::Application(n.resolve(ctx)),
             TypeKind::Forall(n) => abs::TypeKind::Forall(n.resolve(ctx)),
@@ -138,7 +137,7 @@ impl Resolve for TypeKind {
 impl Resolve for LiteralKind {
     type Output = abs::LiteralKind;
 
-    fn resolve(self, _: &Context) -> Self::Output {
+    fn resolve(self, _: &mut Context) -> Self::Output {
         match self {
             LiteralKind::String(n) => abs::LiteralKind::String(n.symbol()),
             LiteralKind::Integer(n) => abs::LiteralKind::Integer(n.symbol()),
@@ -152,9 +151,9 @@ impl Resolve for LiteralKind {
 impl Resolve for PatternKind {
     type Output = abs::PatternKind;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
-            PatternKind::Variable(n) => todo!(),
+            PatternKind::Variable(n) => abs::PatternKind::Variable(n.symbol()),
             PatternKind::Constructor(n) => PatternKind::Application(PatApplication {
                 func: n,
                 args: vec![],
@@ -174,7 +173,7 @@ impl Resolve for PatternKind {
 impl Resolve for PatAscription {
     type Output = abs::PatAscription;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::PatAscription {
             left: self.left.resolve(ctx),
             right: self.right.resolve(ctx),
@@ -185,7 +184,7 @@ impl Resolve for PatAscription {
 impl Resolve for PatOr {
     type Output = abs::PatOr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::PatOr {
             left: self.left.resolve(ctx),
             right: self.right.resolve(ctx),
@@ -196,7 +195,7 @@ impl Resolve for PatOr {
 impl Resolve for PatApplication {
     type Output = abs::PatternKind;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         let func: Vec<_> = (&self.func).into();
         let func = match ctx.find_value(self.func.span.clone(), &func) {
             Some(Item {
@@ -225,7 +224,7 @@ impl Resolve for PatApplication {
 impl Resolve for PatEffectApp {
     type Output = abs::PatternKind;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         let func: Vec<_> = (&self.func).into();
         let func = match ctx.find_value(self.func.span.clone(), &func) {
             Some(Item {
@@ -254,7 +253,7 @@ impl Resolve for PatEffectApp {
 impl Resolve for LambdaExpr {
     type Output = abs::LambdaExpr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::LambdaExpr {
             params: self.patterns.resolve(ctx),
             body: self.expr.resolve(ctx),
@@ -265,7 +264,7 @@ impl Resolve for LambdaExpr {
 impl Resolve for ApplicationExpr {
     type Output = abs::ApplicationExpr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::ApplicationExpr {
             app: abs::AppKind::Normal,
             func: self.func.resolve(ctx),
@@ -277,7 +276,7 @@ impl Resolve for ApplicationExpr {
 impl Resolve for ProjectionExpr {
     type Output = abs::ProjectionExpr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::ProjectionExpr {
             expr: self.expr.resolve(ctx),
             field: self.field.symbol(),
@@ -288,7 +287,7 @@ impl Resolve for ProjectionExpr {
 impl Resolve for Operator {
     type Output = abs::Expr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         let (span, name) = match self {
             Operator::Add(token) => (token.value.span, "add"),
             Operator::Sub(token) => (token.value.span, "sub"),
@@ -334,7 +333,7 @@ impl Resolve for Operator {
 impl Resolve for BinaryExpr {
     type Output = abs::ExprKind;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::ExprKind::Application(abs::ApplicationExpr {
             func: self.op.resolve(ctx),
             args: vec![self.left.resolve(ctx), self.right.resolve(ctx)],
@@ -346,7 +345,7 @@ impl Resolve for BinaryExpr {
 impl Resolve for IfExpr {
     type Output = abs::ExprKind;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         let fn_cons = |name| {
             find_constructor_raw(
                 self.if_.value.span.clone(),
@@ -387,7 +386,7 @@ impl Resolve for IfExpr {
 impl Resolve for PatternArm {
     type Output = abs::PatternArm;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::PatternArm {
             pattern: self
                 .patterns
@@ -403,7 +402,7 @@ impl Resolve for PatternArm {
 impl Resolve for WhenExpr {
     type Output = abs::WhenExpr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::WhenExpr {
             scrutinee: self.scrutinee.resolve(ctx),
             arms: self.arms.resolve(ctx),
@@ -414,7 +413,7 @@ impl Resolve for WhenExpr {
 impl Resolve for AnnotationExpr {
     type Output = abs::AnnotationExpr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::AnnotationExpr {
             expr: self.expr.resolve(ctx),
             ty: self.ty.resolve(ctx),
@@ -425,7 +424,7 @@ impl Resolve for AnnotationExpr {
 impl Resolve for LetExpr {
     type Output = abs::LetExpr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::LetExpr {
             pattern: self.pattern.resolve(ctx),
             body: self.body.resolve(ctx),
@@ -437,7 +436,7 @@ impl Resolve for LetExpr {
 impl Resolve for RecordField {
     type Output = (Symbol, abs::Expr);
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         (self.name.symbol(), self.expr.resolve(ctx))
     }
 }
@@ -445,7 +444,7 @@ impl Resolve for RecordField {
 impl Resolve for RecordInstance {
     type Output = abs::ExprKind;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         let vec: Vec<_> = (&self.name).into();
 
         let name = match ctx.find_type(self.name.span.clone(), &vec) {
@@ -473,7 +472,7 @@ impl Resolve for RecordInstance {
 impl Resolve for RecordUpdate {
     type Output = abs::RecordUpdate;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::RecordUpdate {
             expr: self.expr.resolve(ctx),
             fields: self.fields.into_iter().map(|x| x.0.resolve(ctx)).collect(),
@@ -484,7 +483,7 @@ impl Resolve for RecordUpdate {
 impl Resolve for HandlerExpr {
     type Output = abs::HandlerExpr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::HandlerExpr {
             expr: self.expr.resolve(ctx),
             with: self.handler.resolve(ctx),
@@ -495,7 +494,7 @@ impl Resolve for HandlerExpr {
 impl Resolve for CasesExpr {
     type Output = abs::CasesExpr;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::CasesExpr {
             arms: self.arms.resolve(ctx),
         }
@@ -505,7 +504,7 @@ impl Resolve for CasesExpr {
 impl Resolve for Tuple {
     type Output = abs::Tuple;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::Tuple {
             exprs: self.data.into_iter().map(|x| x.0.resolve(ctx)).collect(),
         }
@@ -515,7 +514,7 @@ impl Resolve for Tuple {
 impl Resolve for LetSttm {
     type Output = abs::LetStatement;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::LetStatement {
             pattern: self.pattern.resolve(ctx),
             expr: self.expr.resolve(ctx),
@@ -526,7 +525,7 @@ impl Resolve for LetSttm {
 impl Resolve for StatementKind {
     type Output = abs::StatementKind;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
             StatementKind::Let(x) => abs::StatementKind::Let(x.resolve(ctx)),
             StatementKind::Expr(x) => abs::StatementKind::Expr(x.resolve(ctx)),
@@ -538,7 +537,7 @@ impl Resolve for StatementKind {
 impl Resolve for DoExpr {
     type Output = abs::Block;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::Block {
             statements: self.block.statements.resolve(ctx),
         }
@@ -548,9 +547,9 @@ impl Resolve for DoExpr {
 impl Resolve for ExprKind {
     type Output = abs::ExprKind;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
-            ExprKind::Variable(x) => todo!(),
+            ExprKind::Variable(x) => abs::ExprKind::Variable(x.symbol()),
             ExprKind::Constructor(x) => {
                 find_constructor(x, ctx, abs::ExprKind::Constructor, abs::ExprKind::Error)
             }
@@ -629,7 +628,7 @@ fn find_constructor_raw<T>(
 impl Resolve for Binder {
     type Output = abs::Binder;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::Binder {
             pattern: self.pattern.resolve(ctx),
             ty: self.typ.resolve(ctx),
@@ -640,7 +639,7 @@ impl Resolve for Binder {
 impl Resolve for LetCase {
     type Output = abs::LetCase;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::LetCase {
             pattern: self.arm.resolve(ctx),
         }
@@ -650,7 +649,7 @@ impl Resolve for LetCase {
 impl Resolve for LetMode {
     type Output = abs::LetMode;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
             LetMode::Body(_, expr) => abs::LetMode {
                 cases: vec![abs::LetCase {
@@ -671,7 +670,7 @@ impl Resolve for LetMode {
 impl Resolve for LetDecl {
     type Output = abs::LetDecl;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::LetDecl {
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
@@ -685,7 +684,7 @@ impl Resolve for LetDecl {
 impl Resolve for Constructor {
     type Output = abs::Constructor;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::Constructor {
             name: self.name.symbol(),
             args: self.args.resolve(ctx),
@@ -696,7 +695,7 @@ impl Resolve for Constructor {
 impl Resolve for SumDecl {
     type Output = abs::SumDecl;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::SumDecl {
             constructors: self.constructors.resolve(ctx),
         }
@@ -706,7 +705,7 @@ impl Resolve for SumDecl {
 impl Resolve for Field {
     type Output = (Symbol, abs::Type);
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         (self.name.symbol(), self.ty.resolve(ctx))
     }
 }
@@ -714,7 +713,7 @@ impl Resolve for Field {
 impl Resolve for RecordDecl {
     type Output = abs::RecordDecl;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::RecordDecl {
             fields: self.fields.into_iter().map(|x| x.0.resolve(ctx)).collect(),
         }
@@ -724,7 +723,7 @@ impl Resolve for RecordDecl {
 impl Resolve for TypeDef {
     type Output = abs::TypeDef;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
             TypeDef::Sum(sum) => abs::TypeDef::Sum(sum.resolve(ctx)),
             TypeDef::Record(rec) => abs::TypeDef::Record(rec.resolve(ctx)),
@@ -736,7 +735,7 @@ impl Resolve for TypeDef {
 impl Resolve for TypeDecl {
     type Output = abs::TypeDecl;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::TypeDecl {
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
@@ -753,7 +752,7 @@ impl Resolve for TypeDecl {
 impl Resolve for ModuleInline {
     type Output = Vec<abs::TopLevelDecl>;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         self.top_levels
             .into_iter()
             .filter_map(|x| x.0.resolve(ctx))
@@ -764,7 +763,7 @@ impl Resolve for ModuleInline {
 impl Resolve for ModuleDecl {
     type Output = abs::ModuleDecl;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::ModuleDecl {
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
@@ -776,7 +775,7 @@ impl Resolve for ModuleDecl {
 impl Resolve for Visibility {
     type Output = abs::Visibility;
 
-    fn resolve(self, _: &Context) -> Self::Output {
+    fn resolve(self, _: &mut Context) -> Self::Output {
         match self {
             Visibility::Public(_) => abs::Visibility::Public,
             Visibility::Private => abs::Visibility::Private,
@@ -787,7 +786,7 @@ impl Resolve for Visibility {
 impl Resolve for TypeBinder {
     type Output = abs::TypeBinder;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
             TypeBinder::Implicit(name) => abs::TypeBinder::Implicit(name.symbol()),
             TypeBinder::Explicit(binder) => {
@@ -800,7 +799,7 @@ impl Resolve for TypeBinder {
 impl Resolve for EffectField {
     type Output = abs::EffectField;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::EffectField {
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
@@ -813,7 +812,7 @@ impl Resolve for EffectField {
 impl Resolve for EffectDecl {
     type Output = abs::EffectDecl;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::EffectDecl {
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
@@ -826,7 +825,7 @@ impl Resolve for EffectDecl {
 impl Resolve for TopLevel {
     type Output = Option<abs::TopLevelDecl>;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
             TopLevel::Let(let_) => Some(abs::TopLevelDecl::Let(let_.resolve(ctx))),
             TopLevel::Type(typ) => Some(abs::TopLevelDecl::Type(typ.resolve(ctx))),
@@ -841,7 +840,7 @@ impl Resolve for TopLevel {
 impl Resolve for Program {
     type Output = abs::Module;
 
-    fn resolve(self, ctx: &Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::Module {
             decls: self
                 .top_levels
