@@ -1,0 +1,31 @@
+└ModuleTree: 0
+   ├Bool
+   │  └ModuleTree: 1
+   │     ├Namespace
+   │     │  ├values
+   │     │  │  └HashMap
+   │     │  │     ├Entry
+   │     │  │     │  ├Symbol: False
+   │     │  │     │  └Public 
+   │     │  │     │     └Constructor: 0.False
+   │     │  │     └Entry
+   │     │  │        ├Symbol: True
+   │     │  │        └Public 
+   │     │  │           └Constructor: 0.True
+   │     │  └types
+   │     │     └HashMap
+   │     └child
+   ├Namespace
+   │  ├values
+   │  │  └HashMap
+   │  │     └Entry
+   │  │        ├Symbol: ata
+   │  │        └Private 
+   │  │           └Function: 0.ata
+   │  └types
+   │     └HashMap
+   │        └Entry
+   │           ├Symbol: Bool
+   │           └Private 
+   │              └Qualified: 0.Bool
+   └child

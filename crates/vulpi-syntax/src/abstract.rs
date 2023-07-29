@@ -4,15 +4,16 @@ use vulpi_macros::Show;
 
 use vulpi_show::{Show, TreeDisplay};
 
+#[derive(Clone, Debug)]
 pub struct Qualified {
-    pub path: Symbol,
+    pub path: usize,
     pub name: Symbol,
 }
 
 impl Show for Qualified {
     fn show(&self) -> TreeDisplay {
         TreeDisplay::label("Qualified")
-            .with(TreeDisplay::label(&self.path.get()))
+            .with(TreeDisplay::label(&self.path.to_string()))
             .with(TreeDisplay::label(&self.name.get()))
     }
 }
@@ -66,6 +67,8 @@ pub enum TypeKind {
     TypeVariable(Symbol),
     Type(Qualified),
     Unit,
+
+    Error,
 }
 
 pub type Type = Box<Spanned<TypeKind>>;
@@ -87,8 +90,8 @@ pub type Literal = Box<Spanned<LiteralKind>>;
 
 #[derive(Show)]
 pub struct LetStatement {
-    pub pattern: Box<Pattern>,
-    pub expr: Box<Expr>,
+    pub pattern: Pattern,
+    pub expr: Expr,
 }
 
 #[derive(Show)]
@@ -109,46 +112,48 @@ pub struct Block {
 
 #[derive(Show)]
 pub struct PatAscription {
-    pub left: Box<Pattern>,
+    pub left: Pattern,
     pub right: Type,
 }
 
 #[derive(Show)]
 pub struct PatOr {
-    pub left: Box<Pattern>,
-    pub right: Box<Pattern>,
+    pub left: Pattern,
+    pub right: Pattern,
 }
 
 #[derive(Show)]
 pub struct PatApplication {
     pub func: Qualified,
-    pub args: Vec<Box<Pattern>>,
+    pub args: Vec<Pattern>,
 }
 
 #[derive(Show)]
-pub struct PatEffectApp {
+pub struct PatEffect {
     pub func: Qualified,
-    pub args: Vec<Box<Pattern>>,
+    pub args: Vec<Pattern>,
+    pub cont: Option<Symbol>,
 }
 
 #[derive(Show)]
 pub enum PatternKind {
     Wildcard,
-    Constructor(Qualified),
     Variable(Symbol),
     Literal(Literal),
     Annotation(PatAscription),
     Or(PatOr),
     Application(PatApplication),
-    EffectApp(PatEffectApp),
+    Effect(PatEffect),
+
+    Error,
 }
 
-pub type Pattern = Spanned<PatternKind>;
+pub type Pattern = Box<Spanned<PatternKind>>;
 
 #[derive(Show)]
 pub struct LambdaExpr {
     pub params: Vec<Pattern>,
-    pub body: Box<Expr>,
+    pub body: Expr,
 }
 
 #[derive(Show)]
@@ -160,8 +165,8 @@ pub enum AppKind {
 #[derive(Show)]
 pub struct ApplicationExpr {
     pub app: AppKind,
-    pub func: Box<Expr>,
-    pub args: Vec<Box<Expr>>,
+    pub func: Expr,
+    pub args: Vec<Expr>,
 }
 
 #[derive(Show)]
@@ -215,7 +220,7 @@ pub struct HandlerExpr {
 }
 
 #[derive(Show)]
-pub struct CasesArm {
+pub struct CasesExpr {
     pub arms: Vec<PatternArm>,
 }
 
@@ -232,6 +237,7 @@ pub enum ExprKind {
     Variable(Symbol),
     Constructor(Qualified),
     Function(Qualified),
+    Effect(Qualified),
 
     Projection(ProjectionExpr),
     Let(LetExpr),
@@ -243,9 +249,11 @@ pub enum ExprKind {
     RecordInstance(RecordInstance),
     RecordUpdate(RecordUpdate),
     Handler(HandlerExpr),
-    Cases(CasesArm),
+    Cases(CasesExpr),
     Tuple(Tuple),
     Unit,
+
+    Error,
 }
 
 pub type Expr = Box<Spanned<ExprKind>>;
@@ -259,13 +267,11 @@ pub enum Visibility {
 #[derive(Show)]
 pub struct LetCase {
     pub pattern: PatternArm,
-    pub expr: Expr,
 }
 
 #[derive(Show)]
 pub struct LetMode {
     pub cases: Vec<LetCase>,
-    pub body: Expr,
 }
 
 #[derive(Show)]
@@ -316,21 +322,15 @@ pub struct TypeDecl {
 }
 
 #[derive(Show)]
-pub struct UseDecl {
-    pub visibility: Visibility,
-    pub path: Symbol,
-    pub alias: Option<Symbol>,
-}
-
-#[derive(Show)]
 pub struct ModuleDecl {
     pub visibility: Visibility,
     pub name: Symbol,
-    pub decls: Vec<TopLevelDecl>,
+    pub decls: Option<Vec<TopLevelDecl>>,
 }
 
 #[derive(Show)]
 pub struct EffectField {
+    pub visibility: Visibility,
     pub name: Symbol,
     pub args: Vec<Type>,
     pub ty: Type,
@@ -346,11 +346,10 @@ pub struct EffectDecl {
 
 #[derive(Show)]
 pub enum TopLevelDecl {
-    Let(LetDecl),
-    Type(TypeDecl),
-    Use(UseDecl),
-    Module(ModuleDecl),
-    Effect(EffectDecl),
+    Let(Box<LetDecl>),
+    Type(Box<TypeDecl>),
+    Module(Box<ModuleDecl>),
+    Effect(Box<EffectDecl>),
 }
 
 #[derive(Show)]

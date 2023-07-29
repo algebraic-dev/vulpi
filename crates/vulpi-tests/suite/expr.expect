@@ -1,0 +1,11 @@
+└ModuleTree: 0
+   ├Namespace
+   │  ├values
+   │  │  └HashMap
+   │  │     └Entry
+   │  │        ├Symbol: main
+   │  │        └Private 
+   │  │           └Function: 0.main
+   │  └types
+   │     └HashMap
+   └child

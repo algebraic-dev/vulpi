@@ -58,7 +58,7 @@ impl Span {
 #[derive(Clone)]
 pub struct Spanned<T> {
     pub data: T,
-    pub range: Span,
+    pub span: Span,
 }
 
 impl<T: Show> Show for Spanned<T> {
@@ -66,7 +66,7 @@ impl<T: Show> Show for Spanned<T> {
         TreeDisplay::label("Spanned")
             .with(TreeDisplay::label(&format!(
                 "{}~{}",
-                self.range.start.0, self.range.end.0
+                self.span.start.0, self.span.end.0
             )))
             .with(self.data.show())
     }
@@ -76,7 +76,7 @@ impl<T> Spanned<T> {
     pub fn map<U>(&self, f: impl FnOnce(&T) -> U) -> Spanned<U> {
         Spanned {
             data: f(&self.data),
-            range: self.range.clone(),
+            span: self.span.clone(),
         }
     }
 }
@@ -89,7 +89,7 @@ impl<T: Debug> Debug for Spanned<T> {
 
 impl<T> Spanned<T> {
     pub fn new(data: T, range: Span) -> Self {
-        Self { data, range }
+        Self { data, span: range }
     }
 }
 

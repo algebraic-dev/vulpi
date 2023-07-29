@@ -62,6 +62,7 @@
     - [ ] Name resolution
     - [ ] Duplicated pattern name checking
     - [ ] Or Pattern
+    - [ ] Desugar
 - [ ] Type checker
     - [ ] Higher rank polymorphism
     - [ ] Higher kinded types

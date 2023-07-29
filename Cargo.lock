@@ -63,6 +63,7 @@ name = "vulpi-intern"
 version = "0.1.0"
 dependencies = [
  "lazy_static",
+ "vulpi-show",
 ]
 
 [[package]]
@@ -113,6 +114,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "vulpi-resolver"
+version = "0.1.0"
+dependencies = [
+ "vulpi-intern",
+ "vulpi-location",
+ "vulpi-macros",
+ "vulpi-report",
+ "vulpi-show",
+ "vulpi-syntax",
+]
+
+[[package]]
 name = "vulpi-show"
 version = "0.1.0"
 
@@ -134,6 +147,7 @@ dependencies = [
  "vulpi-location",
  "vulpi-parser",
  "vulpi-report",
+ "vulpi-resolver",
  "vulpi-show",
  "vulpi-vfs",
 ]

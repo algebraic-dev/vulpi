@@ -1,0 +1,35 @@
+└ModuleTree: 0
+   ├Log
+   │  └ModuleTree: 1
+   │     ├Namespace
+   │     │  ├values
+   │     │  │  └HashMap
+   │     │  │     └Entry
+   │     │  │        ├Symbol: log
+   │     │  │        └Private 
+   │     │  │           └Effect: 0.log
+   │     │  └types
+   │     │     └HashMap
+   │     └child
+   ├Namespace
+   │  ├values
+   │  │  └HashMap
+   │  │     ├Entry
+   │  │     │  ├Symbol: variosLog
+   │  │     │  └Private 
+   │  │     │     └Function: 0.variosLog
+   │  │     ├Entry
+   │  │     │  ├Symbol: main
+   │  │     │  └Private 
+   │  │     │     └Function: 0.main
+   │  │     └Entry
+   │  │        ├Symbol: logToStdout!
+   │  │        └Private 
+   │  │           └Function: 0.logToStdout!
+   │  └types
+   │     └HashMap
+   │        └Entry
+   │           ├Symbol: Log
+   │           └Private 
+   │              └Qualified: 0.Log
+   └child

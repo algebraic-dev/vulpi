@@ -6,10 +6,10 @@ use crate::tokens::Token;
 use super::Parenthesis;
 
 #[derive(Show)]
-pub enum KindKind {
+pub enum KindType {
     Star(Token),
     Arrow(Box<Kind>, Token, Box<Kind>),
     Parenthesis(Parenthesis<Box<Kind>>),
 }
 
-pub type Kind = Spanned<KindKind>;
+pub type Kind = Spanned<KindType>;

@@ -62,6 +62,28 @@ pub struct Path<T> {
     pub span: Span,
 }
 
+impl From<&Path<Upper>> for Vec<Symbol> {
+    fn from(value: &Path<Upper>) -> Self {
+        value
+            .segments
+            .iter()
+            .map(|(upper, _)| upper.symbol())
+            .chain(std::iter::once(value.last.symbol()))
+            .collect::<Vec<_>>()
+    }
+}
+
+impl From<&Path<Lower>> for Vec<Symbol> {
+    fn from(value: &Path<Lower>) -> Self {
+        value
+            .segments
+            .iter()
+            .map(|(upper, _)| upper.symbol())
+            .chain(std::iter::once(value.last.symbol()))
+            .collect::<Vec<_>>()
+    }
+}
+
 impl Path<Ident> {
     pub fn diferentiate(self) -> Either<Path<Upper>, Path<Lower>> {
         let Path {

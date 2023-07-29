@@ -1,0 +1,21 @@
+suite/abstract.vp:1:9: unexpected token 'LBrace'
+
+    1 | mod Ata {
+      |         ^
+    2 |     type A
+
+suite/abstract.vp:4:1: unexpected token 'RBrace'
+
+    2 |     type A
+    3 |     type B
+    4 | }
+      | ^
+    5 | 
+
+suite/abstract.vp:9:1: unexpected token 'RBrace'
+
+    7 |     type C
+    8 |     use Ata
+    9 | }
+      | ^
+

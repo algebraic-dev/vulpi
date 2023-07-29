@@ -1,2 +1,9 @@
-type A
-type B
+mod Ata {
+    type A
+    type B
+}
+
+mod Beta {
+    type C
+    use Ata
+}

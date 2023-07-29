@@ -4,28 +4,27 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
-use vulpi_macros::Show;
 use vulpi_show::{Show, TreeDisplay};
 
-use crate::namespace::{ModuleId, Namespace};
+use crate::namespace::ModuleId;
 
 /// A tree for modules. It starts with a single root module and then it can have multiple children
 /// modules.
 pub struct ModuleTree {
     pub id: ModuleId,
-    pub namespace: Namespace,
     pub modules: HashMap<Symbol, ModuleTree>,
 }
 
 impl Show for ModuleTree {
     fn show(&self) -> vulpi_show::TreeDisplay {
         let mut display = vulpi_show::TreeDisplay::label(&format!("ModuleTree: {}", self.id.0));
+        let child = TreeDisplay::label("child");
 
         for (name, module) in &self.modules {
             display = display.with(TreeDisplay::label(&name.get()).with(module.show()));
         }
 
-        display
+        display.with(child)
     }
 }
 
@@ -33,7 +32,6 @@ impl ModuleTree {
     pub fn new(id: ModuleId) -> Self {
         Self {
             id,
-            namespace: Namespace::default(),
             modules: HashMap::new(),
         }
     }
@@ -48,8 +46,11 @@ impl ModuleTree {
         let (head, tail) = name.split_first().unwrap();
 
         if tail.is_empty() {
-            self.modules.insert(head.clone(), ModuleTree::new(id));
-            Some(self.modules.get_mut(head).unwrap())
+            Some(
+                self.modules
+                    .entry(head.clone())
+                    .or_insert_with(|| ModuleTree::new(id)),
+            )
         } else {
             let module = self.modules.get_mut(head).unwrap();
             module.add(tail, id)
@@ -57,11 +58,21 @@ impl ModuleTree {
     }
 
     /// Finds a subtree in the tree.
-    pub fn find(&mut self, name: &[Symbol]) -> Option<&mut ModuleTree> {
+    pub fn find_mut(&mut self, name: &[Symbol]) -> Option<&mut ModuleTree> {
         let mut current = self;
 
         for symbol in name {
             current = current.modules.get_mut(symbol)?;
+        }
+
+        Some(current)
+    }
+
+    pub fn find(&self, name: &[Symbol]) -> Option<&ModuleTree> {
+        let mut current = self;
+
+        for symbol in name {
+            current = current.modules.get(symbol)?;
         }
 
         Some(current)

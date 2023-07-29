@@ -13,3 +13,5 @@ vulpi-location = { path = "../vulpi-location" }
 vulpi-report = { path = "../vulpi-report" }
 vulpi-show = { path = "../vulpi-show" }
 vulpi-macros = { path = "../vulpi-macros" }
+
+im-rc = "15.1.0"
