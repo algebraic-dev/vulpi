@@ -1,229 +1,219 @@
-use std::collections::HashSet;
+//! This is the first phase of the resolution process. It takes a syntax tree and then checks for
+//! each of the modules inside of it creating an ID for each of them. After that it returns a
+//! [Solver] that is an abstraction for a next phase of the resolution process, the import
+//! resolution phase that will solve all the imports and then return another [Solver] that is the
+//! last one.
 
-use vulpi_macros::Tree;
-use vulpi_report::{Diagnostic, Report};
-use vulpi_storage::id::{self, Id};
-use vulpi_storage::interner::Symbol;
-use vulpi_syntax::r#abstract::*;
+use std::{cell::RefCell, rc::Rc};
 
-use crate::ambiguity::DataType;
-use crate::error;
+use vulpi_intern::Symbol;
+use vulpi_report::Report;
+use vulpi_syntax::concrete::tree::*;
 
-#[derive(Default, Tree)]
-pub struct ModuleTree {
-    name: Id<id::Namespace>,
-    children: std::collections::HashMap<Symbol, ModuleTree>,
-}
+use crate::{
+    module_tree::ModuleTree,
+    namespace::{self, Item, ModuleId, Qualified, Value},
+};
 
-impl ModuleTree {
-    pub fn new(name: Id<id::Namespace>) -> Self {
-        Self {
-            name,
-            children: Default::default(),
-        }
-    }
+/// A shared counter for the module IDs.
+type Counter = Rc<RefCell<usize>>;
 
-    pub fn find(&self, path: &[Symbol]) -> Option<Id<id::Namespace>> {
-        if path.is_empty() {
-            return Some(self.name);
-        }
-
-        let first = path[0].clone();
-        let tail = &path[1..];
-
-        if let Some(child) = self.children.get(&first) {
-            child.find(tail)
-        } else {
-            None
-        }
-    }
-
-    pub fn find_sub_tree(&self, path: &[Symbol]) -> Option<&Self> {
-        if path.is_empty() {
-            return Some(self);
-        }
-
-        let first = path[0].clone();
-        let tail = &path[1..];
-
-        if let Some(child) = self.children.get(&first) {
-            child.find_sub_tree(tail)
-        } else {
-            None
-        }
-    }
-
-    /// Inserts a new module into the tree. If the module already exists, it returns the ID of the
-    /// existing module.
-    pub fn insert(&mut self, path: &[Symbol], id: Id<id::Namespace>) -> Option<Id<id::Namespace>> {
-        if path.is_empty() {
-            return Some(self.name);
-        }
-
-        let first = path[0].clone();
-        let tail = &path[1..];
-
-        if let Some(child) = self.children.get_mut(&first) {
-            child.insert(tail, id)
-        } else {
-            self.children.insert(first, ModuleTree::new(id));
-            None
-        }
-    }
-}
-
-#[derive(Tree)]
-pub struct Definition {
-    pub path: Vec<Symbol>,
-    pub decls: HashSet<DataType>,
-}
-
-impl Definition {
-    pub fn new(path: Vec<Symbol>) -> Self {
-        Self {
-            path,
-            decls: Default::default(),
-        }
-    }
-}
-
-pub struct Modules {
-    pub counter: usize,
-    pub tree: ModuleTree,
-    pub definitions: Vec<Definition>,
-    pub current: Vec<Id<id::Namespace>>,
-    pub module: Vec<Symbol>,
+pub struct Context<'a> {
     pub reporter: Report,
-    pub file_id: Id<id::File>,
+    pub module_tree: &'a mut ModuleTree,
+    pub counter: Counter,
 }
 
-impl Modules {
-    pub fn new(reporter: Report, file_id: Id<id::File>) -> Self {
+impl<'a> Context<'a> {
+    pub fn new(reporter: Report, module_tree: &'a mut ModuleTree) -> Self {
         Self {
-            counter: 1,
-            tree: ModuleTree::new(Id::new(0)),
-            definitions: vec![Definition::new(vec![])],
-            current: vec![Id::new(0)],
-            module: Default::default(),
             reporter,
-            file_id,
+            module_tree,
+            counter: Rc::new(RefCell::new(0)),
         }
     }
 
-    pub fn find_module(&self, path: &[Symbol]) -> Option<Id<id::Namespace>> {
-        self.tree.find(path)
-    }
-
-    pub fn add_module(&mut self, path: Vec<Symbol>) -> Option<Id<id::Namespace>> {
-        let id = Id::new(self.counter);
-        self.counter += 1;
-
-        if self.tree.insert(&path, id).is_none() {
-            self.module = path.clone();
-        } else {
-            self.counter -= 1;
-            panic!("module already exists")
+    fn new_with_counter(
+        reporter: Report,
+        module_tree: &'a mut ModuleTree,
+        counter: Counter,
+    ) -> Self {
+        Self {
+            reporter,
+            module_tree,
+            counter,
         }
-
-        self.current.push(id);
-        self.definitions.push(Definition::new(path));
-
-        Some(id)
     }
 
-    pub fn current(&mut self) -> &mut Definition {
-        &mut self.definitions[self.current.last().unwrap().index()]
+    fn derive<'c>(&'c mut self, name: &[Symbol]) -> Context<'c> {
+        let mut counter = self.counter.borrow_mut();
+        let id = *counter;
+        *counter += 1;
+        let id = ModuleId(id);
+
+        let tree = self.module_tree.add(name, id).unwrap();
+
+        Context::new_with_counter(self.reporter.clone(), tree, self.counter.clone())
+    }
+
+    pub fn qualified_name(&self, name: Symbol) -> namespace::Qualified {
+        namespace::Qualified {
+            path: self.module_tree.id,
+            name,
+        }
+    }
+
+    pub fn add_value(&mut self, name: Symbol, value: Item<Value>) {
+        self.module_tree.namespace.values.insert(name, value);
+    }
+
+    pub fn add_type(&mut self, name: Symbol, value: Item<Qualified>) {
+        self.module_tree.namespace.types.insert(name, value);
     }
 }
 
 pub trait Declare {
-    fn declare(&mut self, context: &mut Modules);
+    fn declare(&self, ctx: &mut Context);
 }
 
-impl<T: Declare> Declare for Vec<T> {
-    fn declare(&mut self, context: &mut Modules) {
-        for item in self {
-            item.declare(context);
+impl From<Visibility> for namespace::Visibility {
+    fn from(value: Visibility) -> Self {
+        match value {
+            Visibility::Public(_) => namespace::Visibility::Public,
+            Visibility::Private => namespace::Visibility::Private,
         }
     }
 }
 
-impl Declare for Variant {
-    fn declare(&mut self, context: &mut Modules) {
-        context
-            .definitions
-            .last_mut()
-            .unwrap()
-            .decls
-            .insert(DataType::Constructor(self.name.0.clone()));
+impl Declare for EffectDecl {
+    fn declare(&self, ctx: &mut Context) {
+        ctx.add_type(
+            self.name.symbol(),
+            Item {
+                visibility: self.visibility.clone().into(),
+                item: ctx.qualified_name(self.name.symbol()),
+            },
+        );
+
+        let ctx = &mut ctx.derive(&[self.name.symbol()]);
+
+        for field in &self.fields {
+            ctx.add_value(
+                field.0.name.symbol(),
+                Item {
+                    visibility: field.0.visibility.clone().into(),
+                    item: Value::Effect(ctx.qualified_name(field.0.name.symbol())),
+                },
+            );
+        }
+    }
+}
+
+impl Declare for ModuleDecl {
+    fn declare(&self, ctx: &mut Context) {
+        let ctx = &mut ctx.derive(&[self.name.symbol()]);
+
+        if let Some(module) = &self.part {
+            for top_level in &module.top_levels {
+                top_level.0.declare(ctx);
+            }
+        }
+    }
+}
+
+impl Declare for SumDecl {
+    fn declare(&self, ctx: &mut Context) {
+        for constructor in self.constructors.iter() {
+            ctx.add_value(
+                constructor.name.symbol(),
+                Item {
+                    visibility: namespace::Visibility::Public,
+                    item: Value::Constructor(ctx.qualified_name(constructor.name.symbol())),
+                },
+            );
+        }
+    }
+}
+
+impl Declare for RecordDecl {
+    fn declare(&self, ctx: &mut Context) {
+        for (field, _) in self.fields.iter() {
+            ctx.add_value(
+                field.name.symbol(),
+                Item {
+                    visibility: namespace::Visibility::Public,
+                    item: Value::Field(ctx.qualified_name(field.name.symbol())),
+                },
+            );
+        }
+    }
+}
+
+impl Declare for TypeDef {
+    fn declare(&self, ctx: &mut Context) {
+        match self {
+            TypeDef::Sum(s) => s.declare(ctx),
+            TypeDef::Record(s) => s.declare(ctx),
+            TypeDef::Synonym(_) => (),
+        }
     }
 }
 
 impl Declare for TypeDecl {
-    fn declare(&mut self, context: &mut Modules) {
-        let defs = context.current();
-        defs.decls.insert(DataType::Type(self.name.0.clone()));
+    fn declare(&self, ctx: &mut Context) {
+        ctx.add_type(
+            self.name.symbol(),
+            Item {
+                visibility: self.visibility.clone().into(),
+                item: ctx.qualified_name(self.name.symbol()),
+            },
+        );
 
-        let old_path = context.module.clone();
-        let mut path = context.module.clone();
-        path.push(self.name.0.clone());
+        let ctx = &mut ctx.derive(&[self.name.symbol()]);
 
-        let id = context.add_module(path).unwrap();
-
-        self.id = Some(id);
-
-        match &mut self.def {
-            TypeDef::Enum(enum_) => enum_.variants.declare(context),
-            TypeDef::Record(_) => (),
-            TypeDef::Synonym(_) => (),
+        if let Some(some) = &self.def {
+            some.1.declare(ctx);
         }
-
-        context.current.pop();
-        context.module = old_path;
     }
 }
 
 impl Declare for LetDecl {
-    fn declare(&mut self, context: &mut Modules) {
-        let file = context.file_id;
-        let reporter = context.reporter.clone();
-        let defs = context.current();
+    fn declare(&self, ctx: &mut Context) {
+        ctx.add_value(
+            self.name.symbol(),
+            Item {
+                visibility: self.visibility.clone().into(),
+                item: Value::Function(ctx.qualified_name(self.name.symbol())),
+            },
+        );
+    }
+}
 
-        if defs.decls.contains(&DataType::Let(self.name.0.clone())) {
-            reporter.report(Diagnostic::new(error::ResolverError {
-                message: error::ResolverErrorKind::AlreadyCaptured(self.name.0.clone()),
-                range: self.name.1.clone(),
-                file,
-            }))
+impl Declare for TopLevel {
+    fn declare(&self, ctx: &mut Context) {
+        match self {
+            TopLevel::Use(_) => (),
+            TopLevel::Type(typ) => {
+                typ.declare(ctx);
+            }
+            TopLevel::Module(module) => {
+                module.declare(ctx);
+            }
+            TopLevel::Effect(effect) => {
+                effect.declare(ctx);
+            }
+            TopLevel::Let(decl) => {
+                decl.declare(ctx);
+            }
+            TopLevel::Error(_) => (),
         }
-
-        defs.decls.insert(DataType::Let(self.name.0.clone()));
     }
 }
 
 impl Declare for Program {
-    fn declare(&mut self, context: &mut Modules) {
-        for type_decl in &mut self.types {
-            type_decl.declare(context);
-        }
-
-        for let_decl in &mut self.lets {
-            let_decl.declare(context);
+    fn declare(&self, ctx: &mut Context) {
+        for top_level in &self.top_levels {
+            top_level.declare(ctx);
         }
     }
-}
-
-pub fn declare(
-    context: &mut Modules,
-    program: &mut Program,
-    path: Vec<Symbol>,
-) -> Id<id::Namespace> {
-    context.add_module(path).unwrap();
-    program.declare(context);
-    context.current.pop().unwrap()
-}
-
-pub fn declare_main(context: &mut Modules, program: &mut Program) -> Id<id::Namespace> {
-    program.declare(context);
-    context.current.pop().unwrap()
 }

@@ -1,20 +1,17 @@
-use std::ops::Range;
-
-use vulpi_location::{Byte, Location};
+use vulpi_location::Span;
 use vulpi_report::IntoDiagnostic;
-use vulpi_storage::id::{File, Id};
-use vulpi_syntax::token::Token;
+use vulpi_syntax::tokens::Token;
 
 #[derive(Debug)]
 pub enum ParserError {
-    UnexpectedToken(Token, Range<Byte>, Id<File>),
+    UnexpectedToken(Box<Token>, Span),
 }
 
 impl IntoDiagnostic for ParserError {
     fn message(&self) -> vulpi_report::Text {
         match self {
-            ParserError::UnexpectedToken(token, _, _) => {
-                format!("unexpected token '{}'", token.data.get()).into()
+            ParserError::UnexpectedToken(token, _) => {
+                format!("unexpected token '{:?}'", token.kind).into()
             }
         }
     }
@@ -23,12 +20,9 @@ impl IntoDiagnostic for ParserError {
         vulpi_report::Severity::Error
     }
 
-    fn location(&self) -> vulpi_location::Location {
+    fn location(&self) -> Span {
         match self {
-            ParserError::UnexpectedToken(_, range, file) => Location {
-                file: *file,
-                range: range.clone(),
-            },
+            ParserError::UnexpectedToken(_, span) => span.clone(),
         }
     }
 }

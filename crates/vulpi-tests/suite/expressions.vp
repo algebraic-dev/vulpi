@@ -1,0 +1,5 @@
+type Bool = | True | False
+
+let ata = do
+    let a = \a => b
+    let f = if True then a else b

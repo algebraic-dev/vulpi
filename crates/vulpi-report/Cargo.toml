@@ -6,8 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-relative-path = "1.8.0"
-
 vulpi-location = { path = "../vulpi-location" }
-vulpi-storage = { path = "../vulpi-storage" }
+vulpi-vfs = { path = "../vulpi-vfs" }
+
 yansi = "0.5.1"

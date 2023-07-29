@@ -1,348 +1,359 @@
-use std::ops::Range;
+use vulpi_intern::Symbol;
+use vulpi_location::Spanned;
+use vulpi_macros::Show;
 
-use vulpi_location::{Byte, Spanned};
-use vulpi_macros::Tree;
 use vulpi_show::{Show, TreeDisplay};
 
-use vulpi_storage::{
-    id::{self, Id},
-    interner::Symbol,
-};
-
-#[derive(Debug, Clone)]
-pub struct Ident(pub Symbol, pub Range<Byte>);
-
-impl Ident {
-    pub fn generate(symbol: Symbol) -> Self {
-        Self(symbol, Byte(0)..Byte(0))
-    }
-}
-
-impl From<Ident> for Spanned<Symbol> {
-    fn from(value: Ident) -> Self {
-        Spanned {
-            data: value.0,
-            range: value.1,
-        }
-    }
-}
-
-impl Show for Ident {
-    fn show(&self) -> vulpi_show::TreeDisplay {
-        TreeDisplay::label(&self.0.get())
-    }
-}
-
-#[derive(Debug, Clone, Tree)]
 pub struct Qualified {
-    pub segments: Vec<Ident>,
-    pub last: Ident,
-    pub range: Range<Byte>,
+    pub path: Symbol,
+    pub name: Symbol,
 }
 
-impl From<Qualified> for Vec<Symbol> {
-    fn from(qualified: Qualified) -> Self {
-        qualified
-            .segments
-            .into_iter()
-            .map(|ident| ident.0)
-            .collect()
+impl Show for Qualified {
+    fn show(&self) -> TreeDisplay {
+        TreeDisplay::label("Qualified")
+            .with(TreeDisplay::label(&self.path.get()))
+            .with(TreeDisplay::label(&self.name.get()))
     }
 }
 
-impl Qualified {
-    pub fn to_path(&self) -> Vec<Symbol> {
-        self.clone().into()
-    }
-
-    pub fn to_entire_path(&self) -> Vec<Symbol> {
-        let mut path = self.to_path();
-        path.push(self.last.0.clone());
-        path
-    }
+#[derive(Show)]
+pub enum KindType {
+    Star,
+    Arrow(Kind, Kind),
 }
 
-#[derive(Default, Tree, Debug)]
+pub type Kind = Box<Spanned<KindType>>;
+
+// Types
+
+#[derive(Show)]
 pub struct Effects {
     pub effects: Vec<Type>,
 }
 
-/// The arrow type `A -> B`
-#[derive(Tree, Debug)]
-pub struct TypeArrow {
-    pub left: Box<Type>,
-    pub effects: Effects,
-    pub right: Box<Type>,
+#[derive(Show)]
+pub struct PiType {
+    pub left: Type,
+    pub effects: Option<Effects>,
+    pub right: Type,
 }
 
-/// The application type `A B`
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct TypeApplication {
-    pub left: Box<Type>,
-    pub right: Vec<Type>,
+    pub func: Type,
+    pub args: Vec<Type>,
 }
 
-/// The forall type `forall a b. A -> B`
-#[derive(Tree, Debug)]
+#[derive(Show)]
+pub enum TypeBinder {
+    Implicit(Symbol),
+    Explicit(Symbol, Kind),
+}
+
+#[derive(Show)]
 pub struct TypeForall {
-    pub params: Vec<Ident>,
-    pub body: Box<Type>,
+    pub params: Vec<TypeBinder>,
+    pub body: Type,
 }
 
-/// The type kind `A`, `A -> B`, `forall a b. A -> B`
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub enum TypeKind {
-    Upper(Qualified),
-    Lower(Ident),
-    Arrow(TypeArrow),
+    Pi(PiType),
+    Tuple(Vec<Type>),
     Application(TypeApplication),
     Forall(TypeForall),
+    TypeVariable(Symbol),
+    Type(Qualified),
     Unit,
 }
 
-pub type Type = Spanned<TypeKind>;
+pub type Type = Box<Spanned<TypeKind>>;
 
 // Literal
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub enum LiteralKind {
-    String(Ident),
-    Integer(Ident),
-    Char(Ident),
-    Float(Ident),
+    String(Symbol),
+    Integer(Symbol),
+    Float(Symbol),
+    Char(Symbol),
     Unit,
 }
 
-pub type Literal = Spanned<LiteralKind>;
+pub type Literal = Box<Spanned<LiteralKind>>;
 
-// Pattern
+// Statements
 
-#[derive(Tree, Debug)]
-pub struct PatAnnotation {
-    pub pat: Box<Pattern>,
-    pub ty: Box<Type>,
-}
-
-#[derive(Tree, Debug)]
-pub struct PatOr {
-    pub left: Box<Pattern>,
-    pub right: Box<Pattern>,
-}
-
-#[derive(Tree, Debug)]
-pub struct PatApplication {
-    pub func: Qualified,
-    pub args: Vec<Pattern>,
-}
-
-#[derive(Tree, Debug)]
-pub enum PatternKind {
-    Wildcard,
-    Upper(Qualified),
-    Lower(Ident),
-    Literal(Literal),
-    Annotation(PatAnnotation),
-    Or(PatOr),
-    Application(PatApplication),
-}
-
-pub type Pattern = Spanned<PatternKind>;
-
-// Expression
-
-#[derive(Tree, Debug)]
-pub struct LetStmt {
-    pub name: Box<Pattern>,
+#[derive(Show)]
+pub struct LetStatement {
+    pub pattern: Box<Pattern>,
     pub expr: Box<Expr>,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub enum StatementKind {
-    Let(LetStmt),
+    Let(LetStatement),
     Expr(Expr),
     Error,
 }
 
 pub type Statement = Spanned<StatementKind>;
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct Block {
     pub statements: Vec<Statement>,
 }
 
-#[derive(Tree, Debug)]
-pub enum Operator {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    And,
-    Or,
-    Xor,
-    Not,
-    Eq,
-    Neq,
-    Lt,
-    Gt,
-    Le,
-    Ge,
-    Shl,
-    Shr,
-    Pipe,
+// Patterns
+
+#[derive(Show)]
+pub struct PatAscription {
+    pub left: Box<Pattern>,
+    pub right: Type,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
+pub struct PatOr {
+    pub left: Box<Pattern>,
+    pub right: Box<Pattern>,
+}
+
+#[derive(Show)]
+pub struct PatApplication {
+    pub func: Qualified,
+    pub args: Vec<Box<Pattern>>,
+}
+
+#[derive(Show)]
+pub struct PatEffectApp {
+    pub func: Qualified,
+    pub args: Vec<Box<Pattern>>,
+}
+
+#[derive(Show)]
+pub enum PatternKind {
+    Wildcard,
+    Constructor(Qualified),
+    Variable(Symbol),
+    Literal(Literal),
+    Annotation(PatAscription),
+    Or(PatOr),
+    Application(PatApplication),
+    EffectApp(PatEffectApp),
+}
+
+pub type Pattern = Spanned<PatternKind>;
+
+#[derive(Show)]
 pub struct LambdaExpr {
-    pub pattern: Pattern,
+    pub params: Vec<Pattern>,
     pub body: Box<Expr>,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
+pub enum AppKind {
+    Infix,
+    Normal,
+}
+
+#[derive(Show)]
 pub struct ApplicationExpr {
+    pub app: AppKind,
     pub func: Box<Expr>,
-    pub args: Vec<Expr>,
+    pub args: Vec<Box<Expr>>,
 }
 
-#[derive(Tree, Debug)]
-pub struct AcessorExpr {
-    pub expr: Box<Expr>,
-    pub field: Ident,
+#[derive(Show)]
+pub struct ProjectionExpr {
+    pub expr: Expr,
+    pub field: Symbol,
 }
 
-#[derive(Tree, Debug)]
-pub struct BinaryExpr {
-    pub left: Box<Expr>,
-    pub op: Spanned<Operator>,
-    pub right: Box<Expr>,
+#[derive(Show)]
+pub struct PatternArm {
+    pub pattern: Vec<Pattern>,
+    pub expr: Expr,
+    pub guard: Option<Expr>,
 }
 
-#[derive(Tree, Debug)]
-pub struct IfExpr {
-    pub cond: Box<Expr>,
-    pub then: Box<Expr>,
-    pub else_: Box<Expr>,
-}
-
-#[derive(Tree, Debug)]
-pub struct WhenArm {
-    pub pattern: Box<Pattern>,
-    pub then: Box<Expr>,
-}
-
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct WhenExpr {
-    pub scrutinee: Box<Expr>,
-    pub arms: Vec<WhenArm>,
+    pub scrutinee: Expr,
+    pub arms: Vec<PatternArm>,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct AnnotationExpr {
-    pub expr: Box<Expr>,
-    pub ty: Box<Type>,
+    pub expr: Expr,
+    pub ty: Type,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct LetExpr {
-    pub name: Box<Pattern>,
-    pub value: Box<Expr>,
-    pub body: Box<Expr>,
+    pub pattern: Pattern,
+    pub body: Expr,
+    pub value: Expr,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct RecordInstance {
-    pub fields: Vec<(Ident, Expr)>,
     pub name: Qualified,
+    pub fields: Vec<(Symbol, Expr)>,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct RecordUpdate {
-    pub fields: Vec<(Ident, Expr)>,
-    pub expr: Box<Expr>,
+    pub expr: Expr,
+    pub fields: Vec<(Symbol, Expr)>,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
+pub struct HandlerExpr {
+    pub expr: Expr,
+    pub with: Expr,
+}
+
+#[derive(Show)]
+pub struct CasesArm {
+    pub arms: Vec<PatternArm>,
+}
+
+#[derive(Show)]
+pub struct Tuple {
+    pub exprs: Vec<Expr>,
+}
+
+#[derive(Show)]
 pub enum ExprKind {
     Lambda(LambdaExpr),
     Application(ApplicationExpr),
-    Ident(Qualified),
-    Acessor(AcessorExpr),
-    Binary(BinaryExpr),
+
+    Variable(Symbol),
+    Constructor(Qualified),
+    Function(Qualified),
+
+    Projection(ProjectionExpr),
     Let(LetExpr),
-    If(IfExpr),
     When(WhenExpr),
-    Annotation(AnnotationExpr),
-    Block(Block),
+    Do(Block),
     Literal(Literal),
+
+    Annotation(AnnotationExpr),
     RecordInstance(RecordInstance),
     RecordUpdate(RecordUpdate),
+    Handler(HandlerExpr),
+    Cases(CasesArm),
+    Tuple(Tuple),
+    Unit,
 }
 
-pub type Expr = Spanned<ExprKind>;
+pub type Expr = Box<Spanned<ExprKind>>;
 
-// Top level
+#[derive(Show)]
+pub enum Visibility {
+    Public,
+    Private,
+}
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct LetCase {
-    pub patterns: Vec<Pattern>,
-    pub body: Box<Expr>,
-    pub range: Range<Byte>,
+    pub pattern: PatternArm,
+    pub expr: Expr,
 }
 
-#[derive(Tree, Debug)]
-pub struct LetDecl {
-    pub name: Ident,
-    pub params: Vec<(Pattern, Type)>,
+#[derive(Show)]
+pub struct LetMode {
     pub cases: Vec<LetCase>,
-    pub ret: Option<Type>,
+    pub body: Expr,
 }
 
-#[derive(Tree, Debug)]
-pub struct Variant {
-    pub name: Ident,
+#[derive(Show)]
+pub struct Binder {
+    pub pattern: Pattern,
+    pub ty: Type,
+}
+
+#[derive(Show)]
+pub struct LetDecl {
+    pub visibility: Visibility,
+    pub name: Symbol,
+    pub binders: Vec<Binder>,
+    pub ret: Option<(Option<Effects>, Type)>,
+    pub body: LetMode,
+}
+
+#[derive(Show)]
+pub struct Constructor {
+    pub name: Symbol,
     pub args: Vec<Type>,
 }
 
-#[derive(Tree, Debug)]
-pub struct EnumDecl {
-    pub variants: Vec<Variant>,
+#[derive(Show)]
+pub struct SumDecl {
+    pub constructors: Vec<Constructor>,
 }
 
-#[derive(Tree, Debug)]
-pub struct Field {
-    pub name: Ident,
-    pub ty: Box<Type>,
-}
-
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct RecordDecl {
-    pub fields: Vec<Field>,
+    pub fields: Vec<(Symbol, Type)>,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub enum TypeDef {
-    Enum(EnumDecl),
+    Sum(SumDecl),
     Record(RecordDecl),
     Synonym(Type),
+    Abstract,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct TypeDecl {
-    pub id: Option<Id<id::Namespace>>,
-    pub name: Ident,
-    pub params: Vec<Ident>,
+    pub visibility: Visibility,
+    pub name: Symbol,
+    pub binders: Vec<TypeBinder>,
     pub def: TypeDef,
 }
 
-#[derive(Tree, Debug)]
+#[derive(Show)]
 pub struct UseDecl {
-    pub path: Qualified,
-    pub alias: Option<Ident>,
+    pub visibility: Visibility,
+    pub path: Symbol,
+    pub alias: Option<Symbol>,
 }
 
-#[derive(Tree, Debug)]
-pub struct Program {
-    pub uses: Vec<UseDecl>,
-    pub types: Vec<TypeDecl>,
-    pub lets: Vec<LetDecl>,
+#[derive(Show)]
+pub struct ModuleDecl {
+    pub visibility: Visibility,
+    pub name: Symbol,
+    pub decls: Vec<TopLevelDecl>,
+}
+
+#[derive(Show)]
+pub struct EffectField {
+    pub name: Symbol,
+    pub args: Vec<Type>,
+    pub ty: Type,
+}
+
+#[derive(Show)]
+pub struct EffectDecl {
+    pub visibility: Visibility,
+    pub name: Symbol,
+    pub binders: Vec<TypeBinder>,
+    pub fields: Vec<EffectField>,
+}
+
+#[derive(Show)]
+pub enum TopLevelDecl {
+    Let(LetDecl),
+    Type(TypeDecl),
+    Use(UseDecl),
+    Module(ModuleDecl),
+    Effect(EffectDecl),
+}
+
+#[derive(Show)]
+pub struct Module {
+    pub decls: Vec<TopLevelDecl>,
 }

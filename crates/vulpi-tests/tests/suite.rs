@@ -1,61 +1,42 @@
 #![feature(custom_test_frameworks)]
 #![test_runner(vulpi_tests::test_runner)]
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use vulpi_build::error::HashReporter;
-use vulpi_parser::{parse, Lexer};
-use vulpi_report::renderer::Classic;
-use vulpi_report::renderer::Reader;
-use vulpi_report::renderer::Renderer;
-use vulpi_report::Report;
-use vulpi_resolver::declare::{self, Modules};
-use vulpi_storage::file_system::real::RealFileSystem;
-use vulpi_storage::file_system::FileSystem;
+use vulpi_lexer::Lexer;
+use vulpi_parser::Parser;
+use vulpi_report::{
+    hash::HashReporter,
+    renderer::{classic::Classic, Reader, Renderer},
+    Report,
+};
+use vulpi_show::Show;
 use vulpi_tests::test;
-use vulpi_typer::context::Env;
+use vulpi_vfs::{real::RealFileSystem, FileSystem};
 
-test!("/suite/", |file_name| {
-    let cwd_real = std::env::current_dir().unwrap();
-
-    let mut fs = RealFileSystem::new(file_name.clone());
+test!("/suite", |file_name| {
     let reporter = Report::new(HashReporter::new());
+    let cwd = std::env::current_dir().unwrap();
 
-    let file = fs.load(file_name).unwrap();
-    let source = fs.read(file).unwrap();
+    let mut vfs = RealFileSystem::new(cwd.clone());
+    let id = vfs.load(file_name).unwrap();
+    let source = vfs.read(id).unwrap();
 
-    let lexer = Lexer::new(source);
-    let concrete = parse(lexer, file, reporter.clone());
+    let lexer = Lexer::new(source, id, reporter.clone());
 
-    let mut desugared = vulpi_desugar::desugar(concrete);
-    let mut modules = Modules::new(reporter.clone(), file);
-    let namespace = declare::declare_main(&mut modules, &mut desugared);
-    let resolved = vulpi_resolver::resolve(desugared, file, namespace, reporter.clone(), &modules);
+    let mut parser = Parser::new(lexer, id, reporter.clone());
+    let program = parser.program();
 
-    let mut modules = vulpi_typer::Modules::default();
+    let report = reporter.all_diagnostics();
 
-    vulpi_typer::declare::declare_types(&mut modules, &resolved);
+    if !reporter.has_errors() {
+        program.show().to_string()
+    } else {
+        let mut writer = Reader::default();
+        let ctx = Classic::new(&vfs, cwd);
 
-    let modules = Rc::new(RefCell::new(modules));
-    let env = Env::new(reporter.clone(), file, modules);
-
-    vulpi_typer::declare::declare_values_types(env.clone(), &resolved);
-
-    vulpi_typer::declare::define_let_body(&env, &resolved);
-
-    let mut end = Reader::default();
-
-    if reporter.has_errors() {
-        eprintln!();
-
-        let renderer = Classic::new(&fs, cwd_real);
-
-        let diagnostics = reporter.all_diagnostics();
-        for diagnostic in diagnostics {
-            diagnostic.render(&renderer, &mut end).unwrap();
+        for diagnostic in report {
+            diagnostic.render(&ctx, &mut writer).unwrap();
         }
-    }
 
-    end.to_string()
+        writer.to_string()
+    }
 });

@@ -1,0 +1,17 @@
+effect Log e where
+  log e : ()
+
+let logToStdout! (x: Request (Log String) a -> a) : {IO} a =
+  cases
+    { Log.log e } => do
+      println e
+      handle k () with logToStdout!
+    other => other
+
+let variosLog : { Log } a = do
+  Log.log "a"
+  Log.log "b"
+  Log.log "c"
+
+let main : { IO } a = 
+  handle variosLog with logToStdout! 

@@ -7,12 +7,9 @@ edition = "2021"
 
 [dependencies]
 
+vulpi-intern = { path = "../vulpi-intern" }
 vulpi-syntax = { path = "../vulpi-syntax" }
-vulpi-report = { path = "../vulpi-report" }
-vulpi-storage = { path = "../vulpi-storage" }
 vulpi-location = { path = "../vulpi-location" }
-
+vulpi-report = { path = "../vulpi-report" }
 vulpi-show = { path = "../vulpi-show" }
 vulpi-macros = { path = "../vulpi-macros" }
-
-im-rc = "15.1.0"

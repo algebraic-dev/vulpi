@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::Item;
 
-#[proc_macro_derive(Tree, attributes(helper))]
+#[proc_macro_derive(Show, attributes(helper))]
 pub fn derive_helper_attr(item: TokenStream) -> TokenStream {
     let parsed = syn::parse::<Item>(item).unwrap();
 

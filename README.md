@@ -1,2 +1,71 @@
 <p align="center"><img alt="Vulpi Logo" height="150px" src="images/logo.png"></p>
 <h2 align="center">The Vulpi Compiler</h2>
+
+# Tasks
+
+- [x] Lexer
+    - [x] Layout Parsing
+    - [x] Escape
+    - [ ] Interpolation
+- [ ] Parser
+    - [x] Types
+        - [x] Algebraic Data Types
+            - [x] Declaration
+            - [ ] Generalized Version
+            - [X] Kinds
+        - [x] Records
+            - [x] Instance
+            - [x] Update
+            - [x] Declaration
+            - [x] Projection
+        - [x] Effects
+            - [x] Declaration
+            - [x] Handler
+        - [ ] Traits
+            - [ ] Implementation
+            - [ ] Constraint Syntax
+        - [x] Abstract Data Types
+        - [x] Type Synonyms
+        - [x] Tuple
+    - [x] Let declarations
+        - [x] Let cases
+    - [x] Patterns
+        - [ ] Record Pattern
+        - [x] ADT Pattern
+        - [x] Guards
+        - [x] Or Pattern
+    - [x] Blocks
+    - [x] Modules
+    - [x] Public / Private things
+    - [ ] Deriving Syntax
+    - [x] Expressions
+        - [x] Operators
+            - [ ] Section Patterns
+            - [ ] Function applications In Half
+            - [x] Pipe and Composition
+            - [x] Precedence
+        - [x] Type ascription
+        - [x] Function Call
+        - [x] Let Expression
+        - [x] Lambda Expression
+        - [x] Do Expression
+        - [x] When Expression
+        - [x] If Expression
+        - [x] Record Expression
+        - [x] Tuple Expression
+        - [ ] List Expression
+        - [x] Unit expression
+    - [ ] Attributes
+    - [x] Import
+- [ ] Resolution
+    - [ ] Visibility resolution
+    - [ ] Name resolution
+    - [ ] Duplicated pattern name checking
+    - [ ] Or Pattern
+- [ ] Type checker
+    - [ ] Higher rank polymorphism
+    - [ ] Higher kinded types
+    - [ ] Entailment
+    - [ ] Coverage checker
+- [ ] Perceus
+- [ ] LLVM

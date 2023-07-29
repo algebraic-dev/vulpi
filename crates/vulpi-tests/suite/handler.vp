@@ -1,0 +1,6 @@
+let logToStdout! =
+  cases
+    { Log.log e } => do 
+          a
+          b
+    { Log.log e } => other

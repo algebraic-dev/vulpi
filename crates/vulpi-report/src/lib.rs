@@ -3,9 +3,9 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use vulpi_location::Location;
-use vulpi_storage::id::{File, Id};
+use vulpi_location::{FileId, Span};
 
+pub mod hash;
 pub mod renderer;
 
 /// A type for representing the severity of a [Diagnostic].
@@ -55,8 +55,10 @@ impl From<String> for Text {
     }
 }
 
+/// A position in the source code that has or not a message. It's used to generate underlined parts
+/// with messages.
 pub struct Marker {
-    pub position: Location,
+    pub position: Span,
     pub subtitle: Option<Text>,
 }
 
@@ -74,9 +76,10 @@ pub trait IntoDiagnostic {
 
     fn severity(&self) -> Severity;
 
-    fn location(&self) -> Location;
+    fn location(&self) -> Span;
 }
 
+/// A diagnostic with reference counting. It is a wrapper around a [IntoDiagnostic] trait object.
 #[derive(Clone)]
 pub struct Diagnostic(Rc<dyn IntoDiagnostic>);
 
@@ -101,7 +104,7 @@ impl Diagnostic {
         self.0.severity()
     }
 
-    pub fn location(&self) -> Location {
+    pub fn location(&self) -> Span {
         self.0.location()
     }
 }
@@ -113,13 +116,13 @@ pub trait Reporter {
     fn report(&mut self, diagnostic: Diagnostic);
 
     /// Gets all the diagnostics of a file.
-    fn diagnostics(&self, file: Id<File>) -> &[Diagnostic];
+    fn diagnostics(&self, file: FileId) -> &[Diagnostic];
 
     /// Get all diagnostics
     fn all_diagnostics(&self) -> Vec<Diagnostic>;
 
     /// Clears all the diagnostics of a file. It's used for LSP.
-    fn clear(&mut self, file: Id<File>);
+    fn clear(&mut self, file: FileId);
 
     /// Check if has errors
     fn has_errors(&self) -> bool;
@@ -139,7 +142,7 @@ impl Report {
         self.0.borrow_mut().report(diagnostic);
     }
 
-    pub fn diagnostics(&self, file: Id<File>) -> Vec<Diagnostic> {
+    pub fn diagnostics(&self, file: FileId) -> Vec<Diagnostic> {
         self.0.borrow().diagnostics(file).to_vec()
     }
 
@@ -147,7 +150,7 @@ impl Report {
         self.0.borrow().all_diagnostics()
     }
 
-    pub fn clear(&self, file: Id<File>) {
+    pub fn clear(&self, file: FileId) {
         self.0.borrow_mut().clear(file);
     }
 

@@ -122,9 +122,25 @@ impl<T: Show, U: Show> Show for (T, U) {
     }
 }
 
+impl<T: Show, U: Show, V: Show> Show for (T, U, V) {
+    fn show(&self) -> TreeDisplay {
+        let mut node = TreeDisplay::label("Tuple");
+        node = node.with(self.0.show());
+        node = node.with(self.1.show());
+        node = node.with(self.2.show());
+        node
+    }
+}
+
 impl<T: std::fmt::Debug> Show for Range<T> {
     fn show(&self) -> TreeDisplay {
         TreeDisplay::label(&format!("Range({:?}..{:?})", self.start, self.end))
+    }
+}
+
+impl Show for bool {
+    fn show(&self) -> TreeDisplay {
+        TreeDisplay::label(&self.to_string())
     }
 }
 
