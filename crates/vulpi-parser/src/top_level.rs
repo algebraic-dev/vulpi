@@ -42,8 +42,7 @@ impl<'a> Parser<'a> {
         Ok(LetCase { pipe, arm })
     }
 
-    pub fn let_decl(&mut self) -> Result<LetDecl> {
-        let visibility = self.visibility()?;
+    pub fn let_decl(&mut self, visibility: Visibility) -> Result<LetDecl> {
         let let_ = self.expect(TokenData::Let)?;
         let name = self.lower()?;
         let binders = self.many(Self::binder)?;
@@ -124,8 +123,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn type_decl(&mut self) -> Result<TypeDecl> {
-        let visibility = self.visibility()?;
+    pub fn type_decl(&mut self, visibility: Visibility) -> Result<TypeDecl> {
         let type_ = self.expect(TokenData::Type)?;
         let name = self.upper()?;
         let binders = self.many(Self::type_binder)?;
@@ -161,8 +159,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn use_decl(&mut self) -> Result<UseDecl> {
-        let visibility = self.visibility()?;
+    pub fn use_decl(&mut self, visibility: Visibility) -> Result<UseDecl> {
         let use_ = self.expect(TokenData::Use)?;
         let path = self.path_upper()?;
 
@@ -195,8 +192,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn effect_decl(&mut self) -> Result<EffectDecl> {
-        let visibility = self.visibility()?;
+    pub fn effect_decl(&mut self, visibility: Visibility) -> Result<EffectDecl> {
         let effect = self.expect(TokenData::Effect)?;
         let name = self.upper()?;
         let binders = self.many(Self::type_binder)?;
@@ -215,8 +211,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn mod_decl(&mut self) -> Result<ModuleDecl> {
-        let visibility = self.visibility()?;
+    pub fn mod_decl(&mut self, visibility: Visibility) -> Result<ModuleDecl> {
         let mod_ = self.expect(TokenData::Mod)?;
         let name = self.upper()?;
 
@@ -242,12 +237,13 @@ impl<'a> Parser<'a> {
     }
 
     pub fn top_level(&mut self) -> Result<TopLevel> {
+        let vis = self.visibility()?;
         match self.token() {
-            TokenData::Let => self.let_decl().map(Box::new).map(TopLevel::Let),
-            TokenData::Type => self.type_decl().map(Box::new).map(TopLevel::Type),
-            TokenData::Use => self.use_decl().map(Box::new).map(TopLevel::Use),
-            TokenData::Effect => self.effect_decl().map(Box::new).map(TopLevel::Effect),
-            TokenData::Mod => self.mod_decl().map(Box::new).map(TopLevel::Module),
+            TokenData::Let => self.let_decl(vis).map(Box::new).map(TopLevel::Let),
+            TokenData::Type => self.type_decl(vis).map(Box::new).map(TopLevel::Type),
+            TokenData::Use => self.use_decl(vis).map(Box::new).map(TopLevel::Use),
+            TokenData::Effect => self.effect_decl(vis).map(Box::new).map(TopLevel::Effect),
+            TokenData::Mod => self.mod_decl(vis).map(Box::new).map(TopLevel::Module),
             _ => self.unexpected(),
         }
     }

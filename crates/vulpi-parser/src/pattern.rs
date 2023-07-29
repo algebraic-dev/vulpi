@@ -51,12 +51,19 @@ impl<'a> Parser<'a> {
                 let left_brace = this.bump();
                 let func = this.path_lower()?;
                 let args = this.many(Self::pattern_atom)?;
+
+                let arrow = if this.at(TokenData::RightArrow) {
+                    Some((this.bump(), this.lower()?))
+                } else {
+                    None
+                };
                 let right_brace = this.expect(TokenData::RBrace)?;
                 Ok(PatternKind::EffectApp(PatEffectApp {
                     left_brace,
                     func,
                     args,
                     right_brace,
+                    arrow,
                 }))
             })
             .map(Box::new)
