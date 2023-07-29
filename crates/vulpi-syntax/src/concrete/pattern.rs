@@ -31,6 +31,7 @@ pub struct PatEffectApp {
     pub func: Path<Lower>,
     pub args: Vec<Box<Pattern>>,
     pub right_brace: Token,
+    pub arrow: Option<(Token, Lower)>,
 }
 
 #[derive(Show)]

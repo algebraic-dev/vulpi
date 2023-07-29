@@ -132,6 +132,7 @@ pub struct PatApplication {
 pub struct PatEffect {
     pub func: Qualified,
     pub args: Vec<Pattern>,
+    pub cont: Option<Symbol>,
 }
 
 #[derive(Show)]

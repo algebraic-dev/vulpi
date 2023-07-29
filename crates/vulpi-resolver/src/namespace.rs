@@ -6,11 +6,11 @@ use vulpi_macros::Show;
 use vulpi_syntax::r#abstract::Qualified;
 
 /// An identifier for a module.
-#[derive(Clone, Copy, Show, Debug)]
+#[derive(Clone, Copy, Show, Debug, PartialEq, Eq)]
 pub struct ModuleId(pub usize);
 
 /// The visibility of a definition. It's used to distinguish between public and private definitions.
-#[derive(Show, Clone, Debug)]
+#[derive(Show, Clone, Debug, PartialEq, Eq)]
 pub enum Visibility {
     Public,
     Private,
@@ -99,8 +99,21 @@ impl<T: vulpi_show::Show> vulpi_show::Show for Item<T> {
 /// A [Namespace] is a bunch of [Name] mapped to [Qualified] definitions. It's used in the first
 /// step of the resolution process to map all the names to their definitions. After that, it's
 /// thrown away and a [] is created.
-#[derive(Default, Show, Clone)]
+#[derive(Show, Clone)]
 pub struct Namespace {
     pub values: HashMap<Symbol, Item<Value>>,
     pub types: HashMap<Symbol, Item<TypeValue>>,
+    pub modules: HashMap<Symbol, Item<ModuleId>>,
+    pub pass_through: bool,
+}
+
+impl Namespace {
+    pub fn new(pass_through: bool) -> Self {
+        Self {
+            values: HashMap::new(),
+            types: HashMap::new(),
+            modules: HashMap::new(),
+            pass_through,
+        }
+    }
 }

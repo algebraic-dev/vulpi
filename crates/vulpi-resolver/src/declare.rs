@@ -4,8 +4,6 @@
 //! resolution phase that will solve all the imports and then return another [Solver] that is the
 //! last one.
 
-use std::collections::HashMap;
-
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::{Diagnostic, Report};
@@ -14,7 +12,7 @@ use vulpi_syntax::{concrete::tree::*, r#abstract::Qualified};
 use crate::{
     error::{ResolverError, ResolverErrorKind},
     module_tree::ModuleTree,
-    namespace::{self, Item, ModuleId, Namespace, TypeValue, Value},
+    namespace::{self, Item, ModuleId, TypeValue, Value},
 };
 
 pub struct Context<'a> {
@@ -56,17 +54,23 @@ impl<'a> Context<'a> {
         self.reporter.report(Diagnostic::new(error));
     }
 
-    fn derive(&mut self, new_name: Symbol) -> Context {
+    fn derive(&mut self, new_name: Symbol, pass_through: bool) -> Context {
         let id = self.namespaces.len();
-        self.derive_with_module_id(new_name, ModuleId(id))
+        self.derive_with_module_id(new_name, ModuleId(id), pass_through)
     }
 
-    fn derive_with_module_id(&mut self, new_name: Symbol, id: ModuleId) -> Context {
+    fn derive_with_module_id(
+        &mut self,
+        new_name: Symbol,
+        id: ModuleId,
+        pass_through: bool,
+    ) -> Context {
         let mut name = self.name.clone();
         name.push(new_name);
 
         self.module_tree.add(&name, id).unwrap();
-        self.namespaces.push(namespace::Namespace::default());
+        self.namespaces
+            .push(namespace::Namespace::new(pass_through));
 
         Context::new_with_counter(
             self.reporter.clone(),
@@ -99,6 +103,18 @@ impl<'a> Context<'a> {
         }
     }
 
+    pub fn add_module(&mut self, span: Span, name: Symbol, value: Item<ModuleId>) {
+        let id = self.module_tree.find_mut(&self.name).unwrap().id;
+        let old = self.namespaces[id.0].modules.insert(name.clone(), value);
+
+        if old.is_some() {
+            self.report(ResolverError {
+                span,
+                kind: ResolverErrorKind::Redeclarated(name),
+            })
+        }
+    }
+
     pub fn add_type(&mut self, span: Span, name: Symbol, value: Item<TypeValue>) {
         let id = self.module_tree.find_mut(&self.name).unwrap().id;
         let old = self.namespaces[id.0].types.insert(name.clone(), value);
@@ -119,56 +135,10 @@ impl<'a> Context<'a> {
         for (key, value) in namespace.types {
             self.add_type(value.span.clone(), key, value);
         }
-    }
 
-    fn find_val<T: Clone>(
-        &self,
-        span: Span,
-        module: &ModuleId,
-        mut name: &[Symbol],
-        fun: fn(&Namespace) -> &HashMap<Symbol, T>,
-    ) -> Option<T> {
-        let mut module = &self.namespaces[module.0];
-
-        while let Some((head, tail)) = name.split_first() {
-            name = tail;
-            if let Value::Module(id) = &module.values[head].item {
-                module = &self.namespaces[id.0];
-                break;
-            }
+        for (key, value) in namespace.modules {
+            self.add_module(value.span.clone(), key, value);
         }
-
-        if name.len() == 1 {
-            fun(module).get(&name[0]).cloned().or_else(|| {
-                self.report(ResolverError {
-                    span,
-                    kind: ResolverErrorKind::NotFound(name.to_vec()),
-                });
-                None
-            })
-        } else if name.is_empty() {
-            self.report(ResolverError {
-                span,
-                kind: ResolverErrorKind::IsAModule,
-            });
-            None
-        } else {
-            self.report(ResolverError {
-                span,
-                kind: ResolverErrorKind::InvalidPath(name.to_vec()),
-            });
-            None
-        }
-    }
-
-    pub(crate) fn find_type(&self, span: Span, name: &[Symbol]) -> Option<Item<TypeValue>> {
-        let current = self.module_tree.find(&self.name).unwrap().id;
-        self.find_val(span, &current, name, |x| &x.types)
-    }
-
-    pub(crate) fn find_value(&self, span: Span, name: &[Symbol]) -> Option<Item<Value>> {
-        let current = self.module_tree.find(&self.name).unwrap().id;
-        self.find_val(span, &current, name, |x| &x.values)
     }
 }
 
@@ -197,7 +167,19 @@ impl Declare for EffectDecl {
             },
         );
 
-        let ctx = &mut ctx.derive(self.name.symbol());
+        let id = ctx.genenerate_id();
+
+        ctx.add_module(
+            self.name.0.value.span.clone(),
+            self.name.symbol(),
+            Item {
+                visibility: self.visibility.clone().into(),
+                span: self.name.0.value.span.clone(),
+                item: id,
+            },
+        );
+
+        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, true);
 
         for field in &self.fields {
             ctx.add_value(
@@ -217,17 +199,17 @@ impl Declare for ModuleDecl {
     fn declare(&self, old_ctx: &mut Context) {
         let id = old_ctx.genenerate_id();
 
-        old_ctx.add_value(
+        old_ctx.add_module(
             self.name.0.value.span.clone(),
             self.name.symbol(),
             Item {
                 visibility: self.visibility.clone().into(),
                 span: self.name.0.value.span.clone(),
-                item: Value::Module(id),
+                item: id,
             },
         );
 
-        let ctx = &mut &mut old_ctx.derive_with_module_id(self.name.symbol(), id);
+        let ctx = &mut &mut old_ctx.derive_with_module_id(self.name.symbol(), id, false);
 
         if let Some(module) = &self.part {
             for top_level in &module.top_levels {
@@ -295,14 +277,26 @@ impl Declare for TypeDecl {
                         TypeValue::Record(ctx.qualified_name(self.name.symbol()))
                     }
                     Some((_, TypeDef::Synonym(_))) => {
-                        todo!("Synonym types are not ready!")
+                        todo!("Synonym types are not")
                     }
                     _ => TypeValue::Abstract(ctx.qualified_name(self.name.symbol())),
                 },
             },
         );
 
-        let ctx = &mut ctx.derive(self.name.symbol());
+        let id = ctx.genenerate_id();
+
+        ctx.add_module(
+            self.name.0.value.span.clone(),
+            self.name.symbol(),
+            Item {
+                visibility: self.visibility.clone().into(),
+                span: self.name.0.value.span.clone(),
+                item: id,
+            },
+        );
+
+        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, true);
 
         if let Some(some) = &self.def {
             some.1.declare(ctx);
@@ -395,7 +389,7 @@ impl ImportResolve for TopLevel {
 
 impl ImportResolve for ModuleDecl {
     fn resolve_imports(&self, ctx: &mut Context) {
-        let ctx = &mut ctx.derive(self.name.symbol());
+        let ctx = &mut ctx.derive(self.name.symbol(), false);
 
         if let Some(module) = &self.part {
             for top_level in module.modules() {

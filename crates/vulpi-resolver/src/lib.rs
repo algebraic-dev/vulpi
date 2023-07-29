@@ -1,8 +1,17 @@
-use declare::Context;
+#![feature(specialization)]
+#![allow(incomplete_features)]
+
+use std::collections::{HashMap, HashSet};
+
 use error::{ResolverError, ResolverErrorKind};
-use namespace::{Item, TypeValue, Value};
+use module_tree::ModuleTree;
+use namespace::{Item, ModuleId, Namespace, TypeValue, Value};
+use scopes::scopable::{TypeVariable, Variable};
+use scopes::Scopeable;
 use vulpi_intern::Symbol;
 use vulpi_location::{Span, Spanned};
+
+use vulpi_report::{Diagnostic, Report};
 
 use vulpi_syntax::concrete::{tree::*, Lower, Path, Upper};
 use vulpi_syntax::r#abstract as abs;
@@ -12,6 +21,191 @@ pub mod declare;
 pub mod error;
 pub mod module_tree;
 pub mod namespace;
+pub mod scopes;
+
+pub struct Context {
+    scopes: scopes::Kaleidoscope,
+    patterns: Vec<HashMap<Symbol, Span>>,
+    namespaces: Vec<namespace::Namespace>,
+    tree: module_tree::ModuleTree,
+    reporter: Report,
+    main: ModuleId,
+    name: Vec<Symbol>,
+}
+
+impl Context {
+    pub fn new(reporter: Report, namespaces: Vec<namespace::Namespace>, tree: ModuleTree) -> Self {
+        Self {
+            scopes: scopes::Kaleidoscope::default(),
+            patterns: Vec::new(),
+            tree,
+            namespaces,
+            reporter,
+            main: ModuleId(0),
+            name: Vec::new(),
+        }
+    }
+    pub fn report(&self, error: ResolverError) {
+        self.reporter.report(Diagnostic::new(error));
+    }
+
+    fn find_val<T: Clone>(
+        &self,
+        span: Span,
+        module: &ModuleId,
+        mut name: &[Symbol],
+        fun: fn(&Namespace) -> &HashMap<Symbol, Item<T>>,
+    ) -> Option<Item<T>> {
+        let current = self.tree.find(&self.name).unwrap().id;
+
+        let mut module_id = *module;
+        let mut module = &self.namespaces[module.0];
+
+        if name.len() > 1 {
+            while let Some((head, tail)) = name.split_first() {
+                name = tail;
+
+                if let Some(item) = &module.modules.get(head) {
+                    if item.visibility == namespace::Visibility::Private && current != module_id {
+                        self.report(ResolverError {
+                            span,
+                            kind: ResolverErrorKind::PrivateDefinition,
+                        });
+                        return None;
+                    }
+
+                    module_id = item.item;
+                    module = &self.namespaces[item.item.0];
+                } else {
+                    break;
+                }
+
+                if tail.len() == 1 {
+                    break;
+                }
+            }
+        }
+
+        if name.len() == 1 {
+            let result = fun(module).get(&name[0]).cloned().or_else(|| {
+                println!("In: {}", module_id.0);
+                self.report(ResolverError {
+                    span: span.clone(),
+                    kind: ResolverErrorKind::NotFound(name.to_vec()),
+                });
+                None
+            })?;
+
+            if namespace::Visibility::Private == result.visibility
+                && module_id != current
+                && !module.pass_through
+            {
+                self.report(ResolverError {
+                    span,
+                    kind: ResolverErrorKind::PrivateDefinition,
+                });
+                None
+            } else {
+                Some(result)
+            }
+        } else {
+            self.report(ResolverError {
+                span,
+                kind: ResolverErrorKind::InvalidPath(name.to_vec()),
+            });
+            None
+        }
+    }
+
+    pub(crate) fn find_type(&self, span: Span, name: &[Symbol]) -> Option<Item<TypeValue>> {
+        self.find_val(span, &self.main, name, |x| &x.types)
+    }
+
+    pub(crate) fn find_value(&self, span: Span, name: &[Symbol]) -> Option<Item<Value>> {
+        self.find_val(span, &self.main, name, |x| &x.values)
+    }
+
+    pub(crate) fn scope<T: Scopeable, U>(&mut self, fun: impl FnOnce(&mut Context) -> U) -> U {
+        self.scopes.push::<T>();
+        let output = fun(self);
+        self.scopes.pop::<T>();
+        output
+    }
+
+    pub(crate) fn add_pattern(&mut self, name: Symbol, span: Span) -> bool {
+        let hash_map = &mut self.patterns.last_mut().unwrap();
+        if hash_map.insert(name.clone(), span.clone()).is_some() {
+            self.report(ResolverError {
+                span,
+                kind: ResolverErrorKind::DuplicatePattern(name),
+            });
+            false
+        } else {
+            true
+        }
+    }
+
+    pub(crate) fn scope_pattern<U>(&mut self, fun: impl FnOnce(&mut Context) -> U) -> U {
+        if self.patterns.is_empty() {
+            self.patterns.push(Default::default());
+            let output = fun(self);
+            let result = self.patterns.pop();
+
+            for key in result.unwrap().keys() {
+                self.scopes.add::<Variable>(key.clone());
+            }
+
+            output
+        } else {
+            fun(self)
+        }
+    }
+
+    pub(crate) fn scope_or_pattern<U>(
+        &mut self,
+        left: impl FnOnce(&mut Context) -> U,
+        right: impl FnOnce(&mut Context) -> U,
+    ) -> Option<(U, U)> {
+        self.patterns.push(Default::default());
+        let left_output = left(self);
+        let left_pop = self.patterns.pop().unwrap();
+        self.patterns.push(Default::default());
+        let right_output = right(self);
+        let right_pop = self.patterns.pop().unwrap();
+
+        let diff: HashSet<Symbol> = left_pop
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>()
+            .symmetric_difference(&right_pop.keys().cloned().collect::<HashSet<_>>())
+            .cloned()
+            .collect();
+
+        let mut errored = false;
+
+        for key in diff {
+            errored = true;
+
+            let range = right_pop
+                .get(&key)
+                .unwrap_or_else(|| left_pop.get(&key).unwrap())
+                .clone();
+
+            self.report(ResolverError {
+                span: range,
+                kind: ResolverErrorKind::VariableNotBoundOnBothSides(key),
+            });
+        }
+
+        self.patterns.last_mut().unwrap().extend(left_pop);
+
+        if errored {
+            None
+        } else {
+            Some((left_output, right_output))
+        }
+    }
+}
 
 pub trait Resolve {
     type Output;
@@ -22,7 +216,7 @@ pub trait Resolve {
 impl<T: Resolve> Resolve for Vec<T> {
     type Output = Vec<T::Output>;
 
-    fn resolve(self, ctx: &mut Context) -> Self::Output {
+    default fn resolve(self, ctx: &mut Context) -> Self::Output {
         self.into_iter().map(|x| x.resolve(ctx)).collect()
     }
 }
@@ -148,12 +342,24 @@ impl Resolve for LiteralKind {
     }
 }
 
+impl Resolve for Vec<Pattern> {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
+        ctx.scope_pattern(|ctx| self.into_iter().map(|x| x.resolve(ctx)).collect())
+    }
+}
+
 impl Resolve for PatternKind {
     type Output = abs::PatternKind;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        match self {
-            PatternKind::Variable(n) => abs::PatternKind::Variable(n.symbol()),
+        ctx.scope_pattern(|ctx| match self {
+            PatternKind::Variable(n) => {
+                if ctx.add_pattern(n.symbol(), n.0.value.span.clone()) {
+                    abs::PatternKind::Variable(n.symbol())
+                } else {
+                    abs::PatternKind::Error
+                }
+            }
             PatternKind::Constructor(n) => PatternKind::Application(PatApplication {
                 func: n,
                 args: vec![],
@@ -162,11 +368,11 @@ impl Resolve for PatternKind {
             PatternKind::Wildcard(_) => abs::PatternKind::Wildcard,
             PatternKind::Literal(n) => abs::PatternKind::Literal(Box::new(n.resolve(ctx))),
             PatternKind::Annotation(n) => abs::PatternKind::Annotation(n.resolve(ctx)),
-            PatternKind::Or(n) => abs::PatternKind::Or(n.resolve(ctx)),
+            PatternKind::Or(n) => n.resolve(ctx),
             PatternKind::Application(n) => n.resolve(ctx),
             PatternKind::EffectApp(n) => n.resolve(ctx),
             PatternKind::Parenthesis(n) => n.data.resolve(ctx).data,
-        }
+        })
     }
 }
 
@@ -182,12 +388,16 @@ impl Resolve for PatAscription {
 }
 
 impl Resolve for PatOr {
-    type Output = abs::PatOr;
+    type Output = abs::PatternKind;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::PatOr {
-            left: self.left.resolve(ctx),
-            right: self.right.resolve(ctx),
+        let scopes =
+            ctx.scope_or_pattern(|ctx| self.left.resolve(ctx), |ctx| self.right.resolve(ctx));
+
+        if let Some((left, right)) = scopes {
+            abs::PatternKind::Or(abs::PatOr { left, right })
+        } else {
+            abs::PatternKind::Error
         }
     }
 }
@@ -225,16 +435,24 @@ impl Resolve for PatEffectApp {
     type Output = abs::PatternKind;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
+        let args = self.args.resolve(ctx);
+
         let func: Vec<_> = (&self.func).into();
+
+        let cont = self.arrow.map(|(_, name)| {
+            ctx.scopes.add::<Variable>(name.symbol());
+            name.symbol()
+        });
+
         let func = match ctx.find_value(self.func.span.clone(), &func) {
             Some(Item {
-                item: Value::Constructor(qual),
+                item: Value::Effect(qual),
                 ..
             }) => qual,
             Some(_) => {
                 ctx.report(ResolverError {
                     span: self.func.span,
-                    kind: ResolverErrorKind::ExpectedConstructor,
+                    kind: ResolverErrorKind::ExpectedEffect,
                 });
                 return abs::PatternKind::Error;
             }
@@ -243,10 +461,7 @@ impl Resolve for PatEffectApp {
             }
         };
 
-        abs::PatternKind::Effect(abs::PatEffect {
-            func,
-            args: self.args.resolve(ctx),
-        })
+        abs::PatternKind::Effect(abs::PatEffect { func, args, cont })
     }
 }
 
@@ -254,10 +469,10 @@ impl Resolve for LambdaExpr {
     type Output = abs::LambdaExpr;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::LambdaExpr {
+        ctx.scope::<Variable, _>(|ctx| abs::LambdaExpr {
             params: self.patterns.resolve(ctx),
             body: self.expr.resolve(ctx),
-        }
+        })
     }
 }
 
@@ -356,8 +571,8 @@ impl Resolve for IfExpr {
             )
         };
 
-        let true_cons = fn_cons("true");
-        let false_cons = fn_cons("false");
+        let true_cons = fn_cons("True");
+        let false_cons = fn_cons("False");
 
         abs::ExprKind::When(abs::WhenExpr {
             scrutinee: self.cond.resolve(ctx),
@@ -387,7 +602,7 @@ impl Resolve for PatternArm {
     type Output = abs::PatternArm;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::PatternArm {
+        ctx.scope::<Variable, _>(|ctx| abs::PatternArm {
             pattern: self
                 .patterns
                 .into_iter()
@@ -395,7 +610,7 @@ impl Resolve for PatternArm {
                 .collect(),
             expr: self.expr.resolve(ctx),
             guard: self.guard.map(|x| x.1).resolve(ctx),
-        }
+        })
     }
 }
 
@@ -425,10 +640,13 @@ impl Resolve for LetExpr {
     type Output = abs::LetExpr;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
+        let (pattern, value) =
+            ctx.scope::<Variable, _>(|ctx| (self.pattern.resolve(ctx), self.value.resolve(ctx)));
+
         abs::LetExpr {
-            pattern: self.pattern.resolve(ctx),
             body: self.body.resolve(ctx),
-            value: self.value.resolve(ctx),
+            pattern,
+            value,
         }
     }
 }
@@ -538,9 +756,9 @@ impl Resolve for DoExpr {
     type Output = abs::Block;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::Block {
+        ctx.scope::<Variable, _>(|ctx| abs::Block {
             statements: self.block.statements.resolve(ctx),
-        }
+        })
     }
 }
 
@@ -549,9 +767,27 @@ impl Resolve for ExprKind {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
-            ExprKind::Variable(x) => abs::ExprKind::Variable(x.symbol()),
             ExprKind::Constructor(x) => {
-                find_constructor(x, ctx, abs::ExprKind::Constructor, abs::ExprKind::Error)
+                find_cons(x, ctx, abs::ExprKind::Constructor, abs::ExprKind::Error)
+            }
+            ExprKind::Variable(x) => {
+                if ctx.scopes.contains::<Variable>(&x.symbol()) {
+                    abs::ExprKind::Variable(x.symbol())
+                } else if let Some(val) = ctx.find_value(x.0.value.span.clone(), &[x.symbol()]) {
+                    match val.item {
+                        Value::Module(_) => todo!(),
+                        Value::Field(_) => todo!(),
+                        Value::Function(qual) => abs::ExprKind::Function(qual),
+                        Value::Effect(eff) => abs::ExprKind::Effect(eff),
+                        Value::Constructor(qual) => abs::ExprKind::Constructor(qual),
+                    }
+                } else {
+                    ctx.report(ResolverError {
+                        span: x.0.value.span.clone(),
+                        kind: ResolverErrorKind::NotFound(vec![x.symbol()]),
+                    });
+                    abs::ExprKind::Error
+                }
             }
             ExprKind::Function(x) => expect_function_or_effect(x, ctx),
             ExprKind::Do(x) => abs::ExprKind::Do(x.resolve(ctx)),
@@ -574,7 +810,7 @@ impl Resolve for ExprKind {
     }
 }
 
-fn expect_function_or_effect(x: Path<Lower>, ctx: &Context<'_>) -> abs::ExprKind {
+fn expect_function_or_effect(x: Path<Lower>, ctx: &Context) -> abs::ExprKind {
     let vec: Vec<_> = (&x).into();
 
     match ctx.find_value(x.span.clone(), &vec) {
@@ -594,34 +830,6 @@ fn expect_function_or_effect(x: Path<Lower>, ctx: &Context<'_>) -> abs::ExprKind
             abs::ExprKind::Error
         }
         None => abs::ExprKind::Error,
-    }
-}
-
-fn find_constructor<T>(x: Path<Upper>, ctx: &Context<'_>, ok: fn(Qualified) -> T, error: T) -> T {
-    let vec: Vec<_> = (&x).into();
-    find_constructor_raw(x.span, &vec, ctx, ok, error)
-}
-
-fn find_constructor_raw<T>(
-    span: Span,
-    x: &[Symbol],
-    ctx: &Context<'_>,
-    ok: fn(Qualified) -> T,
-    error: T,
-) -> T {
-    match ctx.find_value(span.clone(), x) {
-        Some(Item {
-            item: Value::Constructor(qual),
-            ..
-        }) => ok(qual),
-        Some(_) => {
-            ctx.report(ResolverError {
-                span,
-                kind: ResolverErrorKind::ExpectedConstructor,
-            });
-            error
-        }
-        None => error,
     }
 }
 
@@ -671,13 +879,13 @@ impl Resolve for LetDecl {
     type Output = abs::LetDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::LetDecl {
+        ctx.scope::<Variable, _>(|ctx| abs::LetDecl {
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             binders: self.binders.resolve(ctx),
             ret: self.ret.map(|x| (x.1.resolve(ctx), x.2.resolve(ctx))),
             body: self.body.resolve(ctx),
-        }
+        })
     }
 }
 
@@ -736,7 +944,8 @@ impl Resolve for TypeDecl {
     type Output = abs::TypeDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::TypeDecl {
+        ctx.name.push(self.name.symbol());
+        let result = ctx.scope::<Variable, _>(|ctx| abs::TypeDecl {
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             binders: self.binders.resolve(ctx),
@@ -745,7 +954,10 @@ impl Resolve for TypeDecl {
             } else {
                 abs::TypeDef::Abstract
             },
-        }
+        });
+        ctx.name.pop();
+
+        result
     }
 }
 
@@ -764,11 +976,15 @@ impl Resolve for ModuleDecl {
     type Output = abs::ModuleDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::ModuleDecl {
+        ctx.name.push(self.name.symbol());
+        let result = abs::ModuleDecl {
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             decls: self.part.resolve(ctx),
-        }
+        };
+        ctx.name.pop();
+
+        result
     }
 }
 
@@ -788,8 +1004,12 @@ impl Resolve for TypeBinder {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
-            TypeBinder::Implicit(name) => abs::TypeBinder::Implicit(name.symbol()),
+            TypeBinder::Implicit(name) => {
+                ctx.scopes.add::<TypeVariable>(name.symbol());
+                abs::TypeBinder::Implicit(name.symbol())
+            }
             TypeBinder::Explicit(binder) => {
+                ctx.scopes.add::<TypeVariable>(binder.data.name.symbol());
                 abs::TypeBinder::Explicit(binder.data.name.symbol(), binder.data.kind.resolve(ctx))
             }
         }
@@ -813,12 +1033,15 @@ impl Resolve for EffectDecl {
     type Output = abs::EffectDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::EffectDecl {
+        ctx.name.push(self.name.symbol());
+        let result = ctx.scope::<TypeVariable, _>(|ctx| abs::EffectDecl {
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             binders: self.binders.resolve(ctx),
             fields: self.fields.into_iter().map(|x| x.0.resolve(ctx)).collect(),
-        }
+        });
+        ctx.name.pop();
+        result
     }
 }
 
@@ -848,5 +1071,33 @@ impl Resolve for Program {
                 .filter_map(|x| x.resolve(ctx))
                 .collect(),
         }
+    }
+}
+
+fn find_cons<T>(x: Path<Upper>, ctx: &Context, ok: fn(Qualified) -> T, error: T) -> T {
+    let vec: Vec<_> = (&x).into();
+    find_constructor_raw(x.span, &vec, ctx, ok, error)
+}
+
+fn find_constructor_raw<T>(
+    span: Span,
+    x: &[Symbol],
+    ctx: &Context,
+    ok: fn(Qualified) -> T,
+    error: T,
+) -> T {
+    match ctx.find_value(span.clone(), x) {
+        Some(Item {
+            item: Value::Constructor(qual),
+            ..
+        }) => ok(qual),
+        Some(_) => {
+            ctx.report(ResolverError {
+                span,
+                kind: ResolverErrorKind::ExpectedConstructor,
+            });
+            error
+        }
+        None => error,
     }
 }

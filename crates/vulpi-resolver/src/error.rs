@@ -11,6 +11,9 @@ pub enum ResolverErrorKind {
     ExpectedRecordType,
     ExpectedEffect,
     ExpectedFunction,
+    VariableNotBoundOnBothSides(Symbol),
+    DuplicatePattern(Symbol),
+    PrivateDefinition,
 }
 
 pub struct ResolverError {
@@ -39,6 +42,13 @@ impl IntoDiagnostic for ResolverError {
             ResolverErrorKind::ExpectedEffect => "expected effect".into(),
             ResolverErrorKind::ExpectedFunction => "expected function".into(),
             ResolverErrorKind::ExpectedRecordType => "expected record type".into(),
+            ResolverErrorKind::VariableNotBoundOnBothSides(name) => {
+                format!("variable not bound on both sides: {}", name.get()).into()
+            }
+            ResolverErrorKind::DuplicatePattern(name) => {
+                format!("duplicate pattern: {}", name.get()).into()
+            }
+            ResolverErrorKind::PrivateDefinition => "private definition".into(),
         }
     }
 
