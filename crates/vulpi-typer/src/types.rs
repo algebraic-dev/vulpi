@@ -7,6 +7,13 @@ use std::{cell::RefCell, fmt::Display, fmt::Formatter, rc::Rc};
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 
+/// A type is simply a wrapper around [TypeKind] that allows for sharing. This is the main type
+/// for the type checker and this type allows for some interesting properties like:
+///
+/// - Higher rank polymorphism
+/// - Higher kinded types
+/// - Algebraic Effects
+///
 #[derive(Clone)]
 pub struct Type(Rc<TypeKind>);
 
@@ -50,6 +57,8 @@ pub enum TypeKind {
     Error,
 }
 
+/// Inside of a hole, it can be empty or filled wth a type. The Empty version stores the level where
+/// it was created. This is used to determine if it's escaping or not.
 pub enum HoleInner {
     Filled(Type),
     Empty(usize),
@@ -89,7 +98,7 @@ impl Hole {
 }
 
 impl Type {
-    pub fn print(&self, env: Env, fmt: &mut Formatter) -> std::fmt::Result {
+    fn print(&self, env: Env, fmt: &mut Formatter) -> std::fmt::Result {
         match *self.0 {
             TypeKind::Variable(ref name) => write!(fmt, "{}", name.name.get()),
             TypeKind::Bound(lvl) => write!(fmt, "{}", env.names[env.level - lvl - 1].0.get()),
@@ -149,6 +158,7 @@ impl Type {
         self.substitute(name, hole)
     }
 
+    /// Generalizes a type by replacing all free type variables with a type variable.
     pub fn generalize(&self, env: &mut Env) -> Type {
         fn generalize_over(this: Type, new_vars: &mut Vec<Symbol>, env: &mut Env) {
             match this.0.as_ref() {
@@ -429,6 +439,7 @@ impl Type {
     }
 }
 
+/// Structure to be able to show types
 pub struct ShowPair(Env, Type);
 
 impl Display for ShowPair {

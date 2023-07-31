@@ -3,10 +3,9 @@
 //! elaborated tree. The type checker of Vulpi is based on the bidirectional type checking with
 //! higher rank polymorphism and higher kinded types.
 
-pub mod ambient;
-pub mod effects;
 pub mod env;
 pub mod error;
+pub mod infer;
 pub mod kind;
 pub mod module;
 pub mod types;
