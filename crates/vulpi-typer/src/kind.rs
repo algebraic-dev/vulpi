@@ -19,6 +19,10 @@ impl Kind {
     pub fn star() -> Self {
         Kind::new(KindType::Variable(Symbol::intern("*")))
     }
+
+    pub fn arrow(left: Self, right: Self) -> Self {
+        Kind::new(KindType::Arrow(left, right))
+    }
 }
 
 /// The type of level 1 types.

@@ -1,6 +1,8 @@
 //! The inference trait. It correponds to the `Γ |- e ⇒ A -| ∆` on the paper. It is responsible for
 //! inferring the type of an expression given a context.
 
+pub mod kind;
+
 use vulpi_location::Spanned;
 
 /// The inference trait. It descovers the type of an expression based on the context.
