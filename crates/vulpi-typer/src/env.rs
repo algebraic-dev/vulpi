@@ -10,6 +10,7 @@ use vulpi_report::{Diagnostic, Report};
 use crate::{
     error::TypeError,
     kind::Kind,
+    module::Modules,
     types::{Hole, Type, TypeKind},
 };
 
@@ -36,11 +37,18 @@ pub struct Env {
 
     /// The location of the environment.
     pub location: RefCell<Span>,
+
+    /// The modules.
+    pub modules: Rc<Modules>,
 }
 
 impl Env {
     pub fn new_hole(&self) -> Type {
         Type::new(TypeKind::Hole(Hole::new(self.level)))
+    }
+
+    pub fn set_location(&self, location: Span) {
+        *self.location.borrow_mut() = location;
     }
 
     pub fn new_name(&self) -> Symbol {
@@ -66,5 +74,15 @@ impl Env {
         new_env.names.push_back((name, kind));
 
         new_env
+    }
+
+    pub fn add_ty(&self, name: Symbol, kind: Kind) -> Env {
+        let mut new_env = self.clone();
+        new_env.types.insert(name, kind);
+        new_env
+    }
+
+    pub fn get_ty(&self, name: &Symbol) -> Option<Kind> {
+        self.types.get(name).cloned()
     }
 }

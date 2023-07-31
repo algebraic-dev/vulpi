@@ -54,7 +54,7 @@ pub enum TypeBinder {
 
 #[derive(Show)]
 pub struct TypeForall {
-    pub params: Vec<TypeBinder>,
+    pub param: TypeBinder,
     pub body: Type,
 }
 

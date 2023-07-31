@@ -297,7 +297,7 @@ impl Resolve for TypeForall {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::TypeForall {
-            params: self.params.resolve(ctx),
+            param: self.params.resolve(ctx),
             body: self.body.resolve(ctx),
         }
     }

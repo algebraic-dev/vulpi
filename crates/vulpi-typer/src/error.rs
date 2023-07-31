@@ -1,13 +1,16 @@
+use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::{IntoDiagnostic, Text};
 
 use crate::{env::Env, kind::Kind, types::Type};
 
 pub enum TypeErrorKind {
+    UnboundTypeVariable(Symbol),
     TypeMismatch(Env, Type, Type),
     KindMismatch(Kind, Kind),
     InfiniteType,
     EscapingScope,
+    NotAFunctionKind,
 }
 
 pub struct TypeError {
@@ -28,6 +31,10 @@ impl IntoDiagnostic for TypeError {
             }
             TypeErrorKind::InfiniteType => Text::from("infinite type".to_string()),
             TypeErrorKind::EscapingScope => Text::from("escaping scope".to_string()),
+            TypeErrorKind::NotAFunctionKind => Text::from("not a function kind".to_string()),
+            TypeErrorKind::UnboundTypeVariable(name) => {
+                Text::from(format!("unbound type variable: {}", name.get()))
+            }
         }
     }
 

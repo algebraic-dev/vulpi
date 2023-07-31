@@ -29,6 +29,34 @@ impl Type {
     pub fn arrow(left: Type, right: Type) -> Type {
         Type::new(TypeKind::Arrow(left, right))
     }
+
+    pub fn tuple(types: Vec<Type>) -> Type {
+        Type::new(TypeKind::Tuple(types))
+    }
+
+    pub fn forall(name: Symbol, kind: Kind, ty: Type) -> Type {
+        Type::new(TypeKind::Forall(name, kind, ty))
+    }
+
+    pub fn app(left: Type, right: Vec<Type>) -> Type {
+        let mut ty = left;
+        for arg in right {
+            ty = Type::new(TypeKind::App(ty, arg));
+        }
+        ty
+    }
+
+    pub fn variable(name: Qualified) -> Type {
+        Type::new(TypeKind::Variable(name))
+    }
+
+    pub fn named(name: Symbol) -> Type {
+        Type::new(TypeKind::Named(name))
+    }
+
+    pub fn error() -> Type {
+        Type::new(TypeKind::Error)
+    }
 }
 
 pub enum TypeKind {
@@ -49,6 +77,9 @@ pub enum TypeKind {
 
     /// The type of a type abstraction.
     Forall(Symbol, Kind, Type),
+
+    /// The type of a tuple.
+    Tuple(Vec<Type>),
 
     /// A empty or filled hole.
     Hole(Hole),
@@ -124,6 +155,16 @@ impl Type {
                 ty.print(env, fmt)?;
                 write!(fmt, ")")
             }
+            TypeKind::Tuple(ref tys) => {
+                write!(fmt, "(")?;
+                for (i, ty) in tys.iter().enumerate() {
+                    ty.print(env.clone(), fmt)?;
+                    if i != tys.len() - 1 {
+                        write!(fmt, ", ")?;
+                    }
+                }
+                write!(fmt, ")")
+            }
             TypeKind::Hole(ref hole) => {
                 if hole.is_filled() {
                     hole.deref().print(env, fmt)
@@ -149,6 +190,11 @@ impl Type {
             TypeKind::Forall(ref name2, ref kind, ref ty) if name != *name2 => Type::new(
                 TypeKind::Forall(name2.clone(), kind.clone(), ty.substitute(name, to)),
             ),
+            TypeKind::Tuple(ref tys) => Type::new(TypeKind::Tuple(
+                tys.iter()
+                    .map(|ty| ty.substitute(name.clone(), to.clone()))
+                    .collect(),
+            )),
             _ => self.clone(),
         }
     }
@@ -172,6 +218,11 @@ impl Type {
                 }
                 TypeKind::Forall(_, _, ref ty) => {
                     generalize_over(ty.clone(), new_vars, env);
+                }
+                TypeKind::Tuple(ref tys) => {
+                    for ty in tys {
+                        generalize_over(ty.clone(), new_vars, env);
+                    }
                 }
                 TypeKind::Hole(hole) => {
                     if hole.is_filled() {
@@ -215,6 +266,9 @@ impl Type {
                 f.clone().occurs(env.clone(), hole.clone(), scope)
                     && a.clone().occurs(env, hole, scope)
             }
+            TypeKind::Tuple(tys) => tys
+                .iter()
+                .all(|ty| ty.clone().occurs(env.clone(), hole.clone(), scope)),
             TypeKind::Forall(_, _, a) => a.clone().occurs(env, hole, scope),
             TypeKind::Hole(hole1) => {
                 if hole1.is_filled() {
@@ -286,6 +340,12 @@ impl Type {
             (TypeKind::Variable(ref name1), TypeKind::Variable(ref name2)) if name1 == name2 => (),
             (TypeKind::Named(ref name1), TypeKind::Named(ref name2)) if name1 == name2 => (),
 
+            (TypeKind::Tuple(ref tys1), TypeKind::Tuple(ref tys2)) if tys1.len() == tys2.len() => {
+                for (ty1, ty2) in tys1.iter().zip(tys2.iter()) {
+                    Type::unify(env.clone(), ty1.clone(), ty2.clone());
+                }
+            }
+
             (TypeKind::App(a, b), TypeKind::App(c, d)) => {
                 Type::unify(env.clone(), a.clone(), c.clone());
                 Type::unify(env, b.clone(), d.clone());
@@ -346,6 +406,7 @@ impl Type {
                 Type::sub_type_hole(env.clone(), a.clone(), hole_a);
                 Type::sub_hole_type(env, hole_b, b.clone());
             }
+
             _ => Type::unify_hole(env, hole, ty, false),
         }
     }

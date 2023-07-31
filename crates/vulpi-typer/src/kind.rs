@@ -11,6 +11,12 @@ use vulpi_intern::Symbol;
 #[derive(Clone)]
 pub struct Kind(Rc<KindType>);
 
+impl AsRef<KindType> for Kind {
+    fn as_ref(&self) -> &KindType {
+        &self.0
+    }
+}
+
 impl Kind {
     pub fn new(ty: KindType) -> Self {
         Kind(Rc::new(ty))
@@ -58,6 +64,10 @@ impl Kind {
             (_, KindType::Error) => (),
             _ => todo!(),
         }
+    }
+
+    pub fn error() -> Self {
+        Kind::new(KindType::Error)
     }
 }
 

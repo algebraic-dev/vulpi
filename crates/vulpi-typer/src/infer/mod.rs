@@ -2,8 +2,7 @@
 //! inferring the type of an expression given a context.
 
 pub mod kind;
-
-use vulpi_location::Spanned;
+pub mod types;
 
 /// The inference trait. It descovers the type of an expression based on the context.
 trait Infer {
@@ -28,14 +27,5 @@ impl<T: Infer> Infer for Vec<T> {
 
     fn infer(&self, context: &Self::Context) -> Self::Return {
         self.iter().map(|x| x.infer(context)).collect()
-    }
-}
-
-impl<T: Infer> Infer for Spanned<T> {
-    type Return = T::Return;
-    type Context = T::Context;
-
-    fn infer(&self, context: &Self::Context) -> Self::Return {
-        self.data.infer(context)
     }
 }
