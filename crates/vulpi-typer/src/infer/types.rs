@@ -67,16 +67,27 @@ impl Infer for r#abstract::Type {
                 (Type::app(func, args), kind)
             }
             TypeKind::Forall(forall) => {
-                let (param, kind) = match &forall.param {
-                    TypeBinder::Implicit(p) => (p, Kind::star()),
-                    TypeBinder::Explicit(l, r) => (l, r.infer(&())),
-                };
+                let mut ctx = context.clone();
 
-                let ctx = context.add_ty(param.clone(), kind.clone());
+                let mut binders = Vec::new();
+
+                for binder in &forall.params {
+                    let (param, kind) = match binder {
+                        TypeBinder::Implicit(p) => (p, Kind::star()),
+                        TypeBinder::Explicit(l, r) => (l, r.infer(&())),
+                    };
+
+                    ctx = context.add_ty(param.clone(), kind.clone());
+                    binders.push((param.clone(), kind.clone()));
+                }
 
                 let (left, k) = forall.body.infer(&ctx);
 
-                (Type::forall(param.clone(), kind, left), k)
+                let forall = binders
+                    .iter()
+                    .fold(left, |acc, (x, k)| Type::forall(x.clone(), k.clone(), acc));
+
+                (forall, k)
             }
             TypeKind::TypeVariable(t) => {
                 let res = context.get_ty(t);
@@ -90,7 +101,8 @@ impl Infer for r#abstract::Type {
                 }
             }
             TypeKind::Type(q) => {
-                let module = context.modules.get(q.path).unwrap();
+                let borrow_mut = &context.modules.borrow_mut();
+                let module = borrow_mut.get(q.path).unwrap();
                 let ty = module.types.get(&q.name).unwrap();
                 (Type::variable(q.clone()), ty.clone())
             }

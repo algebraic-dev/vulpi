@@ -4,6 +4,7 @@
 
 use vulpi_intern::Symbol;
 
+#[derive(Default, Clone)]
 pub struct Module {
     /// The types of the functions.
     pub variables: im_rc::HashMap<Symbol, crate::types::Type>,
@@ -25,6 +26,11 @@ pub struct Modules {
 }
 
 impl Modules {
+    pub fn new(size: usize) -> Self {
+        Self {
+            modules: vec![Module::default(); size],
+        }
+    }
     /// Adds a new module to the modules.
     pub fn add_module(&mut self, module: Module) {
         self.modules.push(module);

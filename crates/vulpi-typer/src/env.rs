@@ -1,7 +1,10 @@
 //! The environment. This is the module responsible for the creating a structure called
 //! [Env] that is responsible for storing the types of the variables and types of types.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
@@ -39,10 +42,35 @@ pub struct Env {
     pub location: RefCell<Span>,
 
     /// The modules.
-    pub modules: Rc<Modules>,
+    pub modules: Rc<RefCell<Modules>>,
+
+    /// The current id of the module.
+    pub current_id: Cell<usize>,
 }
 
 impl Env {
+    pub fn new(reporter: Report, modules: usize) -> Self {
+        Self {
+            reporter,
+            level: 0,
+            variables: im_rc::HashMap::new(),
+            types: im_rc::HashMap::new(),
+            names: im_rc::Vector::new(),
+            counter: Rc::new(RefCell::new(0)),
+            location: RefCell::new(Span::default()),
+            current_id: Cell::new(0),
+            modules: Rc::new(RefCell::new(Modules::new(modules))),
+        }
+    }
+
+    pub fn set_module(&self, id: usize) {
+        self.current_id.replace(id);
+    }
+
+    pub fn current_id(&self) -> usize {
+        self.current_id.get()
+    }
+
     pub fn new_hole(&self) -> Type {
         Type::new(TypeKind::Hole(Hole::new(self.level)))
     }

@@ -5,7 +5,7 @@ pub mod kind;
 pub mod types;
 
 /// The inference trait. It descovers the type of an expression based on the context.
-trait Infer {
+pub trait Infer {
     type Return;
     type Context;
 
@@ -27,5 +27,14 @@ impl<T: Infer> Infer for Vec<T> {
 
     fn infer(&self, context: &Self::Context) -> Self::Return {
         self.iter().map(|x| x.infer(context)).collect()
+    }
+}
+
+impl<T: Infer> Infer for Box<T> {
+    type Return = Box<T::Return>;
+    type Context = T::Context;
+
+    fn infer(&self, context: &Self::Context) -> Self::Return {
+        Box::new(self.as_ref().infer(context))
     }
 }
