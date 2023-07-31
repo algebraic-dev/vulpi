@@ -1,4 +1,6 @@
-//! Type definitions for the type checker.
+//! Type definitions for the type checker. This module includes a lot of operations that are
+//! required for higher rank polymorphism and higher kinded types like unification, instantiation,
+//! generalization, subsumption, etc.
 
 use crate::{env::Env, error::TypeErrorKind, kind::Kind};
 use std::{cell::RefCell, fmt::Display, fmt::Formatter, rc::Rc};
@@ -231,11 +233,23 @@ impl Type {
         }
     }
 
-    fn unify_hole(env: Env, hole: Hole, ty: Type) {
+    fn unify_hole(env: Env, hole: Hole, ty: Type, flipped: bool) {
         if hole.is_filled() {
-            Type::unify(env, hole.deref(), ty);
-        } else if ty.clone().occurs(env.clone(), hole.clone(), env.level) {
-            hole.fill(ty);
+            if flipped {
+                Type::unify(env, ty, hole.deref());
+            } else {
+                Type::unify(env, hole.deref(), ty);
+            }
+        } else {
+            if let TypeKind::Hole(hole1) = ty.0.as_ref() {
+                if hole == *hole1 {
+                    return;
+                }
+            }
+
+            if ty.clone().occurs(env.clone(), hole.clone(), env.level) {
+                hole.fill(ty);
+            }
         }
     }
 
@@ -244,8 +258,19 @@ impl Type {
             (TypeKind::Hole(x), _) if x.is_filled() => Type::unify(env, x.deref(), right),
             (_, TypeKind::Hole(x)) if x.is_filled() => Type::unify(env, left, x.deref()),
 
-            (TypeKind::Hole(x), _) => Type::unify_hole(env, x.clone(), right),
-            (_, TypeKind::Hole(x)) => Type::unify_hole(env, x.clone(), left),
+            //
+            //     α /∈ FV(A)     Γ [^α] ⊢ ^α := A ⊣ ∆
+            // ------------------------------------------ :InstantiateL
+            //           Γ [^α] ⊢ ^α <: A ⊣ ∆
+            //
+            (TypeKind::Hole(x), _) => Type::unify_hole(env, x.clone(), right, false),
+
+            //
+            //    α /∈ FV(A)    Γ [^α] ⊢ A := ^α ⊣ ∆
+            // ---------------------------------------- :InstantiateR
+            //          Γ [^α] ⊢ A <: ^α ⊣ ∆
+            //
+            (_, TypeKind::Hole(x)) => Type::unify_hole(env, x.clone(), left, true),
 
             (TypeKind::Bound(x), TypeKind::Bound(y)) if x == y => (),
             (TypeKind::Variable(ref name1), TypeKind::Variable(ref name2)) if name1 == name2 => (),
@@ -282,12 +307,21 @@ impl Type {
         }
     }
 
-    pub fn sub_hole_type(env: Env, hole: Hole, ty: Type) {
+    fn sub_hole_type(env: Env, hole: Hole, ty: Type) {
         match ty.0.as_ref() {
+            //
+            // Γ [^α], β ⊢ ^α :=< B ⊣ ∆, β, ∆'
+            // ------------------------------- InstLAllR
+            //    Γ [^α] ⊢ ^α :=< ∀β. B ⊣ ∆
+            //
             TypeKind::Forall(_, kind, t) => {
                 let env = env.add_new_ty(kind.clone());
                 Type::sub_hole_type(env, hole, t.clone());
             }
+            //
+            // Γ [^α2, ^α1, ^α = ^α1 → ^α2] ⊢ A1 =<: ^α1 a Θ Θ ⊣ ^α2 :=< [Θ]A2 a ∆
+            // ------------------------------------------------------------------- InstLArr
+            //                    Γ [^α] ⊢ ^α :=< A1 → A2 ⊣ ∆
             TypeKind::Arrow(a, b) => {
                 let HoleInner::Empty(scope) = *hole.0.borrow() else { unreachable!() };
 
@@ -302,16 +336,27 @@ impl Type {
                 Type::sub_type_hole(env.clone(), a.clone(), hole_a);
                 Type::sub_hole_type(env, hole_b, b.clone());
             }
-            _ => Type::unify_hole(env, hole, ty),
+            _ => Type::unify_hole(env, hole, ty, false),
         }
     }
 
-    pub fn sub_type_hole(env: Env, ty: Type, hole: Hole) {
+    fn sub_type_hole(env: Env, ty: Type, hole: Hole) {
         match ty.0.as_ref() {
+            //
+            //      Γ [^α], ▶^β, ^β ⊢ [^β/β]B =<: ^α ⊣ ∆, ▶^β, ∆′
+            // ----------------------------------------------------  InstRAllL
+            //              Γ [^α] ⊢ ∀β. B =<: ^α ⊣ ∆
+            //
             TypeKind::Forall(n, _, t) => {
                 let a_1 = t.instantiate(env.clone(), n.clone());
                 Type::sub_type_hole(env, a_1, hole)
             }
+
+            //
+            // Γ [^α2, ^α1, ^α = ^α1 → ^α2] ⊢ ^α1 :=< A1 ⊣ Θ    Θ ⊢ [Θ]A2 =<: ^α2 ⊣ ∆
+            // ----------------------------------------------------------------------- InstRArr
+            //                     Γ [^α] ⊢ A1 → A2 =<: ^α ⊣ ∆
+            //
             TypeKind::Arrow(a, b) => {
                 let HoleInner::Empty(scope) = *hole.0.borrow() else { unreachable!() };
 
@@ -326,7 +371,7 @@ impl Type {
                 Type::sub_hole_type(env.clone(), hole_a, a.clone());
                 Type::sub_type_hole(env, b.clone(), hole_b);
             }
-            _ => Type::unify_hole(env, hole, ty),
+            _ => Type::unify_hole(env, hole, ty, true),
         }
     }
 
@@ -335,14 +380,41 @@ impl Type {
             (TypeKind::Hole(x), _) if x.is_filled() => x.deref().sub(env, ty),
             (_, TypeKind::Hole(x)) if x.is_filled() => self.sub(env, x.deref()),
 
+            //
+            // --------------------------------- <:Exva
+            //     Γ [^α] ` ^α <: ^α a Γ [^α]
+            //
+            (TypeKind::Hole(x), TypeKind::Hole(y)) if x == y => (),
+
+            //
+            //     α /∈ FV(A)     Γ [^α] ⊢ ^α :=< A ⊣ ∆
+            // ------------------------------------------ <:Instantiate
+            //           Γ [^α] ⊢ ^α <: A ⊣ ∆
+            //
             (TypeKind::Hole(x), _) => Type::sub_hole_type(env, x.clone(), ty),
+
+            //
+            //    α /∈ FV(A)    Γ [^α] ⊢ A =<: ^α ⊣ ∆
+            // ---------------------------------------- <:InstantiateR
+            //          Γ [^α] ⊢ A <: ^α ⊣ ∆
+            //
             (_, TypeKind::Hole(x)) => Type::sub_type_hole(env, self.clone(), x.clone()),
 
+            //
+            // Γ, α ⊢ A <: B ⊣ ∆, α, Θ
+            // ------------------------- <:∀R
+            //    Γ ⊢ A <: ∀α. B ⊣ ∆
+            //
             (_, TypeKind::Forall(_, k, t)) => {
                 let env = env.add_new_ty(k.clone());
                 self.sub(env, t.clone());
             }
 
+            //
+            // Γ, ▶^α, ^α ⊢ [^α/α]A <: B ⊣ ∆, ▶^α, Θ
+            // ------------------------------------- <:∀L
+            //       Γ ⊢ ∀α. A <: B ⊣ ∆ <:∀L
+            //
             (TypeKind::Forall(n, _, t), _) => {
                 let a_1 = t.instantiate(env.clone(), n.clone());
                 a_1.sub(env, ty)
