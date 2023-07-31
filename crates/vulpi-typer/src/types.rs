@@ -1,13 +1,9 @@
 //! Type definitions for the type checker.
 
-use crate::{
-    env::Env,
-    error::{TypeError, TypeErrorKind},
-    kind::{Kind, KindType},
-};
+use crate::{env::Env, error::TypeErrorKind, kind::Kind};
 use std::{cell::RefCell, fmt::Display, fmt::Formatter, rc::Rc};
 use vulpi_intern::Symbol;
-use vulpi_syntax::{r#abstract::Qualified, r#abstract::TypeForall};
+use vulpi_syntax::r#abstract::Qualified;
 
 #[derive(Clone)]
 pub struct Type(Rc<TypeKind>);
@@ -15,6 +11,14 @@ pub struct Type(Rc<TypeKind>);
 impl Type {
     pub fn new(ty: TypeKind) -> Self {
         Type(Rc::new(ty))
+    }
+
+    pub fn hole(level: usize) -> Type {
+        Type::new(TypeKind::Hole(Hole::new(level)))
+    }
+
+    pub fn arrow(left: Type, right: Type) -> Type {
+        Type::new(TypeKind::Arrow(left, right))
     }
 }
 
@@ -32,7 +36,7 @@ pub enum TypeKind {
     Arrow(Type, Type),
 
     /// The type of a type application.
-    Fun(Type, Type),
+    App(Type, Type),
 
     /// The type of a type abstraction.
     Forall(Symbol, Kind, Type),
@@ -86,7 +90,7 @@ impl Type {
     pub fn print(&self, env: Env, fmt: &mut Formatter) -> std::fmt::Result {
         match *self.0 {
             TypeKind::Variable(ref name) => write!(fmt, "{}", name.name.get()),
-            TypeKind::Bound(lvl) => write!(fmt, "{}", env.names[env.level - lvl - 1].get()),
+            TypeKind::Bound(lvl) => write!(fmt, "{}", env.names[env.level - lvl - 1].0.get()),
             TypeKind::Named(ref name) => write!(fmt, "{}", name.get()),
             TypeKind::Arrow(ref ty1, ref ty2) => {
                 write!(fmt, "(")?;
@@ -95,7 +99,7 @@ impl Type {
                 ty2.print(env, fmt)?;
                 write!(fmt, ")")
             }
-            TypeKind::Fun(ref ty1, ref ty2) => {
+            TypeKind::App(ref ty1, ref ty2) => {
                 write!(fmt, "(")?;
                 ty1.print(env.clone(), fmt)?;
                 write!(fmt, " ")?;
@@ -127,7 +131,7 @@ impl Type {
                 from.substitute(name.clone(), to.clone()),
                 to.substitute(name, to.clone()),
             )),
-            TypeKind::Fun(ref from, ref to) => Type::new(TypeKind::Fun(
+            TypeKind::App(ref from, ref to) => Type::new(TypeKind::App(
                 from.substitute(name.clone(), to.clone()),
                 to.substitute(name, to.clone()),
             )),
@@ -150,7 +154,7 @@ impl Type {
                     generalize_over(from.clone(), new_vars, env);
                     generalize_over(to.clone(), new_vars, env);
                 }
-                TypeKind::Fun(ref from, ref to) => {
+                TypeKind::App(ref from, ref to) => {
                     generalize_over(from.clone(), new_vars, env);
                     generalize_over(to.clone(), new_vars, env);
                 }
@@ -195,7 +199,7 @@ impl Type {
                 l.clone().occurs(env.clone(), hole.clone(), scope)
                     && r.clone().occurs(env, hole, scope)
             }
-            TypeKind::Fun(f, a) => {
+            TypeKind::App(f, a) => {
                 f.clone().occurs(env.clone(), hole.clone(), scope)
                     && a.clone().occurs(env, hole, scope)
             }
@@ -241,17 +245,28 @@ impl Type {
             (_, TypeKind::Hole(x)) if x.is_filled() => Type::unify(env, left, x.deref()),
 
             (TypeKind::Hole(x), _) => Type::unify_hole(env, x.clone(), right),
+            (_, TypeKind::Hole(x)) => Type::unify_hole(env, x.clone(), left),
 
             (TypeKind::Bound(x), TypeKind::Bound(y)) if x == y => (),
             (TypeKind::Variable(ref name1), TypeKind::Variable(ref name2)) if name1 == name2 => (),
             (TypeKind::Named(ref name1), TypeKind::Named(ref name2)) if name1 == name2 => (),
-            (TypeKind::Fun(a, b), TypeKind::Fun(c, d)) => {
+
+            (TypeKind::App(a, b), TypeKind::App(c, d)) => {
                 Type::unify(env.clone(), a.clone(), c.clone());
                 Type::unify(env, b.clone(), d.clone());
             }
-            (TypeKind::Forall(na, _, ta), TypeKind::Forall(nb, _, tb)) => {
+
+            (TypeKind::Arrow(a, b), TypeKind::Arrow(c, d)) => {
+                Type::unify(env.clone(), a.clone(), c.clone());
+                Type::unify(env, b.clone(), d.clone());
+            }
+
+            (TypeKind::Forall(na, k, ta), TypeKind::Forall(nb, k1, tb)) => {
                 let name = env.new_name();
-                env.names.push_back(name);
+
+                k.unify(k1);
+
+                env.names.push_back((name, k.clone()));
                 env.level += 1;
 
                 let ty = Type::new(TypeKind::Bound(env.level));
@@ -264,6 +279,76 @@ impl Type {
             }
             (TypeKind::Error, _) | (_, TypeKind::Error) => (),
             _ => env.report(TypeErrorKind::TypeMismatch(env.clone(), left, right)),
+        }
+    }
+
+    pub fn sub_hole_type(env: Env, hole: Hole, ty: Type) {
+        match ty.0.as_ref() {
+            TypeKind::Forall(_, kind, t) => {
+                let env = env.add_new_ty(kind.clone());
+                Type::sub_hole_type(env, hole, t.clone());
+            }
+            TypeKind::Arrow(a, b) => {
+                let HoleInner::Empty(scope) = *hole.0.borrow() else { unreachable!() };
+
+                let hole_a = Hole::new(scope);
+                let hole_b = Hole::new(scope);
+
+                hole.fill(Type::arrow(
+                    Type::new(TypeKind::Hole(hole_a.clone())),
+                    Type::new(TypeKind::Hole(hole_b.clone())),
+                ));
+
+                Type::sub_type_hole(env.clone(), a.clone(), hole_a);
+                Type::sub_hole_type(env, hole_b, b.clone());
+            }
+            _ => Type::unify_hole(env, hole, ty),
+        }
+    }
+
+    pub fn sub_type_hole(env: Env, ty: Type, hole: Hole) {
+        match ty.0.as_ref() {
+            TypeKind::Forall(n, _, t) => {
+                let a_1 = t.instantiate(env.clone(), n.clone());
+                Type::sub_type_hole(env, a_1, hole)
+            }
+            TypeKind::Arrow(a, b) => {
+                let HoleInner::Empty(scope) = *hole.0.borrow() else { unreachable!() };
+
+                let hole_a = Hole::new(scope);
+                let hole_b = Hole::new(scope);
+
+                hole.fill(Type::arrow(
+                    Type::new(TypeKind::Hole(hole_a.clone())),
+                    Type::new(TypeKind::Hole(hole_b.clone())),
+                ));
+
+                Type::sub_hole_type(env.clone(), hole_a, a.clone());
+                Type::sub_type_hole(env, b.clone(), hole_b);
+            }
+            _ => Type::unify_hole(env, hole, ty),
+        }
+    }
+
+    pub fn sub(&self, env: Env, ty: Type) {
+        match (self.0.as_ref(), ty.0.as_ref()) {
+            (TypeKind::Hole(x), _) if x.is_filled() => x.deref().sub(env, ty),
+            (_, TypeKind::Hole(x)) if x.is_filled() => self.sub(env, x.deref()),
+
+            (TypeKind::Hole(x), _) => Type::sub_hole_type(env, x.clone(), ty),
+            (_, TypeKind::Hole(x)) => Type::sub_type_hole(env, self.clone(), x.clone()),
+
+            (_, TypeKind::Forall(_, k, t)) => {
+                let env = env.add_new_ty(k.clone());
+                self.sub(env, t.clone());
+            }
+
+            (TypeKind::Forall(n, _, t), _) => {
+                let a_1 = t.instantiate(env.clone(), n.clone());
+                a_1.sub(env, ty)
+            }
+
+            _ => Type::unify(env, self.clone(), ty),
         }
     }
 

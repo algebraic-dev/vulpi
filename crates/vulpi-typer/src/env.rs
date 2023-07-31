@@ -9,6 +9,7 @@ use vulpi_report::{Diagnostic, Report};
 
 use crate::{
     error::TypeError,
+    kind::Kind,
     types::{Hole, Type, TypeKind},
 };
 
@@ -28,7 +29,7 @@ pub struct Env {
     pub types: im_rc::HashMap<Symbol, crate::kind::Kind>,
 
     /// Variable names
-    pub names: im_rc::Vector<Symbol>,
+    pub names: im_rc::Vector<(Symbol, Kind)>,
 
     /// Counter for name generation
     pub counter: Rc<RefCell<usize>>,
@@ -54,5 +55,16 @@ impl Env {
             span: self.location.borrow().clone(),
             kind: error,
         }));
+    }
+
+    /// Adds a new type in the environment. It's useful for the type checking of the higher rank types.
+    pub fn add_new_ty(&self, kind: Kind) -> Env {
+        let mut new_env = self.clone();
+        new_env.level += 1;
+        let name = new_env.new_name();
+
+        new_env.names.push_back((name, kind));
+
+        new_env
     }
 }
