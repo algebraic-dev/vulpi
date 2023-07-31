@@ -4,7 +4,7 @@ use vulpi_macros::Show;
 
 use vulpi_show::{Show, TreeDisplay};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Qualified {
     pub path: usize,
     pub name: Symbol,
