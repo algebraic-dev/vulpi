@@ -45,6 +45,11 @@ impl Context {
             name: Vec::new(),
         }
     }
+
+    pub fn get_current_id(&self) -> usize {
+        self.tree.find(&self.name).unwrap().id.0
+    }
+
     pub fn report(&self, error: ResolverError) {
         self.reporter.report(Diagnostic::new(error));
     }
@@ -297,7 +302,7 @@ impl Resolve for TypeForall {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::TypeForall {
-            param: self.params.resolve(ctx),
+            params: self.params.resolve(ctx),
             body: self.body.resolve(ctx),
         }
     }
@@ -946,6 +951,7 @@ impl Resolve for TypeDecl {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.name.push(self.name.symbol());
         let result = ctx.scope::<Variable, _>(|ctx| abs::TypeDecl {
+            id: ctx.get_current_id(),
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             binders: self.binders.resolve(ctx),
@@ -978,6 +984,7 @@ impl Resolve for ModuleDecl {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.name.push(self.name.symbol());
         let result = abs::ModuleDecl {
+            id: ctx.get_current_id(),
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             decls: self.part.resolve(ctx),
@@ -1035,6 +1042,7 @@ impl Resolve for EffectDecl {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.name.push(self.name.symbol());
         let result = ctx.scope::<TypeVariable, _>(|ctx| abs::EffectDecl {
+            id: ctx.get_current_id(),
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             binders: self.binders.resolve(ctx),

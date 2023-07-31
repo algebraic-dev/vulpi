@@ -54,7 +54,7 @@ pub enum TypeBinder {
 
 #[derive(Show)]
 pub struct TypeForall {
-    pub param: TypeBinder,
+    pub params: Vec<TypeBinder>,
     pub body: Type,
 }
 
@@ -315,6 +315,7 @@ pub enum TypeDef {
 
 #[derive(Show)]
 pub struct TypeDecl {
+    pub id: usize,
     pub visibility: Visibility,
     pub name: Symbol,
     pub binders: Vec<TypeBinder>,
@@ -323,6 +324,7 @@ pub struct TypeDecl {
 
 #[derive(Show)]
 pub struct ModuleDecl {
+    pub id: usize,
     pub visibility: Visibility,
     pub name: Symbol,
     pub decls: Option<Vec<TopLevelDecl>>,
@@ -338,6 +340,7 @@ pub struct EffectField {
 
 #[derive(Show)]
 pub struct EffectDecl {
+    pub id: usize,
     pub visibility: Visibility,
     pub name: Symbol,
     pub binders: Vec<TypeBinder>,
