@@ -1,9 +1,11 @@
 //! The inference trait. It correponds to the `Γ |- e ⇒ A -| ∆` on the paper. It is responsible for
 //! inferring the type of an expression given a context.
 
+pub mod expr;
 pub mod kind;
 pub mod literal;
 pub mod pat;
+pub mod top_level;
 pub mod types;
 
 /// The inference trait. It descovers the type of an expression based on the context.

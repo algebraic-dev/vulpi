@@ -3,6 +3,7 @@
 
 use crate::types::Type;
 
+pub mod expr;
 pub mod pat;
 
 pub trait Apply {

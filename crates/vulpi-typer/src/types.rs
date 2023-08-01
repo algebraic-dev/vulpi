@@ -3,12 +3,7 @@
 //! generalization, subsumption, etc.
 
 use crate::{env::Env, error::TypeErrorKind, kind::Kind};
-use std::{
-    cell::{Ref, RefCell},
-    fmt::Display,
-    fmt::Formatter,
-    rc::Rc,
-};
+use std::{cell::RefCell, fmt::Display, fmt::Formatter, rc::Rc};
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 

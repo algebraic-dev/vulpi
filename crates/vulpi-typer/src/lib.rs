@@ -213,6 +213,11 @@ impl Declare for LetDecl {
             .variables
             .insert(self.name.clone(), typ);
     }
+
+    fn define(&self, context: Env) {
+        let ty = self.infer(context.clone());
+        println!("Let {}", ty.show(context));
+    }
 }
 
 impl Declare for ModuleDecl {

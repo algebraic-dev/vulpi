@@ -11,40 +11,39 @@ impl Infer for Literal {
     fn infer(&self, context: Self::Context<'_>) -> Self::Return {
         match self.data {
             LiteralKind::String(_) => {
-                let name = context
-                    .imports
-                    .get(&Symbol::intern("String"))
-                    .unwrap()
-                    .clone();
-                Type::variable(name)
+                if let Some(name) = context.imports.get(&Symbol::intern("String")) {
+                    Type::variable(name.clone())
+                } else {
+                    Type::error()
+                }
             }
             LiteralKind::Integer(_) => {
-                let name = context.imports.get(&Symbol::intern("Int")).unwrap().clone();
-                Type::variable(name)
+                if let Some(name) = context.imports.get(&Symbol::intern("Int")) {
+                    Type::variable(name.clone())
+                } else {
+                    Type::error()
+                }
             }
             LiteralKind::Float(_) => {
-                let name = context
-                    .imports
-                    .get(&Symbol::intern("Float"))
-                    .unwrap()
-                    .clone();
-                Type::variable(name)
+                if let Some(name) = context.imports.get(&Symbol::intern("Float")) {
+                    Type::variable(name.clone())
+                } else {
+                    Type::error()
+                }
             }
             LiteralKind::Char(_) => {
-                let name = context
-                    .imports
-                    .get(&Symbol::intern("Char"))
-                    .unwrap()
-                    .clone();
-                Type::variable(name)
+                if let Some(name) = context.imports.get(&Symbol::intern("Char")) {
+                    Type::variable(name.clone())
+                } else {
+                    Type::error()
+                }
             }
             LiteralKind::Unit => {
-                let name = context
-                    .imports
-                    .get(&Symbol::intern("Unit"))
-                    .unwrap()
-                    .clone();
-                Type::variable(name)
+                if let Some(name) = context.imports.get(&Symbol::intern("Unit")) {
+                    Type::variable(name.clone())
+                } else {
+                    Type::error()
+                }
             }
         }
     }

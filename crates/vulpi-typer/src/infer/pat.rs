@@ -45,7 +45,7 @@ impl Infer for Pattern {
                 ty
             }
             PatternKind::Application(app) => {
-                let (mut ty, arity) = env.get_module_constructor(app);
+                let (mut ty, arity) = env.get_module_constructor(&app.func);
 
                 if app.args.len() != arity {
                     env.report(crate::error::TypeErrorKind::WrongArity(

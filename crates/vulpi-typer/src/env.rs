@@ -49,6 +49,7 @@ pub struct Env {
     /// The current id of the module.
     pub current_id: Cell<usize>,
 
+    /// Prelude imports
     pub imports: HashMap<Symbol, Qualified>,
 }
 
@@ -69,44 +70,42 @@ impl Env {
         }
     }
 
-    pub fn get_module_ty(
-        &self,
-        app: &vulpi_syntax::r#abstract::PatApplication,
-    ) -> crate::kind::Kind {
+    pub fn add_variable(&mut self, name: Symbol, ty: Type) {
+        self.variables.insert(name, ty);
+    }
+
+    pub fn get_module_ty(&self, app: &vulpi_syntax::r#abstract::Qualified) -> crate::kind::Kind {
         self.modules
             .borrow_mut()
-            .get(app.func.path)
+            .get(app.path)
             .unwrap()
             .types
-            .get(&app.func.name)
+            .get(&app.name)
             .unwrap()
             .clone()
     }
 
     pub fn get_module_constructor(
         &self,
-        app: &vulpi_syntax::r#abstract::PatApplication,
+        app: &vulpi_syntax::r#abstract::Qualified,
     ) -> (crate::types::Type, usize) {
         self.modules
             .borrow_mut()
-            .get(app.func.path)
+            .get(app.path)
             .unwrap()
             .constructors
-            .get(&app.func.name)
+            .get(&app.name)
             .unwrap()
             .clone()
     }
 
-    pub fn get_module_let(
-        &self,
-        app: &vulpi_syntax::r#abstract::PatApplication,
-    ) -> crate::types::Type {
+    pub fn get_module_let(&self, app: &vulpi_syntax::r#abstract::Qualified) -> crate::types::Type {
         self.modules
             .borrow_mut()
-            .get(app.func.path)
+            .get(app.path)
             .unwrap()
             .variables
-            .get(&app.func.name)
+            .get(&app.name)
             .unwrap()
             .clone()
     }
