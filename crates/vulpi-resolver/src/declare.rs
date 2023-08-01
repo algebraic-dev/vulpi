@@ -7,6 +7,7 @@
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::{Diagnostic, Report};
+
 use vulpi_syntax::{concrete::tree::*, r#abstract::Qualified};
 
 use crate::{
@@ -363,7 +364,8 @@ impl ImportResolve for UseDecl {
     fn resolve_imports(&self, ctx: &mut Context) {
         let vec: Vec<_> = (&self.path).into();
 
-        let Some(sub_tree) = ctx.module_tree.find(&vec) else {
+        let Some(sub_tree) = ctx.module_tree.find(&ctx.name).and_then(|x| x.find(&vec)) else {
+            println!("{}", vec.iter().map(|x| x.get()).collect::<Vec<_>>().join("::"));
             return ctx.report(ResolverError {
                 span: self.path.span.clone(),
                 kind: ResolverErrorKind::NotFound(vec),

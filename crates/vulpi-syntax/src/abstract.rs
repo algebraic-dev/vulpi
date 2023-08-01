@@ -171,8 +171,8 @@ pub struct Block {
 
 #[derive(Show)]
 pub struct PatAscription {
-    pub left: Pattern,
-    pub right: Type,
+    pub pat: Pattern,
+    pub ty: Type,
 }
 
 #[derive(Show)]

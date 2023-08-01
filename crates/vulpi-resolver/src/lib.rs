@@ -13,7 +13,7 @@ use vulpi_location::{Span, Spanned};
 
 use vulpi_report::{Diagnostic, Report};
 
-use vulpi_syntax::concrete::{tree::*, Lower, Path, Upper};
+use vulpi_syntax::concrete::{tree::*, Lower, Path};
 use vulpi_syntax::r#abstract as abs;
 use vulpi_syntax::r#abstract::Qualified;
 
@@ -31,6 +31,7 @@ pub struct Context {
     reporter: Report,
     main: ModuleId,
     name: Vec<Symbol>,
+    pub prelude: HashMap<Symbol, Qualified>,
 }
 
 impl Context {
@@ -43,6 +44,7 @@ impl Context {
             reporter,
             main: ModuleId(0),
             name: Vec::new(),
+            prelude: HashMap::new(),
         }
     }
 
@@ -128,7 +130,12 @@ impl Context {
         }
     }
 
-    pub(crate) fn find_type(&self, span: Span, name: &[Symbol]) -> Option<Item<TypeValue>> {
+    pub(crate) fn find_type(
+        &self,
+        span: Span,
+        name: &[Symbol],
+        error: bool,
+    ) -> Option<Item<TypeValue>> {
         let (name, current) = if name[0] == Symbol::intern("Self") {
             (&name[1..], self.main)
         } else {
@@ -136,7 +143,7 @@ impl Context {
             (name, ModuleId(current))
         };
 
-        self.find_val(span, &current, name, |x| &x.types, false)
+        self.find_val(span, &current, name, |x| &x.types, error)
     }
 
     pub(crate) fn find_value(
@@ -188,6 +195,56 @@ impl Context {
             output
         } else {
             fun(self)
+        }
+    }
+
+    pub fn find_prelude_func(&mut self, span: Span, name: &str) -> Option<Qualified> {
+        if let Some(item) = self.prelude.get(&Symbol::intern(name)) {
+            Some(item.clone())
+        } else {
+            let find = find_constructor_raw(
+                span,
+                &[
+                    Symbol::intern("Self"),
+                    Symbol::intern("Prelude"),
+                    Symbol::intern(name),
+                ],
+                self,
+                Some,
+                None,
+            );
+
+            if let Some(item) = find {
+                self.prelude.insert(Symbol::intern(name), item.clone());
+                Some(item)
+            } else {
+                None
+            }
+        }
+    }
+
+    pub fn find_prelude_type(&mut self, span: Span, name: &str) -> Option<Qualified> {
+        if let Some(item) = self.prelude.get(&Symbol::intern(name)) {
+            Some(item.clone())
+        } else {
+            let find = find_type_raw(
+                span,
+                &[
+                    Symbol::intern("Self"),
+                    Symbol::intern("Prelude"),
+                    Symbol::intern(name),
+                ],
+                self,
+                Some,
+                None,
+            );
+
+            if let Some(item) = find {
+                self.prelude.insert(Symbol::intern(name), item.clone());
+                Some(item)
+            } else {
+                None
+            }
         }
     }
 
@@ -298,7 +355,7 @@ impl Resolve for Effect {
                 let vec: Vec<_> = (&lower).into();
                 let args = args.resolve(ctx);
 
-                match ctx.find_value(lower.span.clone(), &vec, true) {
+                match ctx.find_value(lower.span.clone(), &vec, false) {
                     Some(Item {
                         item: Value::Effect(qual),
                         ..
@@ -372,7 +429,7 @@ impl Resolve for TypeKind {
         match self {
             TypeKind::Type(n) => {
                 let vec: Vec<_> = (&n).into();
-                match ctx.find_type(n.span, &vec) {
+                match ctx.find_type(n.span, &vec, false) {
                     Some(Item { item, .. }) => abs::TypeKind::Type(item.qualified().clone()),
                     None => abs::TypeKind::Error,
                 }
@@ -393,12 +450,24 @@ impl Resolve for TypeKind {
 impl Resolve for LiteralKind {
     type Output = abs::LiteralKind;
 
-    fn resolve(self, _: &mut Context) -> Self::Output {
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
-            LiteralKind::String(n) => abs::LiteralKind::String(n.symbol()),
-            LiteralKind::Integer(n) => abs::LiteralKind::Integer(n.symbol()),
-            LiteralKind::Float(n) => abs::LiteralKind::Float(n.symbol()),
-            LiteralKind::Char(n) => abs::LiteralKind::Char(n.symbol()),
+            LiteralKind::String(n) => {
+                ctx.find_prelude_type(n.value.span.clone(), "String");
+                abs::LiteralKind::String(n.symbol())
+            }
+            LiteralKind::Integer(n) => {
+                ctx.find_prelude_type(n.value.span.clone(), "Int");
+                abs::LiteralKind::Integer(n.symbol())
+            }
+            LiteralKind::Float(n) => {
+                ctx.find_prelude_type(n.value.span.clone(), "Float");
+                abs::LiteralKind::Float(n.symbol())
+            }
+            LiteralKind::Char(n) => {
+                ctx.find_prelude_type(n.value.span.clone(), "Char");
+                abs::LiteralKind::Char(n.symbol())
+            }
             LiteralKind::Unit(_) => abs::LiteralKind::Unit,
         }
     }
@@ -443,8 +512,8 @@ impl Resolve for PatAscription {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::PatAscription {
-            left: self.left.resolve(ctx),
-            right: self.right.resolve(ctx),
+            pat: self.left.resolve(ctx),
+            ty: self.right.resolve(ctx),
         }
     }
 }
@@ -623,18 +692,15 @@ impl Resolve for IfExpr {
     type Output = abs::ExprKind;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        let fn_cons = |name| {
-            find_constructor_raw(
-                self.if_.value.span.clone(),
-                &[Symbol::intern("Bool"), Symbol::intern(name)],
-                ctx,
-                |func| abs::PatternKind::Application(abs::PatApplication { func, args: vec![] }),
-                abs::PatternKind::Error,
-            )
-        };
+        let true_cons = ctx
+            .find_prelude_func(self.if_.value.span.clone(), "True")
+            .map(|func| abs::PatternKind::Application(abs::PatApplication { func, args: vec![] }))
+            .unwrap_or(abs::PatternKind::Error);
 
-        let true_cons = fn_cons("True");
-        let false_cons = fn_cons("False");
+        let false_cons = ctx
+            .find_prelude_func(self.if_.value.span.clone(), "False")
+            .map(|func| abs::PatternKind::Application(abs::PatApplication { func, args: vec![] }))
+            .unwrap_or(abs::PatternKind::Error);
 
         abs::ExprKind::When(abs::WhenExpr {
             scrutinee: self.cond.resolve(ctx),
@@ -727,7 +793,7 @@ impl Resolve for RecordInstance {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         let vec: Vec<_> = (&self.name).into();
 
-        let name = match ctx.find_type(self.name.span.clone(), &vec) {
+        let name = match ctx.find_type(self.name.span.clone(), &vec, false) {
             Some(Item {
                 item: TypeValue::Record(n),
                 ..
@@ -830,7 +896,14 @@ impl Resolve for ExprKind {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
             ExprKind::Constructor(x) => {
-                find_cons(x, ctx, abs::ExprKind::Constructor, abs::ExprKind::Error)
+                let vec: Vec<_> = (&x).into();
+                find_constructor_raw(
+                    x.span,
+                    &vec,
+                    ctx,
+                    abs::ExprKind::Constructor,
+                    abs::ExprKind::Error,
+                )
             }
             ExprKind::Variable(x) => {
                 if ctx.scopes.contains::<Variable>(&x.symbol()) {
@@ -1135,9 +1208,17 @@ impl Resolve for Program {
     }
 }
 
-fn find_cons<T>(x: Path<Upper>, ctx: &Context, ok: fn(Qualified) -> T, error: T) -> T {
-    let vec: Vec<_> = (&x).into();
-    find_constructor_raw(x.span, &vec, ctx, ok, error)
+fn find_type_raw<T>(
+    span: Span,
+    x: &[Symbol],
+    ctx: &Context,
+    ok: fn(Qualified) -> T,
+    error: T,
+) -> T {
+    match ctx.find_type(span, x, false) {
+        Some(Item { item, .. }) => ok(item.qualified().clone()),
+        None => error,
+    }
 }
 
 fn find_constructor_raw<T>(
