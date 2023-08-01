@@ -93,7 +93,6 @@ impl Context {
 
         if name.len() == 1 {
             let result = fun(module).get(&name[0]).cloned().or_else(|| {
-                println!("In: {}", module_id.0);
                 self.report(ResolverError {
                     span: span.clone(),
                     kind: ResolverErrorKind::NotFound(name.to_vec()),
@@ -787,10 +786,6 @@ impl Resolve for ExprKind {
                         Value::Constructor(qual) => abs::ExprKind::Constructor(qual),
                     }
                 } else {
-                    ctx.report(ResolverError {
-                        span: x.0.value.span.clone(),
-                        kind: ResolverErrorKind::NotFound(vec![x.symbol()]),
-                    });
                     abs::ExprKind::Error
                 }
             }
