@@ -67,6 +67,13 @@ impl Env {
         self.current_id.replace(id);
     }
 
+    pub fn on(&mut self, id: usize, func: impl FnOnce(&mut Self)) {
+        let old = self.current_id.get();
+        self.set_module(id);
+        func(self);
+        self.set_module(old);
+    }
+
     pub fn current_id(&self) -> usize {
         self.current_id.get()
     }

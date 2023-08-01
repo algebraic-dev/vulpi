@@ -9,6 +9,9 @@ pub struct Module {
     /// The types of the functions.
     pub variables: im_rc::HashMap<Symbol, crate::types::Type>,
 
+    /// The types of the functions.
+    pub constructors: im_rc::HashMap<Symbol, crate::types::Type>,
+
     /// The types of the types.
     pub types: im_rc::HashMap<Symbol, crate::kind::Kind>,
 

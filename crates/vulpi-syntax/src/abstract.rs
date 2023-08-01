@@ -389,6 +389,44 @@ pub struct ModuleDecl {
     pub decls: Option<Vec<TopLevelDecl>>,
 }
 
+impl ModuleDecl {
+    pub fn types(&self) -> Option<impl Iterator<Item = &TypeDecl>> {
+        self.decls.as_ref().map(|decls| {
+            decls.iter().filter_map(|decl| match *decl {
+                TopLevelDecl::Type(ref decl) => Some(&**decl),
+                _ => None,
+            })
+        })
+    }
+
+    pub fn effects(&self) -> Option<impl Iterator<Item = &EffectDecl>> {
+        self.decls.as_ref().map(|decls| {
+            decls.iter().filter_map(|decl| match *decl {
+                TopLevelDecl::Effect(ref decl) => Some(&**decl),
+                _ => None,
+            })
+        })
+    }
+
+    pub fn lets(&self) -> Option<impl Iterator<Item = &LetDecl>> {
+        self.decls.as_ref().map(|decls| {
+            decls.iter().filter_map(|decl| match *decl {
+                TopLevelDecl::Let(ref decl) => Some(&**decl),
+                _ => None,
+            })
+        })
+    }
+
+    pub fn modules(&self) -> Option<impl Iterator<Item = &ModuleDecl>> {
+        self.decls.as_ref().map(|decls| {
+            decls.iter().filter_map(|decl| match *decl {
+                TopLevelDecl::Module(ref decl) => Some(&**decl),
+                _ => None,
+            })
+        })
+    }
+}
+
 #[derive(Show)]
 pub struct EffectField {
     pub visibility: Visibility,
@@ -423,6 +461,20 @@ impl Module {
     pub fn lets(&self) -> impl Iterator<Item = &LetDecl> {
         self.decls.iter().filter_map(|decl| match *decl {
             TopLevelDecl::Let(ref decl) => Some(&**decl),
+            _ => None,
+        })
+    }
+
+    pub fn modules(&self) -> impl Iterator<Item = &ModuleDecl> {
+        self.decls.iter().filter_map(|decl| match *decl {
+            TopLevelDecl::Module(ref decl) => Some(&**decl),
+            _ => None,
+        })
+    }
+
+    pub fn effects(&self) -> impl Iterator<Item = &EffectDecl> {
+        self.decls.iter().filter_map(|decl| match *decl {
+            TopLevelDecl::Effect(ref decl) => Some(&**decl),
             _ => None,
         })
     }
