@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use vulpi_intern::Symbol;
 use vulpi_location::Spanned;
@@ -31,8 +31,15 @@ pub type Kind = Box<Spanned<KindType>>;
 // Types
 
 #[derive(Show)]
+pub enum Effect {
+    Application(Qualified, Vec<Type>),
+    Variable(Symbol),
+    Error,
+}
+
+#[derive(Show)]
 pub struct Effects {
-    pub effects: Vec<Type>,
+    pub effects: Vec<Effect>,
 }
 
 #[derive(Show)]

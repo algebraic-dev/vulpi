@@ -7,9 +7,16 @@ use crate::tokens::Token;
 use super::{top_level::TypeBinder, Parenthesis, Path, Upper};
 
 #[derive(Show)]
+
+pub enum Effect {
+    Application(Path<Upper>, Vec<Box<Type>>),
+    Variable(Lower),
+}
+
+#[derive(Show)]
 pub struct Effects {
     pub left_brace: Token,
-    pub effects: Vec<(Box<Type>, Option<Token>)>,
+    pub effects: Vec<(Effect, Option<Token>)>,
     pub right_brace: Token,
 }
 

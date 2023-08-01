@@ -219,7 +219,7 @@ impl Declare for ModuleDecl {
 
         if let Some(module) = &self.part {
             for top_level in &module.top_levels {
-                top_level.0.declare(ctx);
+                top_level.declare(ctx);
             }
         }
     }
