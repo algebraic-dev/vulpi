@@ -11,6 +11,8 @@ pub enum TypeErrorKind {
     InfiniteType,
     EscapingScope,
     NotAFunctionKind,
+    WrongArity(usize, usize),
+    NotAFunction(Env, Type),
 }
 
 pub struct TypeError {
@@ -34,6 +36,13 @@ impl IntoDiagnostic for TypeError {
             TypeErrorKind::NotAFunctionKind => Text::from("not a function kind".to_string()),
             TypeErrorKind::UnboundTypeVariable(name) => {
                 Text::from(format!("unbound type variable: {}", name.get()))
+            }
+            TypeErrorKind::WrongArity(expected, found) => Text::from(format!(
+                "wrong arity: expected {} arguments, found {}",
+                expected, found
+            )),
+            TypeErrorKind::NotAFunction(env, ty) => {
+                Text::from(format!("not a function: {}", ty.show(env.clone())))
             }
         }
     }

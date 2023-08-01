@@ -28,6 +28,10 @@ impl Kind {
         Kind::new(KindType::Variable(Symbol::intern("*")))
     }
 
+    pub fn var(name: Symbol) -> Self {
+        Kind::new(KindType::Variable(name))
+    }
+
     pub fn arrow(left: Self, right: Self) -> Self {
         Kind::new(KindType::Arrow(left, right))
     }

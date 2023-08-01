@@ -6,8 +6,10 @@
 use std::collections::HashSet;
 
 use env::Env;
+use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::*;
 
+pub mod apply;
 pub mod env;
 pub mod error;
 pub mod infer;
@@ -30,7 +32,7 @@ impl Declare for TypeDecl {
         for binder in &self.binders {
             let (name, kind) = match binder {
                 TypeBinder::Implicit(p) => (p.clone(), kind::Kind::star()),
-                TypeBinder::Explicit(p, k) => (p.clone(), k.infer(&())),
+                TypeBinder::Explicit(p, k) => (p.clone(), k.infer(())),
             };
 
             context.types.insert(name, kind.clone());
@@ -53,7 +55,7 @@ impl Declare for TypeDecl {
         for binder in &self.binders {
             let (name, kind) = match binder {
                 TypeBinder::Implicit(p) => (p.clone(), kind::Kind::star()),
-                TypeBinder::Explicit(p, k) => (p.clone(), k.infer(&())),
+                TypeBinder::Explicit(p, k) => (p.clone(), k.infer(())),
             };
 
             context.types.insert(name.clone(), kind.clone());
@@ -80,11 +82,9 @@ impl Declare for TypeDecl {
                         .into_iter()
                         .rfold(typ.clone(), |acc, (n, k)| types::Type::forall(n, k, acc));
 
-                    println!("{}", typ.show(context.clone()));
-
                     context.modules.borrow_mut().modules[context.current_id()]
                         .constructors
-                        .insert(cons.name.clone(), typ);
+                        .insert(cons.name.clone(), (typ, cons.args.len()));
                 }
             }
             TypeDef::Record(rec) => {
@@ -105,6 +105,71 @@ impl Declare for TypeDecl {
             }
             TypeDef::Synonym(_) => todo!(),
             TypeDef::Abstract => (),
+        }
+    }
+}
+
+impl Declare for EffectDecl {
+    fn declare(&self, mut context: Env) {
+        let mut kinds = Vec::new();
+
+        for binder in &self.binders {
+            let (name, kind) = match binder {
+                TypeBinder::Implicit(p) => (p.clone(), kind::Kind::star()),
+                TypeBinder::Explicit(p, k) => (p.clone(), k.infer(())),
+            };
+
+            context.types.insert(name, kind.clone());
+            kinds.push(kind);
+        }
+
+        let arrow = kinds
+            .into_iter()
+            .rfold(kind::Kind::var(Symbol::intern("Effect")), |acc, x| {
+                kind::Kind::arrow(x, acc)
+            });
+
+        context.modules.borrow_mut().modules[self.id]
+            .types
+            .insert(self.name.clone(), arrow);
+    }
+
+    fn define(&self, mut context: Env) {
+        let mut kinds = Vec::new();
+        let mut types = Vec::new();
+
+        for binder in &self.binders {
+            let (name, kind) = match binder {
+                TypeBinder::Implicit(p) => (p.clone(), kind::Kind::star()),
+                TypeBinder::Explicit(p, k) => (p.clone(), k.infer(())),
+            };
+
+            context.types.insert(name.clone(), kind.clone());
+
+            kinds.push((name.clone(), kind));
+            types.push(types::Type::named(name));
+        }
+
+        for eff in &self.fields {
+            let types = eff.args.iter().map(|x| {
+                let (t, k) = x.infer(&context);
+                k.unify(&context, &kind::Kind::star());
+                t
+            });
+
+            let (init, k) = eff.ty.infer(&context);
+            k.unify(&context, &kind::Kind::star());
+
+            let typ = types.rfold(init, |acc, x| types::Type::arrow(x, acc));
+
+            let typ = kinds
+                .clone()
+                .into_iter()
+                .rfold(typ.clone(), |acc, (n, k)| types::Type::forall(n, k, acc));
+
+            context.modules.borrow_mut().modules[context.current_id()]
+                .effects
+                .insert(eff.name.clone(), typ);
         }
     }
 }
@@ -165,6 +230,12 @@ impl Declare for ModuleDecl {
                 }
             }
 
+            if let Some(effs) = self.effects() {
+                for decl in effs {
+                    decl.declare(context.clone());
+                }
+            }
+
             if let Some(modules) = self.modules() {
                 for decl in modules {
                     decl.declare(context.clone());
@@ -183,6 +254,12 @@ impl Declare for ModuleDecl {
 
             if let Some(lets) = self.lets() {
                 for decl in lets {
+                    decl.define(context.clone());
+                }
+            }
+
+            if let Some(effs) = self.effects() {
+                for decl in effs {
                     decl.define(context.clone());
                 }
             }
@@ -206,6 +283,10 @@ impl Declare for Module {
             decl.declare(context.clone());
         }
 
+        for effs in self.effects() {
+            effs.declare(context.clone());
+        }
+
         for del in self.lets() {
             del.declare(context.clone());
         }
@@ -218,6 +299,14 @@ impl Declare for Module {
 
         for decl in self.types() {
             decl.define(context.clone());
+        }
+
+        for effs in self.effects() {
+            effs.define(context.clone());
+        }
+
+        for lets in self.lets() {
+            lets.define(context.clone());
         }
     }
 }

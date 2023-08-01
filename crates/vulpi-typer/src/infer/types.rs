@@ -16,9 +16,9 @@ use super::Infer;
 
 impl Infer for r#abstract::Type {
     type Return = (Type, Kind);
-    type Context = Env;
+    type Context<'a> = &'a Env;
 
-    fn infer(&self, context: &Self::Context) -> Self::Return {
+    fn infer(&self, context: Self::Context<'_>) -> Self::Return {
         context.set_location(self.span.clone());
 
         match &self.data {
@@ -74,7 +74,7 @@ impl Infer for r#abstract::Type {
                 for binder in &forall.params {
                     let (param, kind) = match binder {
                         TypeBinder::Implicit(p) => (p, Kind::star()),
-                        TypeBinder::Explicit(l, r) => (l, r.infer(&())),
+                        TypeBinder::Explicit(l, r) => (l, r.infer(())),
                     };
 
                     ctx = context.add_ty(param.clone(), kind.clone());

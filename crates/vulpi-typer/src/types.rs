@@ -3,7 +3,12 @@
 //! generalization, subsumption, etc.
 
 use crate::{env::Env, error::TypeErrorKind, kind::Kind};
-use std::{cell::RefCell, fmt::Display, fmt::Formatter, rc::Rc};
+use std::{
+    cell::{Ref, RefCell},
+    fmt::Display,
+    fmt::Formatter,
+    rc::Rc,
+};
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 
@@ -16,6 +21,12 @@ use vulpi_syntax::r#abstract::Qualified;
 ///
 #[derive(Clone)]
 pub struct Type(Rc<TypeKind>);
+
+impl AsRef<TypeKind> for Type {
+    fn as_ref(&self) -> &TypeKind {
+        &self.0
+    }
+}
 
 impl Type {
     pub fn new(ty: TypeKind) -> Self {
@@ -59,6 +70,11 @@ impl Type {
     }
 }
 
+pub struct Effect {
+    pub name: Symbol,
+    pub args: Vec<Type>,
+}
+
 pub enum TypeKind {
     /// The type.
     Variable(Qualified),
@@ -90,6 +106,7 @@ pub enum TypeKind {
 
 /// Inside of a hole, it can be empty or filled wth a type. The Empty version stores the level where
 /// it was created. This is used to determine if it's escaping or not.
+#[derive(Clone)]
 pub enum HoleInner {
     Filled(Type),
     Empty(usize),

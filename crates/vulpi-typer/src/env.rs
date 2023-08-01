@@ -3,12 +3,14 @@
 
 use std::{
     cell::{Cell, RefCell},
+    collections::HashMap,
     rc::Rc,
 };
 
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::{Diagnostic, Report};
+use vulpi_syntax::r#abstract::Qualified;
 
 use crate::{
     error::TypeError,
@@ -46,10 +48,12 @@ pub struct Env {
 
     /// The current id of the module.
     pub current_id: Cell<usize>,
+
+    pub imports: HashMap<Symbol, Qualified>,
 }
 
 impl Env {
-    pub fn new(reporter: Report, modules: usize) -> Self {
+    pub fn new(reporter: Report, modules: usize, imports: HashMap<Symbol, Qualified>) -> Self {
         Self {
             reporter,
             level: 0,
@@ -60,7 +64,51 @@ impl Env {
             location: RefCell::new(Span::default()),
             current_id: Cell::new(0),
             modules: Rc::new(RefCell::new(Modules::new(modules))),
+
+            imports,
         }
+    }
+
+    pub fn get_module_ty(
+        &self,
+        app: &vulpi_syntax::r#abstract::PatApplication,
+    ) -> crate::kind::Kind {
+        self.modules
+            .borrow_mut()
+            .get(app.func.path)
+            .unwrap()
+            .types
+            .get(&app.func.name)
+            .unwrap()
+            .clone()
+    }
+
+    pub fn get_module_constructor(
+        &self,
+        app: &vulpi_syntax::r#abstract::PatApplication,
+    ) -> (crate::types::Type, usize) {
+        self.modules
+            .borrow_mut()
+            .get(app.func.path)
+            .unwrap()
+            .constructors
+            .get(&app.func.name)
+            .unwrap()
+            .clone()
+    }
+
+    pub fn get_module_let(
+        &self,
+        app: &vulpi_syntax::r#abstract::PatApplication,
+    ) -> crate::types::Type {
+        self.modules
+            .borrow_mut()
+            .get(app.func.path)
+            .unwrap()
+            .variables
+            .get(&app.func.name)
+            .unwrap()
+            .clone()
     }
 
     pub fn set_module(&self, id: usize) {

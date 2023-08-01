@@ -7,9 +7,9 @@ use crate::kind;
 
 impl Infer for Kind {
     type Return = kind::Kind;
-    type Context = ();
+    type Context<'a> = ();
 
-    fn infer(&self, _ctx: &Self::Context) -> Self::Return {
+    fn infer(&self, _ctx: Self::Context<'_>) -> Self::Return {
         match &self.data {
             KindType::Star => kind::Kind::star(),
             KindType::Arrow(l, r) => kind::Kind::arrow(l.infer(_ctx), r.infer(_ctx)),
