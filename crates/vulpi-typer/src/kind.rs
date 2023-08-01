@@ -7,6 +7,8 @@ use std::{
 
 use vulpi_intern::Symbol;
 
+use crate::env::Env;
+
 /// The kind of a type.
 #[derive(Clone)]
 pub struct Kind(Rc<KindType>);
@@ -53,16 +55,19 @@ impl Kind {
         }
     }
 
-    pub fn unify(&self, other: &Self) {
+    pub fn unify(&self, env: &Env, other: &Self) {
         match (&*self.0, &*other.0) {
             (KindType::Variable(name), KindType::Variable(other_name)) if name == other_name => (),
             (KindType::Arrow(from1, to1), KindType::Arrow(from2, to2)) => {
-                from1.unify(from2);
-                to1.unify(to2);
+                from1.unify(env, from2);
+                to1.unify(env, to2);
             }
             (KindType::Error, _) => (),
             (_, KindType::Error) => (),
-            _ => todo!(),
+            _ => env.report(crate::error::TypeErrorKind::KindMismatch(
+                self.clone(),
+                other.clone(),
+            )),
         }
     }
 

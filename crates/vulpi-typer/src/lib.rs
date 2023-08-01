@@ -61,7 +61,7 @@ impl Declare for LetDecl {
         let ret = match &self.ret {
             Some((_, t)) => {
                 let (t, k) = t.infer(&context);
-                k.unify(&kind::Kind::star());
+                k.unify(&context, &kind::Kind::star());
                 t
             }
             None => context.new_hole(),
@@ -72,7 +72,7 @@ impl Declare for LetDecl {
             .iter()
             .map(|x| {
                 let (t, k) = x.ty.infer(&context);
-                k.unify(&kind::Kind::star());
+                k.unify(&context, &kind::Kind::star());
                 t
             })
             .rfold(ret, |acc, x| types::Type::arrow(x, acc));

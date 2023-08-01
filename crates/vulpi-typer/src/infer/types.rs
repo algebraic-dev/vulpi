@@ -24,10 +24,10 @@ impl Infer for r#abstract::Type {
         match &self.data {
             TypeKind::Pi(pi) => {
                 let (left, k) = pi.left.infer(context);
-                k.unify(&Kind::star());
+                k.unify(context, &Kind::star());
 
                 let (right, k) = pi.right.infer(context);
-                k.unify(&Kind::star());
+                k.unify(context, &Kind::star());
 
                 (Type::arrow(left, right), Kind::star())
             }
@@ -36,7 +36,7 @@ impl Infer for r#abstract::Type {
                     .iter()
                     .map(|x| {
                         let (t, k) = x.infer(context);
-                        k.unify(&Kind::star());
+                        k.unify(context, &Kind::star());
                         t
                     })
                     .collect();
@@ -53,7 +53,7 @@ impl Infer for r#abstract::Type {
 
                     match kind.as_ref() {
                         KindType::Arrow(l, r) => {
-                            l.unify(&k);
+                            l.unify(context, &k);
                             kind = r.clone();
                         }
                         _ => {

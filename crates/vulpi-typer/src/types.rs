@@ -359,7 +359,7 @@ impl Type {
             (TypeKind::Forall(na, k, ta), TypeKind::Forall(nb, k1, tb)) => {
                 let name = env.new_name();
 
-                k.unify(k1);
+                k.unify(&env, k1);
 
                 env.names.push_back((name, k.clone()));
                 env.level += 1;
