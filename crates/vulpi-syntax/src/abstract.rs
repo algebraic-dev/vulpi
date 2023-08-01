@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use vulpi_intern::Symbol;
 use vulpi_location::Spanned;
 use vulpi_macros::Show;
@@ -72,6 +74,56 @@ pub enum TypeKind {
 }
 
 pub type Type = Box<Spanned<TypeKind>>;
+
+impl TypeKind {
+    pub fn free_variables(&self) -> HashSet<Symbol> {
+        match self {
+            TypeKind::Pi(pi) => {
+                let mut set = pi.left.data.free_variables();
+                set.extend(pi.right.data.free_variables());
+                set
+            }
+            TypeKind::Tuple(t) => {
+                let mut set = HashSet::new();
+
+                for ty in t {
+                    set.extend(ty.data.free_variables());
+                }
+
+                set
+            }
+            TypeKind::Application(app) => {
+                let mut set = app.func.data.free_variables();
+
+                for arg in &app.args {
+                    set.extend(arg.data.free_variables());
+                }
+
+                set
+            }
+            TypeKind::Forall(f) => {
+                let mut set = HashSet::new();
+
+                set.extend(f.body.data.free_variables());
+
+                for binder in &f.params {
+                    match binder {
+                        TypeBinder::Implicit(p) => set.remove(p),
+                        TypeBinder::Explicit(p, _) => set.remove(p),
+                    };
+                }
+
+                set
+            }
+            TypeKind::TypeVariable(v) => {
+                let mut set = HashSet::new();
+                set.insert(v.clone());
+                set
+            }
+            _ => HashSet::new(),
+        }
+    }
+}
 
 // Literal
 
@@ -358,4 +410,20 @@ pub enum TopLevelDecl {
 #[derive(Show)]
 pub struct Module {
     pub decls: Vec<TopLevelDecl>,
+}
+
+impl Module {
+    pub fn lets(&self) -> impl Iterator<Item = &LetDecl> {
+        self.decls.iter().filter_map(|decl| match *decl {
+            TopLevelDecl::Let(ref decl) => Some(&**decl),
+            _ => None,
+        })
+    }
+
+    pub fn types(&self) -> impl Iterator<Item = &TypeDecl> {
+        self.decls.iter().filter_map(|decl| match *decl {
+            TopLevelDecl::Type(ref decl) => Some(&**decl),
+            _ => None,
+        })
+    }
 }

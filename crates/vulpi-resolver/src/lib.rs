@@ -62,6 +62,7 @@ impl Context {
         fun: fn(&Namespace) -> &HashMap<Symbol, Item<T>>,
     ) -> Option<Item<T>> {
         let current = self.tree.find(&self.name).unwrap().id;
+        let current_module = &self.namespaces[current.0];
 
         let mut module_id = *module;
         let mut module = &self.namespaces[module.0];
@@ -102,7 +103,7 @@ impl Context {
 
             if namespace::Visibility::Private == result.visibility
                 && module_id != current
-                && !module.pass_through
+                && current_module.pass_through != Some(module_id)
             {
                 self.report(ResolverError {
                     span,

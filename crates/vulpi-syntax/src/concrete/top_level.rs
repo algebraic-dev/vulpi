@@ -204,4 +204,31 @@ impl Program {
                 _ => None,
             })
     }
+
+    pub fn types(&self) -> impl Iterator<Item = &TypeDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match top_level {
+                TopLevel::Type(type_) => Some(&**type_),
+                _ => None,
+            })
+    }
+
+    pub fn lets(&self) -> impl Iterator<Item = &LetDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match top_level {
+                TopLevel::Let(let_) => Some(&**let_),
+                _ => None,
+            })
+    }
+
+    pub fn effects(&self) -> impl Iterator<Item = &EffectDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match top_level {
+                TopLevel::Effect(effect) => Some(&**effect),
+                _ => None,
+            })
+    }
 }

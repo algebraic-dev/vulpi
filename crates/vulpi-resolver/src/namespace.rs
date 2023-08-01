@@ -25,7 +25,7 @@ pub enum Value {
     Field(Qualified),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TypeValue {
     Enum(Qualified),
     Effect(Qualified),
@@ -83,7 +83,7 @@ impl vulpi_show::Show for Value {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Item<Kind> {
     pub visibility: Visibility,
     pub span: Span,
@@ -104,11 +104,11 @@ pub struct Namespace {
     pub values: HashMap<Symbol, Item<Value>>,
     pub types: HashMap<Symbol, Item<TypeValue>>,
     pub modules: HashMap<Symbol, Item<ModuleId>>,
-    pub pass_through: bool,
+    pub pass_through: Option<ModuleId>,
 }
 
 impl Namespace {
-    pub fn new(pass_through: bool) -> Self {
+    pub fn new(pass_through: Option<ModuleId>) -> Self {
         Self {
             values: HashMap::new(),
             types: HashMap::new(),

@@ -6,11 +6,11 @@ use std::fmt::Debug;
 use vulpi_show::{Show, TreeDisplay};
 
 /// A new-type for a usize. It's used to locate a byte inside a source code.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Byte(pub usize);
 
 /// A span that locates a piece of data inside a source code.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Span {
     pub file: FileId,
     pub start: Byte,
@@ -94,5 +94,5 @@ impl<T> Spanned<T> {
 }
 
 /// The identifier of a file.
-#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Default, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct FileId(pub usize);

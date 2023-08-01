@@ -7,6 +7,7 @@
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::{Diagnostic, Report};
+use vulpi_show::Show;
 use vulpi_syntax::{concrete::tree::*, r#abstract::Qualified};
 
 use crate::{
@@ -54,7 +55,7 @@ impl<'a> Context<'a> {
         self.reporter.report(Diagnostic::new(error));
     }
 
-    fn derive(&mut self, new_name: Symbol, pass_through: bool) -> Context {
+    fn derive(&mut self, new_name: Symbol, pass_through: Option<ModuleId>) -> Context {
         let id = self.namespaces.len();
         self.derive_with_module_id(new_name, ModuleId(id), pass_through)
     }
@@ -63,7 +64,7 @@ impl<'a> Context<'a> {
         &mut self,
         new_name: Symbol,
         id: ModuleId,
-        pass_through: bool,
+        pass_through: Option<ModuleId>,
     ) -> Context {
         let mut name = self.name.clone();
         name.push(new_name);
@@ -127,18 +128,32 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn merge(&mut self, namespace: namespace::Namespace) {
-        for (key, value) in namespace.values {
+    fn merge(&mut self, namespace: namespace::Namespace, turn: bool) {
+        for (key, mut value) in namespace.values {
+            if turn {
+                value.visibility = namespace::Visibility::Public;
+            }
             self.add_value(value.span.clone(), key, value);
         }
 
-        for (key, value) in namespace.types {
+        for (key, mut value) in namespace.types {
+            if turn {
+                value.visibility = namespace::Visibility::Public;
+            }
+            println!("Adding {} {:?}", key.get(), value);
             self.add_type(value.span.clone(), key, value);
         }
 
-        for (key, value) in namespace.modules {
+        for (key, mut value) in namespace.modules {
+            if turn {
+                value.visibility = namespace::Visibility::Public;
+            }
             self.add_module(value.span.clone(), key, value);
         }
+    }
+
+    pub fn current_id(&self) -> ModuleId {
+        self.module_tree.find(&self.name).unwrap().id
     }
 }
 
@@ -157,6 +172,8 @@ impl From<Visibility> for namespace::Visibility {
 
 impl Declare for EffectDecl {
     fn declare(&self, ctx: &mut Context) {
+        let old = ctx.current_id();
+
         ctx.add_type(
             self.name.0.value.span.clone(),
             self.name.symbol(),
@@ -179,7 +196,7 @@ impl Declare for EffectDecl {
             },
         );
 
-        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, true);
+        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, Some(old));
 
         for field in &self.fields {
             ctx.add_value(
@@ -209,7 +226,7 @@ impl Declare for ModuleDecl {
             },
         );
 
-        let ctx = &mut &mut old_ctx.derive_with_module_id(self.name.symbol(), id, false);
+        let ctx = &mut &mut old_ctx.derive_with_module_id(self.name.symbol(), id, None);
 
         if let Some(module) = &self.part {
             for top_level in &module.top_levels {
@@ -263,6 +280,8 @@ impl Declare for TypeDef {
 
 impl Declare for TypeDecl {
     fn declare(&self, ctx: &mut Context) {
+        let old = ctx.current_id();
+
         ctx.add_type(
             self.name.0.value.span.clone(),
             self.name.symbol(),
@@ -296,7 +315,7 @@ impl Declare for TypeDecl {
             },
         );
 
-        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, true);
+        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, Some(old));
 
         if let Some(some) = &self.def {
             some.1.declare(ctx);
@@ -374,7 +393,7 @@ impl ImportResolve for UseDecl {
             )
         } else {
             let namespace = ctx.namespaces[sub_tree.id.0].clone();
-            ctx.merge(namespace);
+            ctx.merge(namespace, false);
         }
     }
 }
@@ -389,7 +408,7 @@ impl ImportResolve for TopLevel {
 
 impl ImportResolve for ModuleDecl {
     fn resolve_imports(&self, ctx: &mut Context) {
-        let ctx = &mut ctx.derive(self.name.symbol(), false);
+        let ctx = &mut ctx.derive(self.name.symbol(), None);
 
         if let Some(module) = &self.part {
             for top_level in module.modules() {
@@ -403,6 +422,27 @@ impl ImportResolve for ModuleDecl {
     }
 }
 
+impl ImportResolve for TypeDecl {
+    fn resolve_imports(&self, ctx: &mut Context) {
+        let old = ctx.current_id();
+        let namespace = ctx.module_tree.find(&ctx.name).unwrap().id;
+        let namespace = ctx.namespaces[namespace.0].clone();
+
+        let ctx = &mut ctx.derive(self.name.symbol(), Some(old));
+        ctx.merge(namespace, true);
+    }
+}
+
+impl ImportResolve for EffectDecl {
+    fn resolve_imports(&self, ctx: &mut Context) {
+        let namespace = ctx.module_tree.find(&ctx.name).unwrap().id;
+        let namespace = ctx.namespaces[namespace.0].clone();
+
+        let ctx = &mut ctx.derive(self.name.symbol(), None);
+        ctx.merge(namespace, true);
+    }
+}
+
 impl ImportResolve for Program {
     fn resolve_imports(&self, ctx: &mut Context) {
         for top_level in self.modules() {
@@ -410,6 +450,14 @@ impl ImportResolve for Program {
         }
 
         for top_level in self.uses() {
+            top_level.resolve_imports(ctx);
+        }
+
+        for top_level in self.types() {
+            top_level.resolve_imports(ctx);
+        }
+
+        for top_level in self.effects() {
             top_level.resolve_imports(ctx);
         }
     }
