@@ -128,26 +128,16 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn merge(&mut self, namespace: namespace::Namespace, turn: bool) {
-        for (key, mut value) in namespace.values {
-            if turn {
-                value.visibility = namespace::Visibility::Public;
-            }
+    fn merge(&mut self, namespace: namespace::Namespace) {
+        for (key, value) in namespace.values {
             self.add_value(value.span.clone(), key, value);
         }
 
-        for (key, mut value) in namespace.types {
-            if turn {
-                value.visibility = namespace::Visibility::Public;
-            }
-            println!("Adding {} {:?}", key.get(), value);
+        for (key, value) in namespace.types {
             self.add_type(value.span.clone(), key, value);
         }
 
-        for (key, mut value) in namespace.modules {
-            if turn {
-                value.visibility = namespace::Visibility::Public;
-            }
+        for (key, value) in namespace.modules {
             self.add_module(value.span.clone(), key, value);
         }
     }
@@ -393,7 +383,7 @@ impl ImportResolve for UseDecl {
             )
         } else {
             let namespace = ctx.namespaces[sub_tree.id.0].clone();
-            ctx.merge(namespace, false);
+            ctx.merge(namespace);
         }
     }
 }
@@ -429,7 +419,7 @@ impl ImportResolve for TypeDecl {
         let namespace = ctx.namespaces[namespace.0].clone();
 
         let ctx = &mut ctx.derive(self.name.symbol(), Some(old));
-        ctx.merge(namespace, true);
+        ctx.merge(namespace);
     }
 }
 
@@ -439,7 +429,7 @@ impl ImportResolve for EffectDecl {
         let namespace = ctx.namespaces[namespace.0].clone();
 
         let ctx = &mut ctx.derive(self.name.symbol(), None);
-        ctx.merge(namespace, true);
+        ctx.merge(namespace);
     }
 }
 

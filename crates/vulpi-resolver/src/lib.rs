@@ -123,11 +123,13 @@ impl Context {
     }
 
     pub(crate) fn find_type(&self, span: Span, name: &[Symbol]) -> Option<Item<TypeValue>> {
-        self.find_val(span, &self.main, name, |x| &x.types)
+        let current = self.get_current_id();
+        self.find_val(span, &ModuleId(current), name, |x| &x.types)
     }
 
     pub(crate) fn find_value(&self, span: Span, name: &[Symbol]) -> Option<Item<Value>> {
-        self.find_val(span, &self.main, name, |x| &x.values)
+        let current = self.get_current_id();
+        self.find_val(span, &ModuleId(current), name, |x| &x.values)
     }
 
     pub(crate) fn scope<T: Scopeable, U>(&mut self, fun: impl FnOnce(&mut Context) -> U) -> U {
@@ -945,8 +947,7 @@ impl Resolve for TypeDecl {
     type Output = abs::TypeDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        ctx.name.push(self.name.symbol());
-        let result = ctx.scope::<Variable, _>(|ctx| abs::TypeDecl {
+        ctx.scope::<Variable, _>(|ctx| abs::TypeDecl {
             id: ctx.get_current_id(),
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
@@ -956,10 +957,7 @@ impl Resolve for TypeDecl {
             } else {
                 abs::TypeDef::Abstract
             },
-        });
-        ctx.name.pop();
-
-        result
+        })
     }
 }
 
@@ -979,12 +977,14 @@ impl Resolve for ModuleDecl {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.name.push(self.name.symbol());
+
         let result = abs::ModuleDecl {
             id: ctx.get_current_id(),
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             decls: self.part.resolve(ctx),
         };
+
         ctx.name.pop();
 
         result
