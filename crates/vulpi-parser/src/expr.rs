@@ -70,10 +70,8 @@ impl<'a> Parser<'a> {
             let stmt = parse(self)?;
 
             if self.at(TokenData::Sep) {
-                Some(self.bump())
-            } else {
-                None
-            };
+                self.bump();
+            }
 
             statements.push(stmt);
         }
