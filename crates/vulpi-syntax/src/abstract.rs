@@ -211,7 +211,7 @@ pub type Pattern = Box<Spanned<PatternKind>>;
 
 #[derive(Show)]
 pub struct LambdaExpr {
-    pub params: Vec<Pattern>,
+    pub param: Pattern,
     pub body: Expr,
 }
 
@@ -236,7 +236,7 @@ pub struct ProjectionExpr {
 
 #[derive(Show)]
 pub struct PatternArm {
-    pub pattern: Vec<Pattern>,
+    pub patterns: Vec<Pattern>,
     pub expr: Expr,
     pub guard: Option<Expr>,
 }
@@ -310,7 +310,6 @@ pub enum ExprKind {
     Handler(HandlerExpr),
     Cases(CasesExpr),
     Tuple(Tuple),
-    Unit,
 
     Error,
 }

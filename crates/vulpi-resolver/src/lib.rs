@@ -452,22 +452,10 @@ impl Resolve for LiteralKind {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
-            LiteralKind::String(n) => {
-                ctx.find_prelude_type(n.value.span.clone(), "String");
-                abs::LiteralKind::String(n.symbol())
-            }
-            LiteralKind::Integer(n) => {
-                ctx.find_prelude_type(n.value.span.clone(), "Int");
-                abs::LiteralKind::Integer(n.symbol())
-            }
-            LiteralKind::Float(n) => {
-                ctx.find_prelude_type(n.value.span.clone(), "Float");
-                abs::LiteralKind::Float(n.symbol())
-            }
-            LiteralKind::Char(n) => {
-                ctx.find_prelude_type(n.value.span.clone(), "Char");
-                abs::LiteralKind::Char(n.symbol())
-            }
+            LiteralKind::String(n) => abs::LiteralKind::String(n.symbol()),
+            LiteralKind::Integer(n) => abs::LiteralKind::Integer(n.symbol()),
+            LiteralKind::Float(n) => abs::LiteralKind::Float(n.symbol()),
+            LiteralKind::Char(n) => abs::LiteralKind::Char(n.symbol()),
             LiteralKind::Unit(_) => abs::LiteralKind::Unit,
         }
     }
@@ -597,12 +585,19 @@ impl Resolve for PatEffectApp {
 }
 
 impl Resolve for LambdaExpr {
-    type Output = abs::LambdaExpr;
+    type Output = abs::Expr;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        ctx.scope::<Variable, _>(|ctx| abs::LambdaExpr {
-            params: self.patterns.resolve(ctx),
-            body: self.expr.resolve(ctx),
+        ctx.scope::<Variable, _>(|ctx| {
+            let body = self.expr.resolve(ctx);
+            let params = self.patterns.resolve(ctx);
+
+            params.into_iter().rfold(body, |body, param| {
+                Box::new(Spanned {
+                    span: param.span.clone().mix(body.span.clone()),
+                    data: abs::ExprKind::Lambda(abs::LambdaExpr { param, body }),
+                })
+            })
         })
     }
 }
@@ -706,7 +701,7 @@ impl Resolve for IfExpr {
             scrutinee: self.cond.resolve(ctx),
             arms: vec![
                 abs::PatternArm {
-                    pattern: vec![Box::new(Spanned::new(
+                    patterns: vec![Box::new(Spanned::new(
                         true_cons,
                         self.if_.value.span.clone(),
                     ))],
@@ -714,7 +709,7 @@ impl Resolve for IfExpr {
                     guard: None,
                 },
                 abs::PatternArm {
-                    pattern: vec![Box::new(Spanned::new(
+                    patterns: vec![Box::new(Spanned::new(
                         false_cons,
                         self.if_.value.span.clone(),
                     ))],
@@ -731,7 +726,7 @@ impl Resolve for PatternArm {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.scope::<Variable, _>(|ctx| abs::PatternArm {
-            pattern: self
+            patterns: self
                 .patterns
                 .into_iter()
                 .map(|x| x.0.resolve(ctx))
@@ -924,7 +919,7 @@ impl Resolve for ExprKind {
             }
             ExprKind::Function(x) => expect_function_or_effect(x, ctx),
             ExprKind::Do(x) => abs::ExprKind::Do(x.resolve(ctx)),
-            ExprKind::Lambda(x) => abs::ExprKind::Lambda(x.resolve(ctx)),
+            ExprKind::Lambda(x) => x.resolve(ctx).data,
             ExprKind::Application(x) => abs::ExprKind::Application(x.resolve(ctx)),
             ExprKind::Acessor(x) => abs::ExprKind::Projection(x.resolve(ctx)),
             ExprKind::Binary(x) => x.resolve(ctx),
@@ -995,7 +990,7 @@ impl Resolve for LetMode {
             LetMode::Body(_, expr) => abs::LetMode {
                 cases: vec![abs::LetCase {
                     pattern: abs::PatternArm {
-                        pattern: vec![],
+                        patterns: vec![],
                         expr: expr.resolve(ctx),
                         guard: None,
                     },
@@ -1198,6 +1193,12 @@ impl Resolve for Program {
     type Output = abs::Module;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
+        ctx.find_prelude_type(self.eof.value.span.clone(), "String");
+        ctx.find_prelude_type(self.eof.value.span.clone(), "Int");
+        ctx.find_prelude_type(self.eof.value.span.clone(), "Float");
+        ctx.find_prelude_type(self.eof.value.span.clone(), "Char");
+        ctx.find_prelude_type(self.eof.value.span.clone(), "Bool");
+
         abs::Module {
             decls: self
                 .top_levels
@@ -1215,7 +1216,7 @@ fn find_type_raw<T>(
     ok: fn(Qualified) -> T,
     error: T,
 ) -> T {
-    match ctx.find_type(span, x, false) {
+    match ctx.find_type(span, x, true) {
         Some(Item { item, .. }) => ok(item.qualified().clone()),
         None => error,
     }
