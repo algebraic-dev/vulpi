@@ -13,6 +13,7 @@ use vulpi_location::{Span, Spanned};
 
 use vulpi_report::{Diagnostic, Report};
 
+use vulpi_show::Show;
 use vulpi_syntax::concrete::{tree::*, Lower, Path, Upper};
 use vulpi_syntax::r#abstract as abs;
 use vulpi_syntax::r#abstract::Qualified;
@@ -62,7 +63,6 @@ impl Context {
         fun: fn(&Namespace) -> &HashMap<Symbol, Item<T>>,
     ) -> Option<Item<T>> {
         let current = self.tree.find(&self.name).unwrap().id;
-        let current_module = &self.namespaces[current.0];
 
         let mut module_id = *module;
         let mut module = &self.namespaces[module.0];
@@ -83,7 +83,11 @@ impl Context {
                     module_id = item.item;
                     module = &self.namespaces[item.item.0];
                 } else {
-                    break;
+                    self.report(ResolverError {
+                        span,
+                        kind: ResolverErrorKind::NotFound(vec![head.clone()]),
+                    });
+                    return None;
                 }
 
                 if tail.len() == 1 {
@@ -103,7 +107,7 @@ impl Context {
 
             if namespace::Visibility::Private == result.visibility
                 && module_id != current
-                && current_module.pass_through != Some(module_id)
+                && module.pass_through != Some(current)
             {
                 self.report(ResolverError {
                     span,
@@ -123,13 +127,25 @@ impl Context {
     }
 
     pub(crate) fn find_type(&self, span: Span, name: &[Symbol]) -> Option<Item<TypeValue>> {
-        let current = self.get_current_id();
-        self.find_val(span, &ModuleId(current), name, |x| &x.types)
+        let (name, current) = if name[0] == Symbol::intern("Self") {
+            (&name[1..], self.main)
+        } else {
+            let current = self.get_current_id();
+            (name, ModuleId(current))
+        };
+
+        self.find_val(span, &current, name, |x| &x.types)
     }
 
     pub(crate) fn find_value(&self, span: Span, name: &[Symbol]) -> Option<Item<Value>> {
-        let current = self.get_current_id();
-        self.find_val(span, &ModuleId(current), name, |x| &x.values)
+        let (name, current) = if name[0] == Symbol::intern("Self") {
+            (&name[1..], self.main)
+        } else {
+            let current = self.get_current_id();
+            (name, ModuleId(current))
+        };
+
+        self.find_val(span, &current, name, |x| &x.values)
     }
 
     pub(crate) fn scope<T: Scopeable, U>(&mut self, fun: impl FnOnce(&mut Context) -> U) -> U {

@@ -7,7 +7,6 @@
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::{Diagnostic, Report};
-use vulpi_show::Show;
 use vulpi_syntax::{concrete::tree::*, r#abstract::Qualified};
 
 use crate::{
@@ -412,27 +411,6 @@ impl ImportResolve for ModuleDecl {
     }
 }
 
-impl ImportResolve for TypeDecl {
-    fn resolve_imports(&self, ctx: &mut Context) {
-        let old = ctx.current_id();
-        let namespace = ctx.module_tree.find(&ctx.name).unwrap().id;
-        let namespace = ctx.namespaces[namespace.0].clone();
-
-        let ctx = &mut ctx.derive(self.name.symbol(), Some(old));
-        ctx.merge(namespace);
-    }
-}
-
-impl ImportResolve for EffectDecl {
-    fn resolve_imports(&self, ctx: &mut Context) {
-        let namespace = ctx.module_tree.find(&ctx.name).unwrap().id;
-        let namespace = ctx.namespaces[namespace.0].clone();
-
-        let ctx = &mut ctx.derive(self.name.symbol(), None);
-        ctx.merge(namespace);
-    }
-}
-
 impl ImportResolve for Program {
     fn resolve_imports(&self, ctx: &mut Context) {
         for top_level in self.modules() {
@@ -440,14 +418,6 @@ impl ImportResolve for Program {
         }
 
         for top_level in self.uses() {
-            top_level.resolve_imports(ctx);
-        }
-
-        for top_level in self.types() {
-            top_level.resolve_imports(ctx);
-        }
-
-        for top_level in self.effects() {
             top_level.resolve_imports(ctx);
         }
     }
