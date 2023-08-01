@@ -54,7 +54,7 @@ impl<'a> Context<'a> {
         self.reporter.report(Diagnostic::new(error));
     }
 
-    fn derive(&mut self, new_name: Symbol, pass_through: bool) -> Context {
+    fn derive(&mut self, new_name: Symbol, pass_through: Option<ModuleId>) -> Context {
         let id = self.namespaces.len();
         self.derive_with_module_id(new_name, ModuleId(id), pass_through)
     }
@@ -63,7 +63,7 @@ impl<'a> Context<'a> {
         &mut self,
         new_name: Symbol,
         id: ModuleId,
-        pass_through: bool,
+        pass_through: Option<ModuleId>,
     ) -> Context {
         let mut name = self.name.clone();
         name.push(new_name);
@@ -140,6 +140,10 @@ impl<'a> Context<'a> {
             self.add_module(value.span.clone(), key, value);
         }
     }
+
+    pub fn current_id(&self) -> ModuleId {
+        self.module_tree.find(&self.name).unwrap().id
+    }
 }
 
 pub trait Declare {
@@ -157,6 +161,8 @@ impl From<Visibility> for namespace::Visibility {
 
 impl Declare for EffectDecl {
     fn declare(&self, ctx: &mut Context) {
+        let old = ctx.current_id();
+
         ctx.add_type(
             self.name.0.value.span.clone(),
             self.name.symbol(),
@@ -179,7 +185,7 @@ impl Declare for EffectDecl {
             },
         );
 
-        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, true);
+        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, Some(old));
 
         for field in &self.fields {
             ctx.add_value(
@@ -209,11 +215,11 @@ impl Declare for ModuleDecl {
             },
         );
 
-        let ctx = &mut &mut old_ctx.derive_with_module_id(self.name.symbol(), id, false);
+        let ctx = &mut &mut old_ctx.derive_with_module_id(self.name.symbol(), id, None);
 
         if let Some(module) = &self.part {
             for top_level in &module.top_levels {
-                top_level.0.declare(ctx);
+                top_level.declare(ctx);
             }
         }
     }
@@ -263,6 +269,8 @@ impl Declare for TypeDef {
 
 impl Declare for TypeDecl {
     fn declare(&self, ctx: &mut Context) {
+        let old = ctx.current_id();
+
         ctx.add_type(
             self.name.0.value.span.clone(),
             self.name.symbol(),
@@ -296,7 +304,7 @@ impl Declare for TypeDecl {
             },
         );
 
-        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, true);
+        let ctx = &mut ctx.derive_with_module_id(self.name.symbol(), id, Some(old));
 
         if let Some(some) = &self.def {
             some.1.declare(ctx);
@@ -389,7 +397,7 @@ impl ImportResolve for TopLevel {
 
 impl ImportResolve for ModuleDecl {
     fn resolve_imports(&self, ctx: &mut Context) {
-        let ctx = &mut ctx.derive(self.name.symbol(), false);
+        let ctx = &mut ctx.derive(self.name.symbol(), None);
 
         if let Some(module) = &self.part {
             for top_level in module.modules() {

@@ -1,10 +1,12 @@
+use std::collections::HashSet;
+
 use vulpi_intern::Symbol;
 use vulpi_location::Spanned;
 use vulpi_macros::Show;
 
 use vulpi_show::{Show, TreeDisplay};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Qualified {
     pub path: usize,
     pub name: Symbol,
@@ -29,8 +31,15 @@ pub type Kind = Box<Spanned<KindType>>;
 // Types
 
 #[derive(Show)]
+pub enum Effect {
+    Application(Qualified, Vec<Type>),
+    Variable(Symbol),
+    Error,
+}
+
+#[derive(Show)]
 pub struct Effects {
-    pub effects: Vec<Type>,
+    pub effects: Vec<Effect>,
 }
 
 #[derive(Show)]
@@ -72,6 +81,56 @@ pub enum TypeKind {
 }
 
 pub type Type = Box<Spanned<TypeKind>>;
+
+impl TypeKind {
+    pub fn free_variables(&self) -> HashSet<Symbol> {
+        match self {
+            TypeKind::Pi(pi) => {
+                let mut set = pi.left.data.free_variables();
+                set.extend(pi.right.data.free_variables());
+                set
+            }
+            TypeKind::Tuple(t) => {
+                let mut set = HashSet::new();
+
+                for ty in t {
+                    set.extend(ty.data.free_variables());
+                }
+
+                set
+            }
+            TypeKind::Application(app) => {
+                let mut set = app.func.data.free_variables();
+
+                for arg in &app.args {
+                    set.extend(arg.data.free_variables());
+                }
+
+                set
+            }
+            TypeKind::Forall(f) => {
+                let mut set = HashSet::new();
+
+                set.extend(f.body.data.free_variables());
+
+                for binder in &f.params {
+                    match binder {
+                        TypeBinder::Implicit(p) => set.remove(p),
+                        TypeBinder::Explicit(p, _) => set.remove(p),
+                    };
+                }
+
+                set
+            }
+            TypeKind::TypeVariable(v) => {
+                let mut set = HashSet::new();
+                set.insert(v.clone());
+                set
+            }
+            _ => HashSet::new(),
+        }
+    }
+}
 
 // Literal
 
@@ -315,6 +374,7 @@ pub enum TypeDef {
 
 #[derive(Show)]
 pub struct TypeDecl {
+    pub id: usize,
     pub visibility: Visibility,
     pub name: Symbol,
     pub binders: Vec<TypeBinder>,
@@ -323,9 +383,48 @@ pub struct TypeDecl {
 
 #[derive(Show)]
 pub struct ModuleDecl {
+    pub id: usize,
     pub visibility: Visibility,
     pub name: Symbol,
     pub decls: Option<Vec<TopLevelDecl>>,
+}
+
+impl ModuleDecl {
+    pub fn types(&self) -> Option<impl Iterator<Item = &TypeDecl>> {
+        self.decls.as_ref().map(|decls| {
+            decls.iter().filter_map(|decl| match *decl {
+                TopLevelDecl::Type(ref decl) => Some(&**decl),
+                _ => None,
+            })
+        })
+    }
+
+    pub fn effects(&self) -> Option<impl Iterator<Item = &EffectDecl>> {
+        self.decls.as_ref().map(|decls| {
+            decls.iter().filter_map(|decl| match *decl {
+                TopLevelDecl::Effect(ref decl) => Some(&**decl),
+                _ => None,
+            })
+        })
+    }
+
+    pub fn lets(&self) -> Option<impl Iterator<Item = &LetDecl>> {
+        self.decls.as_ref().map(|decls| {
+            decls.iter().filter_map(|decl| match *decl {
+                TopLevelDecl::Let(ref decl) => Some(&**decl),
+                _ => None,
+            })
+        })
+    }
+
+    pub fn modules(&self) -> Option<impl Iterator<Item = &ModuleDecl>> {
+        self.decls.as_ref().map(|decls| {
+            decls.iter().filter_map(|decl| match *decl {
+                TopLevelDecl::Module(ref decl) => Some(&**decl),
+                _ => None,
+            })
+        })
+    }
 }
 
 #[derive(Show)]
@@ -338,6 +437,7 @@ pub struct EffectField {
 
 #[derive(Show)]
 pub struct EffectDecl {
+    pub id: usize,
     pub visibility: Visibility,
     pub name: Symbol,
     pub binders: Vec<TypeBinder>,
@@ -355,4 +455,34 @@ pub enum TopLevelDecl {
 #[derive(Show)]
 pub struct Module {
     pub decls: Vec<TopLevelDecl>,
+}
+
+impl Module {
+    pub fn lets(&self) -> impl Iterator<Item = &LetDecl> {
+        self.decls.iter().filter_map(|decl| match *decl {
+            TopLevelDecl::Let(ref decl) => Some(&**decl),
+            _ => None,
+        })
+    }
+
+    pub fn modules(&self) -> impl Iterator<Item = &ModuleDecl> {
+        self.decls.iter().filter_map(|decl| match *decl {
+            TopLevelDecl::Module(ref decl) => Some(&**decl),
+            _ => None,
+        })
+    }
+
+    pub fn effects(&self) -> impl Iterator<Item = &EffectDecl> {
+        self.decls.iter().filter_map(|decl| match *decl {
+            TopLevelDecl::Effect(ref decl) => Some(&**decl),
+            _ => None,
+        })
+    }
+
+    pub fn types(&self) -> impl Iterator<Item = &TypeDecl> {
+        self.decls.iter().filter_map(|decl| match *decl {
+            TopLevelDecl::Type(ref decl) => Some(&**decl),
+            _ => None,
+        })
+    }
 }

@@ -45,6 +45,11 @@ impl Context {
             name: Vec::new(),
         }
     }
+
+    pub fn get_current_id(&self) -> usize {
+        self.tree.find(&self.name).unwrap().id.0
+    }
+
     pub fn report(&self, error: ResolverError) {
         self.reporter.report(Diagnostic::new(error));
     }
@@ -55,6 +60,7 @@ impl Context {
         module: &ModuleId,
         mut name: &[Symbol],
         fun: fn(&Namespace) -> &HashMap<Symbol, Item<T>>,
+        not_report: bool,
     ) -> Option<Item<T>> {
         let current = self.tree.find(&self.name).unwrap().id;
 
@@ -77,7 +83,11 @@ impl Context {
                     module_id = item.item;
                     module = &self.namespaces[item.item.0];
                 } else {
-                    break;
+                    self.report(ResolverError {
+                        span,
+                        kind: ResolverErrorKind::NotFound(vec![head.clone()]),
+                    });
+                    return None;
                 }
 
                 if tail.len() == 1 {
@@ -88,17 +98,18 @@ impl Context {
 
         if name.len() == 1 {
             let result = fun(module).get(&name[0]).cloned().or_else(|| {
-                println!("In: {}", module_id.0);
-                self.report(ResolverError {
-                    span: span.clone(),
-                    kind: ResolverErrorKind::NotFound(name.to_vec()),
-                });
+                if !not_report {
+                    self.report(ResolverError {
+                        span: span.clone(),
+                        kind: ResolverErrorKind::NotFound(name.to_vec()),
+                    });
+                }
                 None
             })?;
 
             if namespace::Visibility::Private == result.visibility
                 && module_id != current
-                && !module.pass_through
+                && module.pass_through != Some(current)
             {
                 self.report(ResolverError {
                     span,
@@ -118,11 +129,30 @@ impl Context {
     }
 
     pub(crate) fn find_type(&self, span: Span, name: &[Symbol]) -> Option<Item<TypeValue>> {
-        self.find_val(span, &self.main, name, |x| &x.types)
+        let (name, current) = if name[0] == Symbol::intern("Self") {
+            (&name[1..], self.main)
+        } else {
+            let current = self.get_current_id();
+            (name, ModuleId(current))
+        };
+
+        self.find_val(span, &current, name, |x| &x.types, false)
     }
 
-    pub(crate) fn find_value(&self, span: Span, name: &[Symbol]) -> Option<Item<Value>> {
-        self.find_val(span, &self.main, name, |x| &x.values)
+    pub(crate) fn find_value(
+        &self,
+        span: Span,
+        name: &[Symbol],
+        not_report: bool,
+    ) -> Option<Item<Value>> {
+        let (name, current) = if name[0] == Symbol::intern("Self") {
+            (&name[1..], self.main)
+        } else {
+            let current = self.get_current_id();
+            (name, ModuleId(current))
+        };
+
+        self.find_val(span, &current, name, |x| &x.values, not_report)
     }
 
     pub(crate) fn scope<T: Scopeable, U>(&mut self, fun: impl FnOnce(&mut Context) -> U) -> U {
@@ -255,6 +285,38 @@ impl Resolve for KindType {
             KindType::Arrow(left, _, right) => {
                 abs::KindType::Arrow(left.resolve(ctx), right.resolve(ctx))
             }
+        }
+    }
+}
+
+impl Resolve for Effect {
+    type Output = abs::Effect;
+
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
+        match self {
+            Effect::Application(lower, args) => {
+                let vec: Vec<_> = (&lower).into();
+                let args = args.resolve(ctx);
+
+                match ctx.find_value(lower.span.clone(), &vec, true) {
+                    Some(Item {
+                        item: Value::Effect(qual),
+                        ..
+                    }) => abs::Effect::Application(qual, args),
+                    _ => {
+                        if args.is_empty() && lower.segments.is_empty() {
+                            abs::Effect::Variable(lower.last.symbol())
+                        } else {
+                            ctx.report(ResolverError {
+                                span: lower.span,
+                                kind: ResolverErrorKind::NotFound(vec),
+                            });
+                            abs::Effect::Error
+                        }
+                    }
+                }
+            }
+            Effect::Variable(name) => abs::Effect::Variable(name.symbol()),
         }
     }
 }
@@ -407,7 +469,7 @@ impl Resolve for PatApplication {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         let func: Vec<_> = (&self.func).into();
-        let func = match ctx.find_value(self.func.span.clone(), &func) {
+        let func = match ctx.find_value(self.func.span.clone(), &func, false) {
             Some(Item {
                 item: Value::Constructor(qual),
                 ..
@@ -444,7 +506,7 @@ impl Resolve for PatEffectApp {
             name.symbol()
         });
 
-        let func = match ctx.find_value(self.func.span.clone(), &func) {
+        let func = match ctx.find_value(self.func.span.clone(), &func, false) {
             Some(Item {
                 item: Value::Effect(qual),
                 ..
@@ -526,7 +588,7 @@ impl Resolve for Operator {
 
         let x = &[Symbol::intern("Operator"), Symbol::intern(name)];
 
-        let kind = match ctx.find_value(span.clone(), x) {
+        let kind = match ctx.find_value(span.clone(), x, false) {
             Some(Item {
                 item: Value::Function(qual),
                 ..
@@ -773,7 +835,9 @@ impl Resolve for ExprKind {
             ExprKind::Variable(x) => {
                 if ctx.scopes.contains::<Variable>(&x.symbol()) {
                     abs::ExprKind::Variable(x.symbol())
-                } else if let Some(val) = ctx.find_value(x.0.value.span.clone(), &[x.symbol()]) {
+                } else if let Some(val) =
+                    ctx.find_value(x.0.value.span.clone(), &[x.symbol()], false)
+                {
                     match val.item {
                         Value::Module(_) => todo!(),
                         Value::Field(_) => todo!(),
@@ -782,10 +846,6 @@ impl Resolve for ExprKind {
                         Value::Constructor(qual) => abs::ExprKind::Constructor(qual),
                     }
                 } else {
-                    ctx.report(ResolverError {
-                        span: x.0.value.span.clone(),
-                        kind: ResolverErrorKind::NotFound(vec![x.symbol()]),
-                    });
                     abs::ExprKind::Error
                 }
             }
@@ -813,7 +873,7 @@ impl Resolve for ExprKind {
 fn expect_function_or_effect(x: Path<Lower>, ctx: &Context) -> abs::ExprKind {
     let vec: Vec<_> = (&x).into();
 
-    match ctx.find_value(x.span.clone(), &vec) {
+    match ctx.find_value(x.span.clone(), &vec, false) {
         Some(Item {
             item: Value::Function(qual),
             ..
@@ -944,8 +1004,8 @@ impl Resolve for TypeDecl {
     type Output = abs::TypeDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        ctx.name.push(self.name.symbol());
-        let result = ctx.scope::<Variable, _>(|ctx| abs::TypeDecl {
+        ctx.scope::<Variable, _>(|ctx| abs::TypeDecl {
+            id: ctx.get_current_id(),
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             binders: self.binders.resolve(ctx),
@@ -954,10 +1014,7 @@ impl Resolve for TypeDecl {
             } else {
                 abs::TypeDef::Abstract
             },
-        });
-        ctx.name.pop();
-
-        result
+        })
     }
 }
 
@@ -967,7 +1024,7 @@ impl Resolve for ModuleInline {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         self.top_levels
             .into_iter()
-            .filter_map(|x| x.0.resolve(ctx))
+            .filter_map(|x| x.resolve(ctx))
             .collect()
     }
 }
@@ -977,11 +1034,14 @@ impl Resolve for ModuleDecl {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.name.push(self.name.symbol());
+
         let result = abs::ModuleDecl {
+            id: ctx.get_current_id(),
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             decls: self.part.resolve(ctx),
         };
+
         ctx.name.pop();
 
         result
@@ -1035,6 +1095,7 @@ impl Resolve for EffectDecl {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.name.push(self.name.symbol());
         let result = ctx.scope::<TypeVariable, _>(|ctx| abs::EffectDecl {
+            id: ctx.get_current_id(),
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             binders: self.binders.resolve(ctx),
@@ -1086,7 +1147,7 @@ fn find_constructor_raw<T>(
     ok: fn(Qualified) -> T,
     error: T,
 ) -> T {
-    match ctx.find_value(span.clone(), x) {
+    match ctx.find_value(span.clone(), x, false) {
         Some(Item {
             item: Value::Constructor(qual),
             ..

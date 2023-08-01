@@ -59,9 +59,21 @@ impl<'a> Parser<'a> {
         })
     }
 
+    pub fn effect(&mut self) -> Result<Effect> {
+        if self.at(TokenData::LowerIdent) {
+            let var = self.lower()?;
+            Ok(Effect::Variable(var))
+        } else {
+            let var = self.path_upper()?;
+            let args = self.many(Self::type_atom)?;
+
+            Ok(Effect::Application(var, args))
+        }
+    }
+
     pub fn type_effects(&mut self) -> Result<Effects> {
         let left_brace = self.expect(TokenData::LBrace)?;
-        let effects = self.sep_by(TokenData::Comma, Self::typ)?;
+        let effects = self.sep_by(TokenData::Comma, Self::effect)?;
         let right_brace = self.expect(TokenData::RBrace)?;
 
         Ok(Effects {

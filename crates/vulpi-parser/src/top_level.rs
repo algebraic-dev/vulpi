@@ -217,11 +217,7 @@ impl<'a> Parser<'a> {
 
         let part = if self.at(TokenData::Where) {
             let where_ = self.expect(TokenData::Where)?;
-            self.expect(TokenData::Begin)?;
-
-            let top_levels = self.sep_by(TokenData::Sep, Self::top_level)?;
-
-            self.expect(TokenData::End)?;
+            let top_levels = self.block(Self::top_level)?;
 
             Some(ModuleInline { where_, top_levels })
         } else {

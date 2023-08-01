@@ -120,14 +120,14 @@ pub struct UseDecl {
 #[derive(Show)]
 pub struct ModuleInline {
     pub where_: Token,
-    pub top_levels: Vec<(TopLevel, Option<Token>)>,
+    pub top_levels: Vec<TopLevel>,
 }
 
 impl ModuleInline {
     pub fn modules(&self) -> impl Iterator<Item = &ModuleDecl> {
         self.top_levels
             .iter()
-            .filter_map(|top_level| match &top_level.0 {
+            .filter_map(|top_level| match &top_level {
                 TopLevel::Module(module) => Some(&**module),
                 _ => None,
             })
@@ -136,7 +136,7 @@ impl ModuleInline {
     pub fn uses(&self) -> impl Iterator<Item = &UseDecl> {
         self.top_levels
             .iter()
-            .filter_map(|top_level| match &top_level.0 {
+            .filter_map(|top_level| match &top_level {
                 TopLevel::Use(use_) => Some(&**use_),
                 _ => None,
             })
@@ -201,6 +201,33 @@ impl Program {
             .iter()
             .filter_map(|top_level| match top_level {
                 TopLevel::Use(use_) => Some(&**use_),
+                _ => None,
+            })
+    }
+
+    pub fn types(&self) -> impl Iterator<Item = &TypeDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match top_level {
+                TopLevel::Type(type_) => Some(&**type_),
+                _ => None,
+            })
+    }
+
+    pub fn lets(&self) -> impl Iterator<Item = &LetDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match top_level {
+                TopLevel::Let(let_) => Some(&**let_),
+                _ => None,
+            })
+    }
+
+    pub fn effects(&self) -> impl Iterator<Item = &EffectDecl> {
+        self.top_levels
+            .iter()
+            .filter_map(|top_level| match top_level {
+                TopLevel::Effect(effect) => Some(&**effect),
                 _ => None,
             })
     }
