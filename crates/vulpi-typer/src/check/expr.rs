@@ -26,14 +26,14 @@ impl Check for PatternArm {
             context.add_variable(binding.0, binding.1 .1)
         }
 
-        if let Some(ty) = self.guard.infer(context.clone()) {
+        if let Some(guard) = &self.guard {
             let Some(right) = context.import("Bool") else {
                 return Vec::new()
             };
 
             let right = Type::variable(right);
 
-            Type::unify(context.clone(), ty, right);
+            guard.check(right, context.clone());
         }
 
         self.expr.check(ty, context);
@@ -63,7 +63,7 @@ impl Check for (usize, &Vec<&PatternArm>) {
             let tys = arm.check(ty.clone(), context.clone());
 
             for (left, right) in types.iter().zip(tys.into_iter()) {
-                Type::unify(context.clone(), left.clone(), right);
+                left.sub(context.clone(), right);
             }
         }
 
@@ -88,7 +88,7 @@ impl Check for Expr {
                 let unit = Type::variable(unit_qual);
 
                 if block.statements.is_empty() {
-                    Type::unify(context.clone(), unit, ty);
+                    unit.sub(context.clone(), ty);
                     return;
                 }
 
@@ -100,8 +100,7 @@ impl Check for Expr {
                             let mut bindings = HashMap::new();
                             let ty = let_.pattern.infer((context.clone(), &mut bindings));
 
-                            let body = let_.expr.infer(context.clone());
-                            Type::unify(context.clone(), ty, body);
+                            let_.expr.check(ty.clone(), context.clone());
 
                             for (k, (_, t)) in bindings {
                                 context.add_variable(k, t)
@@ -131,7 +130,7 @@ impl Check for Expr {
             }
             _ => {
                 let infered = self.infer(context.clone());
-                Type::unify(context.clone(), infered, ty);
+                ty.sub(context.clone(), infered);
             }
         }
     }

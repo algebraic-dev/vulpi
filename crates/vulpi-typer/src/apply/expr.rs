@@ -1,5 +1,6 @@
 use vulpi_syntax::r#abstract::Expr;
 
+use crate::check::Check;
 use crate::infer::Infer;
 use crate::{
     env::Env,
@@ -27,8 +28,7 @@ impl Apply for Expr {
                 }
             },
             TypeKind::Arrow(l, r) => {
-                let arg = self.infer(env.clone());
-                Type::unify(env, arg, l.clone());
+                self.check(l.clone(), env);
                 r.clone()
             }
             TypeKind::Forall(p, _, t) => self.apply(t.instantiate(env.clone(), p.clone()), env),

@@ -6,6 +6,7 @@
 use std::collections::HashSet;
 
 use env::Env;
+use module::TypeData;
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::*;
 
@@ -44,9 +45,15 @@ impl Declare for TypeDecl {
             .into_iter()
             .rfold(kind::Kind::star(), |acc, x| kind::Kind::arrow(x, acc));
 
-        context.modules.borrow_mut().modules[self.id]
+        context.modules.borrow_mut().modules[self.name.path]
             .types
-            .insert(self.name.clone(), arrow);
+            .insert(
+                self.name.name.clone(),
+                TypeData {
+                    kind: arrow,
+                    module: self.id,
+                },
+            );
     }
 
     fn define(&self, mut context: Env) {
@@ -65,7 +72,7 @@ impl Declare for TypeDecl {
             types.push(types::Type::named(name));
         }
 
-        let ret = types::Type::app(types::Type::named(self.name.clone()), types);
+        let ret = types::Type::app(types::Type::variable(self.name.clone()), types);
 
         match &self.def {
             TypeDef::Sum(sum) => {
@@ -75,6 +82,22 @@ impl Declare for TypeDecl {
                         k.unify(&context, &kind::Kind::star());
                         t
                     });
+
+                    let ret = if let Some(new_ret) = &cons.typ {
+                        let (t, k) = new_ret.infer(&context);
+                        k.unify(&context, &kind::Kind::star());
+
+                        let foralled = kinds
+                            .clone()
+                            .into_iter()
+                            .rfold(ret.clone(), |acc, (n, k)| types::Type::forall(n, k, acc));
+
+                        types::Type::sub(&foralled, context.clone(), t.clone());
+
+                        t
+                    } else {
+                        ret.clone()
+                    };
 
                     let typ = types.rfold(ret.clone(), |acc, x| types::Type::arrow(x, acc));
 
@@ -130,9 +153,13 @@ impl Declare for EffectDecl {
                 kind::Kind::arrow(x, acc)
             });
 
-        context.modules.borrow_mut().modules[self.id]
-            .types
-            .insert(self.name.clone(), arrow);
+        context.modules.borrow_mut().modules[self.id].types.insert(
+            self.name.clone(),
+            TypeData {
+                kind: arrow,
+                module: self.id,
+            },
+        );
     }
 
     fn define(&self, mut context: Env) {
@@ -216,8 +243,7 @@ impl Declare for LetDecl {
     }
 
     fn define(&self, context: Env) {
-        let ty = self.infer(context.clone());
-        println!("Let {}", ty.show(context));
+        self.infer(context);
     }
 }
 

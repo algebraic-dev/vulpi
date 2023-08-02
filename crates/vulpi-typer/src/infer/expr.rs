@@ -1,11 +1,12 @@
 use crate::apply::Apply;
+use crate::check::Check;
+use crate::{env::Env, types::Type, Infer};
+
 use im_rc::HashMap;
 use vulpi_intern::Symbol;
 use vulpi_syntax::{
     r#abstract::Expr, r#abstract::ExprKind, r#abstract::PatternArm, r#abstract::StatementKind,
 };
-
-use crate::{env::Env, types::Type, Infer};
 
 impl Infer for PatternArm {
     type Return = (Vec<Type>, Type);
@@ -25,11 +26,11 @@ impl Infer for PatternArm {
             context.add_variable(binding.0, binding.1 .1)
         }
 
-        if let Some(ty) = self.guard.infer(context.clone()) {
+        if let Some(guard) = &self.guard {
             let right = context.imports.get(&Symbol::intern("Bool")).unwrap();
             let right = Type::variable(right.clone());
 
-            Type::unify(context.clone(), ty, right);
+            guard.check(right, context.clone());
         }
 
         let result = self.expr.infer(context);
@@ -57,13 +58,11 @@ impl Infer for (usize, &Vec<&PatternArm>) {
                 return (Vec::new(), Type::error());
             }
 
-            let (tys, ty) = arm.infer(context.clone());
+            let tys = arm.check(ret.clone(), context.clone());
 
             for (left, right) in types.iter().zip(tys.into_iter()) {
-                Type::unify(context.clone(), left.clone(), right);
+                left.sub(context.clone(), right);
             }
-
-            Type::unify(context.clone(), ret.clone(), ty);
         }
 
         (types, ret)
@@ -97,8 +96,8 @@ impl Infer for Expr {
             ExprKind::Let(let_) => {
                 let mut bindings = HashMap::new();
                 let ty = let_.pattern.infer((context.clone(), &mut bindings));
-                let ty2 = let_.body.infer(context.clone());
-                Type::unify(context.clone(), ty, ty2);
+
+                let_.body.check(ty, context.clone());
 
                 for (k, (_, t)) in bindings {
                     context.add_variable(k, t)
@@ -137,8 +136,7 @@ impl Infer for Expr {
                             let mut bindings = HashMap::new();
                             let ty = let_.pattern.infer((context.clone(), &mut bindings));
 
-                            let body = let_.expr.infer(context.clone());
-                            Type::unify(context.clone(), ty, body);
+                            let_.expr.check(ty, context.clone());
 
                             for (k, (_, t)) in bindings {
                                 context.add_variable(k, t)
@@ -169,9 +167,8 @@ impl Infer for Expr {
             ExprKind::Literal(l) => l.infer(&context),
             ExprKind::Annotation(ann) => {
                 let (ty, _) = ann.ty.infer(&context);
-                let ty2 = ann.expr.infer(context.clone());
-                Type::unify(context, ty, ty2.clone());
-                ty2
+                ann.expr.check(ty.clone(), context.clone());
+                ty
             }
 
             ExprKind::Projection(_) => todo!(),

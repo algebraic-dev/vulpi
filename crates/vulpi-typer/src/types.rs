@@ -143,9 +143,9 @@ impl Hole {
 impl Type {
     fn print(&self, env: Env, fmt: &mut Formatter) -> std::fmt::Result {
         match *self.0 {
-            TypeKind::Variable(ref name) => write!(fmt, "{}", name.name.get()),
-            TypeKind::Bound(lvl) => write!(fmt, "{}", env.names[env.level - lvl - 1].0.get()),
-            TypeKind::Named(ref name) => write!(fmt, "{}", name.get()),
+            TypeKind::Variable(ref name) => write!(fmt, "~{}", name.name.get()),
+            TypeKind::Bound(lvl) => write!(fmt, "!{}", env.names[env.level - lvl - 1].0.get()),
+            TypeKind::Named(ref name) => write!(fmt, "^{}", name.get()),
             TypeKind::Arrow(ref ty1, ref ty2) => {
                 write!(fmt, "(")?;
                 ty1.print(env.clone(), fmt)?;
@@ -191,13 +191,13 @@ impl Type {
     pub fn substitute(&self, name: Symbol, to: Type) -> Type {
         match self.0.as_ref() {
             TypeKind::Named(ref name2) if name == *name2 => to,
-            TypeKind::Arrow(ref from, ref to) => Type::new(TypeKind::Arrow(
+            TypeKind::Arrow(ref from, ref r) => Type::new(TypeKind::Arrow(
                 from.substitute(name.clone(), to.clone()),
-                to.substitute(name, to.clone()),
+                r.substitute(name, to),
             )),
-            TypeKind::App(ref from, ref to) => Type::new(TypeKind::App(
+            TypeKind::App(ref from, ref p) => Type::new(TypeKind::App(
                 from.substitute(name.clone(), to.clone()),
-                to.substitute(name, to.clone()),
+                p.substitute(name, to),
             )),
             TypeKind::Forall(ref name2, ref kind, ref ty) if name != *name2 => Type::new(
                 TypeKind::Forall(name2.clone(), kind.clone(), ty.substitute(name, to)),

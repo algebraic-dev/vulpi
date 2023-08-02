@@ -351,6 +351,7 @@ pub struct LetDecl {
 pub struct Constructor {
     pub name: Symbol,
     pub args: Vec<Type>,
+    pub typ: Option<Type>,
 }
 
 #[derive(Show)]
@@ -374,8 +375,9 @@ pub enum TypeDef {
 #[derive(Show)]
 pub struct TypeDecl {
     pub id: usize,
+    pub module_id: usize,
     pub visibility: Visibility,
-    pub name: Symbol,
+    pub name: Qualified,
     pub binders: Vec<TypeBinder>,
     pub def: TypeDef,
 }

@@ -52,6 +52,7 @@ pub struct Constructor {
     pub pipe: Token,
     pub name: Upper,
     pub args: Vec<Box<Type>>,
+    pub typ: Option<(Token, Box<Type>)>,
 }
 
 #[derive(Show)]

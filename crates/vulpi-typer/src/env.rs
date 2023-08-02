@@ -15,7 +15,7 @@ use vulpi_syntax::r#abstract::Qualified;
 use crate::{
     error::TypeError,
     kind::Kind,
-    module::Modules,
+    module::{Modules, TypeData},
     types::{Hole, Type, TypeKind},
 };
 
@@ -85,7 +85,7 @@ impl Env {
         self.variables.insert(name, ty);
     }
 
-    pub fn get_module_ty(&self, app: &vulpi_syntax::r#abstract::Qualified) -> crate::kind::Kind {
+    pub fn get_module_ty(&self, app: &vulpi_syntax::r#abstract::Qualified) -> TypeData {
         self.modules
             .borrow_mut()
             .get(app.path)
@@ -169,10 +169,8 @@ impl Env {
         new_env
     }
 
-    pub fn add_ty(&self, name: Symbol, kind: Kind) -> Env {
-        let mut new_env = self.clone();
-        new_env.types.insert(name, kind);
-        new_env
+    pub fn add_ty(&mut self, name: Symbol, kind: Kind) {
+        self.types.insert(name, kind);
     }
 
     pub fn get_ty(&self, name: &Symbol) -> Option<Kind> {

@@ -2,6 +2,7 @@ use im_rc::HashMap;
 use vulpi_syntax::r#abstract::LetDecl;
 
 use crate::check::Check;
+use crate::kind::Kind;
 use crate::{env::Env, types::Type, Infer};
 
 impl Infer for LetDecl {
@@ -20,10 +21,11 @@ impl Infer for LetDecl {
 
             for f in fvs {
                 // Rigid type variables.
-                context.add_variable(f.clone(), Type::named(f));
+
+                context.add_ty(f.clone(), Kind::star());
             }
 
-            let (ty, _) = binder.ty.infer(&context.clone());
+            let (ty, _) = binder.ty.infer(&context);
 
             all_tys.push(ty.clone());
 

@@ -77,7 +77,7 @@ impl Infer for r#abstract::Type {
                         TypeBinder::Explicit(l, r) => (l, r.infer(())),
                     };
 
-                    ctx = context.add_ty(param.clone(), kind.clone());
+                    ctx.add_ty(param.clone(), kind.clone());
                     binders.push((param.clone(), kind.clone()));
                 }
 
@@ -91,7 +91,6 @@ impl Infer for r#abstract::Type {
             }
             TypeKind::TypeVariable(t) => {
                 let res = context.get_ty(t);
-
                 match res {
                     Some(k) => (Type::named(t.clone()), k),
                     None => {
@@ -104,7 +103,7 @@ impl Infer for r#abstract::Type {
                 let borrow_mut = &context.modules.borrow_mut();
                 let module = borrow_mut.get(q.path).unwrap();
                 let ty = module.types.get(&q.name).unwrap();
-                (Type::variable(q.clone()), ty.clone())
+                (Type::variable(q.clone()), ty.kind.clone())
             }
             TypeKind::Unit => {
                 let k = Kind::star();

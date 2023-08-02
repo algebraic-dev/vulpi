@@ -4,6 +4,12 @@
 
 use vulpi_intern::Symbol;
 
+#[derive(Clone)]
+pub struct TypeData {
+    pub kind: crate::kind::Kind,
+    pub module: usize,
+}
+
 #[derive(Default, Clone)]
 pub struct Module {
     /// The types of the functions.
@@ -13,7 +19,7 @@ pub struct Module {
     pub constructors: im_rc::HashMap<Symbol, (crate::types::Type, usize)>,
 
     /// The types of the types.
-    pub types: im_rc::HashMap<Symbol, crate::kind::Kind>,
+    pub types: im_rc::HashMap<Symbol, TypeData>,
 
     /// The fields of the records.
     pub fields: im_rc::HashMap<Symbol, crate::types::Type>,
