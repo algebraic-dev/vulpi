@@ -57,15 +57,15 @@
         - [x] Unit expression
     - [ ] Attributes
     - [x] Import
-- [ ] Resolution
-    - [ ] Visibility resolution
-    - [ ] Name resolution
-    - [ ] Duplicated pattern name checking
-    - [ ] Or Pattern
-    - [ ] Desugar
-- [ ] Type checker
-    - [ ] Higher rank polymorphism
-    - [ ] Higher kinded types
+- [x] Resolution
+    - [x] Visibility resolution
+    - [x] Name resolution
+    - [x] Duplicated pattern name checking
+    - [x] Or Pattern
+    - [x] Desugar
+- [x] Type checker
+    - [x] Higher rank polymorphism
+    - [x] Higher kinded types
     - [ ] Entailment
     - [ ] Coverage checker
 - [ ] Perceus
