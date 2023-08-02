@@ -52,6 +52,12 @@ impl Context {
         self.tree.find(&self.name).unwrap().id.0
     }
 
+    pub fn get_id(&self, name: Symbol) -> usize {
+        let mut names = self.name.clone();
+        names.push(name);
+        self.tree.find(&names).unwrap().id.0
+    }
+
     pub fn report(&self, error: ResolverError) {
         self.reporter.report(Diagnostic::new(error));
     }
@@ -450,7 +456,7 @@ impl Resolve for TypeKind {
 impl Resolve for LiteralKind {
     type Output = abs::LiteralKind;
 
-    fn resolve(self, ctx: &mut Context) -> Self::Output {
+    fn resolve(self, _ctx: &mut Context) -> Self::Output {
         match self {
             LiteralKind::String(n) => abs::LiteralKind::String(n.symbol()),
             LiteralKind::Integer(n) => abs::LiteralKind::Integer(n.symbol()),
@@ -1024,6 +1030,7 @@ impl Resolve for Constructor {
         abs::Constructor {
             name: self.name.symbol(),
             args: self.args.resolve(ctx),
+            typ: self.typ.map(|x| x.1.resolve(ctx)),
         }
     }
 }
@@ -1074,8 +1081,12 @@ impl Resolve for TypeDecl {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.scope::<Variable, _>(|ctx| abs::TypeDecl {
             id: ctx.get_current_id(),
+            module_id: ctx.get_id(self.name.symbol()),
             visibility: self.visibility.resolve(ctx),
-            name: self.name.symbol(),
+            name: Qualified {
+                path: ctx.get_current_id(),
+                name: self.name.symbol(),
+            },
             binders: self.binders.resolve(ctx),
             def: if let Some(res) = self.def {
                 res.1.resolve(ctx)

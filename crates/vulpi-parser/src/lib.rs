@@ -103,7 +103,6 @@ impl<'a> Parser<'a> {
         if self.peek().kind == token {
             self.bump();
         } else {
-            println!("Popped layout {:?}", self.peek().kind);
             self.lexer.pop_layout();
         }
         Ok(())

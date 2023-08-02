@@ -82,7 +82,21 @@ impl<'a> Parser<'a> {
         let pipe = self.expect(TokenData::Bar)?;
         let name = self.upper()?;
         let args = self.many(Self::type_atom)?;
-        Ok(Constructor { pipe, name, args })
+
+        let typ = if self.at(TokenData::Colon) {
+            let colon = self.bump();
+            let typ = self.typ()?;
+            Some((colon, typ))
+        } else {
+            None
+        };
+
+        Ok(Constructor {
+            pipe,
+            name,
+            args,
+            typ,
+        })
     }
 
     pub fn sum_decl(&mut self) -> Result<SumDecl> {

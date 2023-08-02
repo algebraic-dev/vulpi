@@ -450,7 +450,6 @@ mod tests {
 
         while token.kind != TokenData::Eof {
             token = lexer.bump();
-            println!("{:?} '{}'", token.kind, token.data());
             assert!(token.kind != TokenData::Error);
         }
     }

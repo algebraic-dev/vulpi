@@ -365,7 +365,6 @@ impl ImportResolve for UseDecl {
         let vec: Vec<_> = (&self.path).into();
 
         let Some(sub_tree) = ctx.module_tree.find(&ctx.name).and_then(|x| x.find(&vec)) else {
-            println!("{}", vec.iter().map(|x| x.get()).collect::<Vec<_>>().join("::"));
             return ctx.report(ResolverError {
                 span: self.path.span.clone(),
                 kind: ResolverErrorKind::NotFound(vec),
