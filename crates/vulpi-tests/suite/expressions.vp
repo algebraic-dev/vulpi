@@ -1,5 +1,18 @@
-type Bool = | True | False
+mod Prelude where
+    pub type Bool = 
+        | True 
+        | False
+    
+    pub type String
+    pub type Int
+    pub type Unit
 
-let ata = do
-    let a = \a => b
-    let f = if True then a else b
+    use Bool
+
+use Prelude
+
+let ata (x: Int) (z: Bool) (y: String) : Int = do
+    1
+    2
+    ()
+    

@@ -70,6 +70,17 @@ impl Env {
         }
     }
 
+    pub fn import(&mut self, name: &str) -> Option<Qualified> {
+        if let Some(qualified) = self.imports.get(&Symbol::intern(name)) {
+            Some(qualified.clone())
+        } else {
+            self.report(crate::error::TypeErrorKind::CannotFind(Symbol::intern(
+                name,
+            )));
+            None
+        }
+    }
+
     pub fn add_variable(&mut self, name: Symbol, ty: Type) {
         self.variables.insert(name, ty);
     }

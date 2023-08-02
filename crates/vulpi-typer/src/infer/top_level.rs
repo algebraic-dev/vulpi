@@ -1,6 +1,7 @@
 use im_rc::HashMap;
 use vulpi_syntax::r#abstract::LetDecl;
 
+use crate::check::Check;
 use crate::{env::Env, types::Type, Infer};
 
 impl Infer for LetDecl {
@@ -53,10 +54,8 @@ impl Infer for LetDecl {
             context.new_hole()
         };
 
-        let (_, ty) = (size, &collect).infer(context.clone());
+        (size, &collect).check(ret.clone(), context.clone());
 
-        Type::unify(context.clone(), ty.clone(), ret);
-
-        all_tys.into_iter().rfold(ty, |acc, x| Type::arrow(x, acc))
+        all_tys.into_iter().rfold(ret, |acc, x| Type::arrow(x, acc))
     }
 }

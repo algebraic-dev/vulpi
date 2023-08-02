@@ -10,6 +10,7 @@ use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::*;
 
 pub mod apply;
+pub mod check;
 pub mod env;
 pub mod error;
 pub mod infer;

@@ -1,28 +1,30 @@
-#![feature(custom_test_frameworks)]
-#![test_runner(vulpi_tests::test_runner)]
-
 use vulpi_lexer::Lexer;
 use vulpi_parser::Parser;
-use vulpi_report::{
-    hash::HashReporter,
-    renderer::{classic::Classic, Reader, Renderer},
-    Report,
-};
-use vulpi_resolver::declare::ImportResolve;
-use vulpi_resolver::Resolve;
-use vulpi_resolver::{declare::Declare, namespace::Namespace};
-use vulpi_resolver::{module_tree::ModuleTree, namespace::ModuleId};
-use vulpi_show::Show;
-use vulpi_tests::test;
-use vulpi_typer::Declare as Decl;
-use vulpi_vfs::{real::RealFileSystem, FileSystem};
 
-test!("/suite", |file_name| {
+use vulpi_report::renderer::classic::Classic;
+use vulpi_report::renderer::Reader;
+use vulpi_report::renderer::Renderer;
+use vulpi_report::{hash::HashReporter, Report};
+
+use vulpi_resolver::declare::Declare;
+use vulpi_resolver::declare::ImportResolve;
+use vulpi_resolver::module_tree::ModuleTree;
+use vulpi_resolver::namespace::{ModuleId, Namespace};
+use vulpi_resolver::Resolve;
+
+use vulpi_vfs::real::RealFileSystem;
+use vulpi_vfs::FileSystem;
+
+use vulpi_typer::Declare as Decl;
+
+fn main() {
+    let file_name = std::env::args().nth(1).unwrap();
+
     let reporter = Report::new(HashReporter::new());
     let cwd = std::env::current_dir().unwrap();
 
     let mut vfs = RealFileSystem::new(cwd.clone());
-    let id = vfs.load(file_name).unwrap();
+    let id = vfs.load(file_name.into()).unwrap();
     let source = vfs.read(id).unwrap();
 
     let lexer = Lexer::new(source, id, reporter.clone());
@@ -53,8 +55,9 @@ test!("/suite", |file_name| {
     let report = reporter.all_diagnostics();
 
     if !reporter.has_errors() {
-        program.show().to_string()
+        println!("Ok!");
     } else {
+        println!("Err!");
         let mut writer = Reader::default();
         let ctx = Classic::new(&vfs, cwd);
 
@@ -62,6 +65,6 @@ test!("/suite", |file_name| {
             diagnostic.render(&ctx, &mut writer).unwrap();
         }
 
-        writer.to_string()
+        print!("{}", writer.to_string());
     }
-});
+}

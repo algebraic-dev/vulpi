@@ -1198,6 +1198,7 @@ impl Resolve for Program {
         ctx.find_prelude_type(self.eof.value.span.clone(), "Float");
         ctx.find_prelude_type(self.eof.value.span.clone(), "Char");
         ctx.find_prelude_type(self.eof.value.span.clone(), "Bool");
+        ctx.find_prelude_type(self.eof.value.span.clone(), "Unit");
 
         abs::Module {
             decls: self

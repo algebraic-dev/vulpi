@@ -9,6 +9,7 @@ pub enum TypeErrorKind {
     TypeMismatch(Env, Type, Type),
     KindMismatch(Kind, Kind),
     InfiniteType,
+    CannotFind(Symbol),
     EscapingScope,
     NotAFunctionKind,
     WrongArity(usize, usize),
@@ -44,6 +45,7 @@ impl IntoDiagnostic for TypeError {
             TypeErrorKind::NotAFunction(env, ty) => {
                 Text::from(format!("not a function: {}", ty.show(env.clone())))
             }
+            TypeErrorKind::CannotFind(name) => Text::from(format!("cannot find: {}", name.get())),
         }
     }
 

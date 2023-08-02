@@ -76,6 +76,8 @@ impl Infer for Expr {
     type Context<'a> = Env;
 
     fn infer(&self, mut context: Self::Context<'_>) -> Self::Return {
+        context.set_location(self.span.clone());
+
         match &self.data {
             ExprKind::Lambda(lam) => {
                 let mut bindings = HashMap::new();
@@ -120,8 +122,11 @@ impl Infer for Expr {
                 }
             }
             ExprKind::Do(not) => {
-                let unit_qual = context.imports.get(&Symbol::intern("Unit")).unwrap();
-                let unit = Type::variable(unit_qual.clone());
+                let Some(unit_qual) = context.import("Unit") else {
+                    return Type::error();
+                };
+
+                let unit = Type::variable(unit_qual);
 
                 let mut res_ty = unit.clone();
 
