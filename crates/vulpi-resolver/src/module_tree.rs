@@ -1,4 +1,4 @@
-//! This module declares a [ModuleTree] that is responsible for declaring the modules and their
+//! This module declares a [Tree] that is responsible for declaring the modules and their
 //! child.
 
 use std::collections::HashMap;
@@ -10,14 +10,14 @@ use crate::namespace::ModuleId;
 
 /// A tree for modules. It starts with a single root module and then it can have multiple children
 /// modules.
-pub struct ModuleTree {
+pub struct Tree {
     pub id: ModuleId,
-    pub modules: HashMap<Symbol, ModuleTree>,
+    pub modules: HashMap<Symbol, Tree>,
 }
 
-impl Show for ModuleTree {
+impl Show for Tree {
     fn show(&self) -> vulpi_show::TreeDisplay {
-        let mut display = vulpi_show::TreeDisplay::label(&format!("ModuleTree: {}", self.id.0));
+        let mut display = vulpi_show::TreeDisplay::label(&format!("ModuleTree: {}", self.id.get()));
         let child = TreeDisplay::label("child");
 
         for (name, module) in &self.modules {
@@ -28,7 +28,7 @@ impl Show for ModuleTree {
     }
 }
 
-impl ModuleTree {
+impl Tree {
     pub fn new(id: ModuleId) -> Self {
         Self {
             id,
@@ -49,7 +49,7 @@ impl ModuleTree {
             Some(
                 self.modules
                     .entry(head.clone())
-                    .or_insert_with(|| ModuleTree::new(id)),
+                    .or_insert_with(|| Tree::new(id)),
             )
         } else {
             let module = self.modules.get_mut(head).unwrap();
@@ -57,8 +57,8 @@ impl ModuleTree {
         }
     }
 
-    /// Finds a subtree in the tree.
-    pub fn find_mut(&mut self, name: &[Symbol]) -> Option<&mut ModuleTree> {
+    /// Finds a mutable subtree in the tree.
+    pub fn find_mut(&mut self, name: &[Symbol]) -> Option<&mut Tree> {
         let mut current = self;
 
         for symbol in name {
@@ -68,7 +68,8 @@ impl ModuleTree {
         Some(current)
     }
 
-    pub fn find(&self, name: &[Symbol]) -> Option<&ModuleTree> {
+    /// Finds a subtree in the tree.
+    pub fn find(&self, name: &[Symbol]) -> Option<&Tree> {
         let mut current = self;
 
         for symbol in name {

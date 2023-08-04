@@ -8,14 +8,14 @@ use vulpi_show::{Show, TreeDisplay};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Qualified {
-    pub path: usize,
+    pub path: Symbol,
     pub name: Symbol,
 }
 
 impl Show for Qualified {
     fn show(&self) -> TreeDisplay {
         TreeDisplay::label("Qualified")
-            .with(TreeDisplay::label(&self.path.to_string()))
+            .with(TreeDisplay::label(&self.path.get()))
             .with(TreeDisplay::label(&self.name.get()))
     }
 }
@@ -374,8 +374,7 @@ pub enum TypeDef {
 
 #[derive(Show)]
 pub struct TypeDecl {
-    pub id: usize,
-    pub module_id: usize,
+    pub namespace: Symbol,
     pub visibility: Visibility,
     pub name: Qualified,
     pub binders: Vec<TypeBinder>,
@@ -384,7 +383,7 @@ pub struct TypeDecl {
 
 #[derive(Show)]
 pub struct ModuleDecl {
-    pub id: usize,
+    pub namespace: Symbol,
     pub visibility: Visibility,
     pub name: Symbol,
     pub decls: Option<Vec<TopLevelDecl>>,
@@ -438,9 +437,9 @@ pub struct EffectField {
 
 #[derive(Show)]
 pub struct EffectDecl {
-    pub id: usize,
+    pub namespace: Symbol,
     pub visibility: Visibility,
-    pub name: Symbol,
+    pub qualified: Qualified,
     pub binders: Vec<TypeBinder>,
     pub fields: Vec<EffectField>,
 }

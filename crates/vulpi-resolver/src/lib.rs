@@ -4,7 +4,7 @@
 use std::collections::{HashMap, HashSet};
 
 use error::{ResolverError, ResolverErrorKind};
-use module_tree::ModuleTree;
+use module_tree::Tree;
 use namespace::{Item, ModuleId, Namespace, TypeValue, Value};
 use scopes::scopable::{TypeVariable, Variable};
 use scopes::Scopeable;
@@ -21,35 +21,47 @@ pub mod declare;
 pub mod error;
 pub mod module_tree;
 pub mod namespace;
+pub mod paths;
 pub mod scopes;
 
 pub struct Context {
     scopes: scopes::Kaleidoscope,
     patterns: Vec<HashMap<Symbol, Span>>,
     namespaces: Vec<namespace::Namespace>,
-    tree: module_tree::ModuleTree,
+    tree: module_tree::Tree,
     reporter: Report,
     main: ModuleId,
     name: Vec<Symbol>,
-    pub prelude: HashMap<Symbol, Qualified>,
+    prelude: HashMap<Symbol, Qualified>,
 }
 
 impl Context {
-    pub fn new(reporter: Report, namespaces: Vec<namespace::Namespace>, tree: ModuleTree) -> Self {
+    pub fn new(reporter: Report, namespaces: Vec<namespace::Namespace>, tree: Tree) -> Self {
         Self {
             scopes: scopes::Kaleidoscope::default(),
             patterns: Vec::new(),
             tree,
             namespaces,
             reporter,
-            main: ModuleId(0),
+            main: Symbol::intern(""),
             name: Vec::new(),
             prelude: HashMap::new(),
         }
     }
 
-    pub fn get_current_id(&self) -> usize {
-        self.tree.find(&self.name).unwrap().id.0
+    pub fn get_current_id(&self) -> Symbol {
+        self.tree.find(&self.name).unwrap().id
+    }
+
+    pub fn get_name(&self) -> Symbol {
+        Symbol::intern(
+            &self
+                .name
+                .iter()
+                .map(|x| x.get())
+                .collect::<Vec<_>>()
+                .join("."),
+        )
     }
 
     pub fn get_id(&self, name: Symbol) -> usize {
@@ -65,75 +77,77 @@ impl Context {
     fn find_val<T: Clone>(
         &self,
         span: Span,
-        module: &ModuleId,
-        mut name: &[Symbol],
+        current: &ModuleId,
+        name: &[Symbol],
         fun: fn(&Namespace) -> &HashMap<Symbol, Item<T>>,
         not_report: bool,
     ) -> Option<Item<T>> {
-        let current = self.tree.find(&self.name).unwrap().id;
+        let path = &name[0..name.len() - 1];
+        let Some((module_id, module)) = self.resolve_module(*current, path, &span) else {
+            return None
+        };
 
-        let mut module_id = *module;
-        let mut module = &self.namespaces[module.0];
+        let symbol = name.last().unwrap();
 
-        if name.len() > 1 {
-            while let Some((head, tail)) = name.split_first() {
-                name = tail;
+        let result = fun(module).get(symbol).cloned().or_else(|| {
+            if !not_report {
+                self.report(ResolverError {
+                    span: span.clone(),
+                    kind: ResolverErrorKind::NotFound(name.to_vec()),
+                });
+            }
+            None
+        })?;
 
-                if let Some(item) = &module.modules.get(head) {
-                    if item.visibility == namespace::Visibility::Private && current != module_id {
-                        self.report(ResolverError {
-                            span,
-                            kind: ResolverErrorKind::PrivateDefinition,
-                        });
-                        return None;
-                    }
+        if namespace::Visibility::Private == result.visibility && result.module != module_id {
+            self.report(ResolverError {
+                span,
+                kind: ResolverErrorKind::PrivateDefinition,
+            });
+            None
+        } else {
+            Some(result)
+        }
+    }
 
-                    module_id = item.item;
-                    module = &self.namespaces[item.item.0];
-                } else {
+    fn resolve_module(
+        &self,
+        mut current: ModuleId,
+        mut name: &[Symbol],
+        span: &Span,
+    ) -> Option<(ModuleId, &Namespace)> {
+        if !name.is_empty() && name.starts_with(&[Symbol::intern("Self")]) {
+            name = &name[1..];
+            current = self.main
+        }
+
+        let mut module_id = current;
+        let mut module = &self.namespaces[current.0];
+        while let Some((head, tail)) = name.split_first() {
+            name = tail;
+
+            if let Some(item) = &module.modules.get(head) {
+                let new_module = &self.namespaces[item.item.0];
+                if item.visibility == namespace::Visibility::Private && current != item.module {
                     self.report(ResolverError {
-                        span,
-                        kind: ResolverErrorKind::NotFound(vec![head.clone()]),
+                        span: span.clone(),
+                        kind: ResolverErrorKind::PrivateDefinition,
                     });
                     return None;
                 }
 
-                if tail.len() == 1 {
-                    break;
-                }
-            }
-        }
-
-        if name.len() == 1 {
-            let result = fun(module).get(&name[0]).cloned().or_else(|| {
-                if !not_report {
-                    self.report(ResolverError {
-                        span: span.clone(),
-                        kind: ResolverErrorKind::NotFound(name.to_vec()),
-                    });
-                }
-                None
-            })?;
-
-            if namespace::Visibility::Private == result.visibility
-                && module_id != current
-                && module.pass_through != Some(current)
-            {
-                self.report(ResolverError {
-                    span,
-                    kind: ResolverErrorKind::PrivateDefinition,
-                });
-                None
+                module_id = item.item;
+                module = new_module;
             } else {
-                Some(result)
+                self.report(ResolverError {
+                    span: span.clone(),
+                    kind: ResolverErrorKind::NotFound(vec![head.clone()]),
+                });
+                return None;
             }
-        } else {
-            self.report(ResolverError {
-                span,
-                kind: ResolverErrorKind::InvalidPath(name.to_vec()),
-            });
-            None
         }
+
+        Some((module_id, module))
     }
 
     pub(crate) fn find_type(
@@ -142,13 +156,7 @@ impl Context {
         name: &[Symbol],
         error: bool,
     ) -> Option<Item<TypeValue>> {
-        let (name, current) = if name[0] == Symbol::intern("Self") {
-            (&name[1..], self.main)
-        } else {
-            let current = self.get_current_id();
-            (name, ModuleId(current))
-        };
-
+        let current = ModuleId(self.get_current_id());
         self.find_val(span, &current, name, |x| &x.types, error)
     }
 
@@ -158,13 +166,7 @@ impl Context {
         name: &[Symbol],
         not_report: bool,
     ) -> Option<Item<Value>> {
-        let (name, current) = if name[0] == Symbol::intern("Self") {
-            (&name[1..], self.main)
-        } else {
-            let current = self.get_current_id();
-            (name, ModuleId(current))
-        };
-
+        let current = ModuleId(self.get_current_id());
         self.find_val(span, &current, name, |x| &x.values, not_report)
     }
 
@@ -1080,11 +1082,10 @@ impl Resolve for TypeDecl {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.scope::<Variable, _>(|ctx| abs::TypeDecl {
-            id: ctx.get_current_id(),
-            module_id: ctx.get_id(self.name.symbol()),
+            namespace: ctx.get_name(),
             visibility: self.visibility.resolve(ctx),
             name: Qualified {
-                path: ctx.get_current_id(),
+                path: ctx.get_name(),
                 name: self.name.symbol(),
             },
             binders: self.binders.resolve(ctx),
@@ -1115,7 +1116,7 @@ impl Resolve for ModuleDecl {
         ctx.name.push(self.name.symbol());
 
         let result = abs::ModuleDecl {
-            id: ctx.get_current_id(),
+            namespace: ctx.get_name(),
             visibility: self.visibility.resolve(ctx),
             name: self.name.symbol(),
             decls: self.part.resolve(ctx),
@@ -1174,9 +1175,12 @@ impl Resolve for EffectDecl {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.name.push(self.name.symbol());
         let result = ctx.scope::<TypeVariable, _>(|ctx| abs::EffectDecl {
-            id: ctx.get_current_id(),
+            namespace: ctx.get_name(),
             visibility: self.visibility.resolve(ctx),
-            name: self.name.symbol(),
+            qualified: Qualified {
+                path: ctx.get_name(),
+                name: self.name.symbol(),
+            },
             binders: self.binders.resolve(ctx),
             fields: self.fields.into_iter().map(|x| x.0.resolve(ctx)).collect(),
         });
@@ -1204,13 +1208,6 @@ impl Resolve for Program {
     type Output = abs::Module;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        ctx.find_prelude_type(self.eof.value.span.clone(), "String");
-        ctx.find_prelude_type(self.eof.value.span.clone(), "Int");
-        ctx.find_prelude_type(self.eof.value.span.clone(), "Float");
-        ctx.find_prelude_type(self.eof.value.span.clone(), "Char");
-        ctx.find_prelude_type(self.eof.value.span.clone(), "Bool");
-        ctx.find_prelude_type(self.eof.value.span.clone(), "Unit");
-
         abs::Module {
             decls: self
                 .top_levels
