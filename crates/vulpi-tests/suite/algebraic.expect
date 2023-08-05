@@ -1,8 +1,191 @@
-suite/algebraic.vp:9:9: unexpected token 'Colon'
-
-    7 | 
-    8 | type Is a = 
-    9 |     | T : Is True
-      |         ^
-   10 |     | F : Is False
-
+└Module
+   └decls
+      └Vec
+         ├Type
+         │  └TypeDecl
+         │     ├namespace
+         │     │  └Symbol: Result
+         │     ├visibility
+         │     │  └Private
+         │     ├name
+         │     │  └Qualified
+         │     │     ├
+         │     │     └Result
+         │     ├binders
+         │     │  └Vec
+         │     │     ├Implicit
+         │     │     │  └Symbol: a
+         │     │     └Implicit
+         │     │        └Symbol: b
+         │     └def
+         │        └Sum
+         │           └SumDecl
+         │              └constructors
+         │                 └Vec
+         │                    ├Constructor
+         │                    │  ├name
+         │                    │  │  └Symbol: Ok
+         │                    │  ├args
+         │                    │  │  └Vec
+         │                    │  │     └Spanned
+         │                    │  │        ├27~28
+         │                    │  │        └TypeVariable
+         │                    │  │           └Symbol: a
+         │                    │  └typ
+         │                    │     └None
+         │                    └Constructor
+         │                       ├name
+         │                       │  └Symbol: Err
+         │                       ├args
+         │                       │  └Vec
+         │                       │     └Spanned
+         │                       │        ├39~40
+         │                       │        └TypeVariable
+         │                       │           └Symbol: b
+         │                       └typ
+         │                          └None
+         ├Type
+         │  └TypeDecl
+         │     ├namespace
+         │     │  └Symbol: True
+         │     ├visibility
+         │     │  └Private
+         │     ├name
+         │     │  └Qualified
+         │     │     ├
+         │     │     └True
+         │     ├binders
+         │     │  └Vec
+         │     └def
+         │        └Abstract
+         ├Type
+         │  └TypeDecl
+         │     ├namespace
+         │     │  └Symbol: False
+         │     ├visibility
+         │     │  └Private
+         │     ├name
+         │     │  └Qualified
+         │     │     ├
+         │     │     └False
+         │     ├binders
+         │     │  └Vec
+         │     └def
+         │        └Abstract
+         ├Type
+         │  └TypeDecl
+         │     ├namespace
+         │     │  └Symbol: Is
+         │     ├visibility
+         │     │  └Private
+         │     ├name
+         │     │  └Qualified
+         │     │     ├
+         │     │     └Is
+         │     ├binders
+         │     │  └Vec
+         │     │     └Implicit
+         │     │        └Symbol: a
+         │     └def
+         │        └Sum
+         │           └SumDecl
+         │              └constructors
+         │                 └Vec
+         │                    ├Constructor
+         │                    │  ├name
+         │                    │  │  └Symbol: T
+         │                    │  ├args
+         │                    │  │  └Vec
+         │                    │  └typ
+         │                    │     └Spanned
+         │                    │        ├87~94
+         │                    │        └Application
+         │                    │           └TypeApplication
+         │                    │              ├func
+         │                    │              │  └Spanned
+         │                    │              │     ├87~89
+         │                    │              │     └Type
+         │                    │              │        └Qualified
+         │                    │              │           ├
+         │                    │              │           └Is
+         │                    │              └args
+         │                    │                 └Vec
+         │                    │                    └Spanned
+         │                    │                       ├90~94
+         │                    │                       └Type
+         │                    │                          └Qualified
+         │                    │                             ├
+         │                    │                             └True
+         │                    └Constructor
+         │                       ├name
+         │                       │  └Symbol: F
+         │                       ├args
+         │                       │  └Vec
+         │                       └typ
+         │                          └Spanned
+         │                             ├105~113
+         │                             └Application
+         │                                └TypeApplication
+         │                                   ├func
+         │                                   │  └Spanned
+         │                                   │     ├105~107
+         │                                   │     └Type
+         │                                   │        └Qualified
+         │                                   │           ├
+         │                                   │           └Is
+         │                                   └args
+         │                                      └Vec
+         │                                         └Spanned
+         │                                            ├108~113
+         │                                            └Type
+         │                                               └Qualified
+         │                                                  ├
+         │                                                  └False
+         └Let
+            └LetDecl
+               ├visibility
+               │  └Private
+               ├name
+               │  └Symbol: main
+               ├binders
+               │  └Vec
+               ├ret
+               │  └Tuple
+               │     ├None
+               │     └Spanned
+               │        ├126~133
+               │        └Application
+               │           └TypeApplication
+               │              ├func
+               │              │  └Spanned
+               │              │     ├126~128
+               │              │     └Type
+               │              │        └Qualified
+               │              │           ├
+               │              │           └Is
+               │              └args
+               │                 └Vec
+               │                    └Spanned
+               │                       ├129~133
+               │                       └Type
+               │                          └Qualified
+               │                             ├
+               │                             └True
+               └body
+                  └LetMode
+                     └cases
+                        └Vec
+                           └LetCase
+                              └pattern
+                                 └PatternArm
+                                    ├patterns
+                                    │  └Vec
+                                    ├expr
+                                    │  └Spanned
+                                    │     ├136~140
+                                    │     └Constructor
+                                    │        └Qualified
+                                    │           ├Is
+                                    │           └T
+                                    └guard
+                                       └None

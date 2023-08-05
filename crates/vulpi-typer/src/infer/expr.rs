@@ -170,10 +170,6 @@ impl Infer for Expr {
                 ty
             }
 
-            ExprKind::Projection(_) => todo!(),
-            ExprKind::RecordInstance(_) => todo!(),
-            ExprKind::RecordUpdate(_) => todo!(),
-
             ExprKind::Tuple(tuple) => {
                 let mut types = Vec::new();
 
@@ -185,9 +181,31 @@ impl Infer for Expr {
             }
             ExprKind::Error => Type::error(),
 
-            ExprKind::Handler(_) => todo!(),
-            ExprKind::Cases(_) => todo!(),
-            ExprKind::Effect(_) => todo!(),
+            ExprKind::Projection(_) => {
+                context.report(crate::error::TypeErrorKind::NotImplemented);
+                Type::error()
+            }
+            ExprKind::RecordInstance(_) => {
+                context.report(crate::error::TypeErrorKind::NotImplemented);
+                Type::error()
+            }
+            ExprKind::RecordUpdate(_) => {
+                context.report(crate::error::TypeErrorKind::NotImplemented);
+                Type::error()
+            }
+
+            ExprKind::Handler(_) => {
+                context.report(crate::error::TypeErrorKind::NotImplemented);
+                Type::error()
+            }
+            ExprKind::Cases(_) => {
+                context.report(crate::error::TypeErrorKind::NotImplemented);
+                Type::error()
+            }
+            ExprKind::Effect(_) => {
+                context.report(crate::error::TypeErrorKind::NotImplemented);
+                Type::error()
+            }
         }
     }
 }

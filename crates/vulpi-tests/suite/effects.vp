@@ -1,9 +1,21 @@
-effect Log e where
-  log e : ()
+pub mod Prelude where
+  pub type String
+  pub type Request a b
+  pub type Unit
+  
+  pub effect IO where
+    run : ()
+
+  pub let println (a: String) : { IO } ()
+
+use Prelude
+
+pub effect Log e where
+  pub log e : ()
 
 let logToStdout! (x: Request (Log String) a -> a) : {IO} a =
   cases
-    { Log.log e } => do
+    { Log.log e -> k } => do
       println e
       handle k () with logToStdout!
     other => other

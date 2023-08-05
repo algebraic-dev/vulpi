@@ -84,18 +84,18 @@ impl<'a> Context<'a> {
         })
     }
 
-    fn report_not_found(&self, span: Span, name: paths::Path) {
+    fn report_not_found(&self, span: Span, name: Symbol) {
         self.report(ResolverError {
             span,
-            kind: ResolverErrorKind::NotFound(name.path),
+            kind: ResolverErrorKind::NotFound(name),
         });
     }
 
-    pub fn resolve_module(&self, span: Span, name: paths::Path) -> Option<Symbol> {
-        let resolved = self.namespaces.resolve(self.path.clone(), name.clone());
+    pub fn resolve_module(&self, span: Span, name: paths::Path, entire: Symbol) -> Option<Symbol> {
+        let resolved = self.namespaces.resolve(self.path.clone(), name);
         match resolved {
             ResolveObj::ModuleNotFound(_) => {
-                self.report_not_found(span, name);
+                self.report_not_found(span, entire);
                 None
             }
             ResolveObj::PrivateModule(_) => {
@@ -123,14 +123,14 @@ impl<'a> Context<'a> {
     where
         F: FnOnce(&Namespace) -> &HashMap<Symbol, Item<T>>,
     {
-        let Some(resolved) = self.resolve_module(span.clone(), name.path.clone()) else {
+        let Some(resolved) = self.resolve_module(span.clone(), name.path.clone(), name.symbol()) else {
             return None
         };
 
         let namespace = self.namespaces.find(resolved).unwrap();
 
         let Some(item) = fun(namespace).get(&name.name) else {
-            self.report_not_found(span, name.path);
+            self.report_not_found(span, name.symbol());
             return None
         };
 
@@ -329,6 +329,17 @@ impl Resolve for KindType {
             KindType::Arrow(left, _, right) => {
                 abs::KindType::Arrow(left.resolve(ctx), right.resolve(ctx))
             }
+            KindType::Variable(name) => match name.0.symbol().get().as_str() {
+                "Effect" => abs::KindType::Effect,
+                "Constraint" => abs::KindType::Constraint,
+                _ => {
+                    ctx.report(ResolverError {
+                        span: name.0.value.span.clone(),
+                        kind: ResolverErrorKind::NotFound(name.symbol()),
+                    });
+                    abs::KindType::Error
+                }
+            },
         }
     }
 }
@@ -338,26 +349,16 @@ impl Resolve for Effect {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
-            Effect::Application(lower, args) => {
-                let vec: Vec<_> = (&lower).into();
+            Effect::Application(upper, args) => {
+                let vec: Vec<_> = (&upper).into();
                 let args = args.resolve(ctx);
 
-                match ctx.find_value(lower.span.clone(), &vec) {
+                match ctx.find_type(upper.span, &vec) {
                     Some(Item {
-                        item: Value::Effect(qual),
+                        item: TypeValue::Effect(qual),
                         ..
                     }) => abs::Effect::Application(qual, args),
-                    _ => {
-                        if args.is_empty() && lower.segments.is_empty() {
-                            abs::Effect::Variable(lower.last.symbol())
-                        } else {
-                            ctx.report(ResolverError {
-                                span: lower.span,
-                                kind: ResolverErrorKind::NotFound(vec),
-                            });
-                            abs::Effect::Error
-                        }
-                    }
+                    _ => abs::Effect::Error,
                 }
             }
             Effect::Variable(name) => abs::Effect::Variable(name.symbol()),
@@ -1144,16 +1145,31 @@ impl Resolve for EffectDecl {
     type Output = abs::EffectDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
+        let path = ctx.current();
         ctx.scope_namespace(self.name.symbol(), |ctx| abs::EffectDecl {
             namespace: ctx.current(),
             qualified: Qualified {
-                path: ctx.current(),
+                path,
                 name: self.name.symbol(),
             },
             visibility: self.visibility.resolve(ctx),
             binders: self.binders.resolve(ctx),
             fields: self.fields.into_iter().map(|x| x.0.resolve(ctx)).collect(),
         })
+    }
+}
+
+impl Resolve for ExternalDecl {
+    type Output = abs::ExternalDecl;
+
+    fn resolve(self, ctx: &mut Context) -> Self::Output {
+        abs::ExternalDecl {
+            namespace: ctx.current(),
+            visibility: self.visibility.resolve(ctx),
+            name: self.name.symbol(),
+            ty: self.typ.resolve(ctx),
+            ret: self.str.symbol(),
+        }
     }
 }
 
@@ -1166,6 +1182,9 @@ impl Resolve for TopLevel {
             TopLevel::Type(typ) => Some(abs::TopLevelDecl::Type(typ.resolve(ctx))),
             TopLevel::Module(module) => Some(abs::TopLevelDecl::Module(module.resolve(ctx))),
             TopLevel::Effect(effect) => Some(abs::TopLevelDecl::Effect(effect.resolve(ctx))),
+            TopLevel::External(external) => {
+                Some(abs::TopLevelDecl::External(external.resolve(ctx)))
+            }
             TopLevel::Error(_) => None,
             TopLevel::Use(_) => None,
         }

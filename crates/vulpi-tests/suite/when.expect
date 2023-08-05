@@ -1,11 +1,22 @@
-└ModuleTree: 0
-   ├Namespace
-   │  ├values
-   │  │  └HashMap
-   │  │     └Entry
-   │  │        ├Symbol: ok
-   │  │        └Private 
-   │  │           └Function: 0.ok
-   │  └types
-   │     └HashMap
-   └child
+suite/when.vp:3:18: name not found: 
+
+    1 | let ok : Int =
+    2 |     when 2 is 
+    3 |         2 | 3 if a == 2 => 1
+      |                  ^
+    4 |         1               => 0
+
+suite/when.vp:3:20: name not found: Operator
+
+    1 | let ok : Int =
+    2 |     when 2 is 
+    3 |         2 | 3 if a == 2 => 1
+      |                    ^^
+    4 |         1               => 0
+
+suite/when.vp:1:10: name not found: 
+
+    1 | let ok : Int =
+      |          ^^^
+    2 |     when 2 is 
+

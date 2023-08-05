@@ -82,9 +82,11 @@ impl From<Visibility> for namespace::Visibility {
 
 impl Declare for EffectDecl {
     fn declare(&self, ctx: &mut Context) {
+        let name = self.name.symbol();
+
         ctx.add_type(
             self.name.0.value.span.clone(),
-            self.name.symbol(),
+            name,
             Item {
                 visibility: self.visibility.clone().into(),
                 span: self.name.0.value.span.clone(),
@@ -242,6 +244,21 @@ impl Declare for ModuleDecl {
     }
 }
 
+impl Declare for ExternalDecl {
+    fn declare(&self, ctx: &mut Context) {
+        ctx.add_value(
+            self.name.0.value.span.clone(),
+            self.name.symbol(),
+            Item {
+                visibility: self.visibility.clone().into(),
+                span: self.name.0.value.span.clone(),
+                item: Value::Function(ctx.qualify(self.name.symbol())),
+                parent: Some(ctx.path.symbol()),
+            },
+        );
+    }
+}
+
 impl Declare for TopLevel {
     fn declare(&self, ctx: &mut Context) {
         match self {
@@ -258,6 +275,7 @@ impl Declare for TopLevel {
             TopLevel::Let(decl) => {
                 decl.declare(ctx);
             }
+            TopLevel::External(external) => external.declare(ctx),
             TopLevel::Error(_) => (),
         }
     }
@@ -287,7 +305,7 @@ impl ImportResolve for UseDecl {
                 .collect(),
         };
 
-        let Some(name) = ctx.resolve_module(self.path.span.clone(), path) else {
+        let Some(name) = ctx.resolve_module(self.path.span.clone(), path.clone(), path.symbol()) else {
             return;
         };
 

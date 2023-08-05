@@ -4,7 +4,7 @@ use vulpi_report::IntoDiagnostic;
 
 pub enum ResolverErrorKind {
     Redeclarated(Symbol),
-    NotFound(Vec<Symbol>),
+    NotFound(Symbol),
     InvalidPath(Vec<Symbol>),
     IsAModule,
     ExpectedConstructor,
@@ -27,11 +27,7 @@ impl IntoDiagnostic for ResolverError {
             ResolverErrorKind::Redeclarated(name) => {
                 format!("redeclarated name: {}", name.get()).into()
             }
-            ResolverErrorKind::NotFound(name) => format!(
-                "name not found: {}",
-                name.iter().map(|s| s.get()).collect::<Vec<_>>().join(".")
-            )
-            .into(),
+            ResolverErrorKind::NotFound(name) => format!("name not found: {}", name.get()).into(),
             ResolverErrorKind::InvalidPath(name) => format!(
                 "invalid path: {}",
                 name.iter().map(|s| s.get()).collect::<Vec<_>>().join(".")

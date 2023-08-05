@@ -1,31 +1,171 @@
-└ModuleTree: 0
-   ├Bool
-   │  └ModuleTree: 1
-   │     ├Namespace
-   │     │  ├values
-   │     │  │  └HashMap
-   │     │  │     ├Entry
-   │     │  │     │  ├Symbol: False
-   │     │  │     │  └Public 
-   │     │  │     │     └Constructor: 0.False
-   │     │  │     └Entry
-   │     │  │        ├Symbol: True
-   │     │  │        └Public 
-   │     │  │           └Constructor: 0.True
-   │     │  └types
-   │     │     └HashMap
-   │     └child
-   ├Namespace
-   │  ├values
-   │  │  └HashMap
-   │  │     └Entry
-   │  │        ├Symbol: ata
-   │  │        └Private 
-   │  │           └Function: 0.ata
-   │  └types
-   │     └HashMap
-   │        └Entry
-   │           ├Symbol: Bool
-   │           └Private 
-   │              └Qualified: 0.Bool
-   └child
+└Module
+   └decls
+      └Vec
+         ├Module
+         │  └ModuleDecl
+         │     ├namespace
+         │     │  └Symbol: Prelude
+         │     ├visibility
+         │     │  └Public
+         │     ├name
+         │     │  └Symbol: Prelude
+         │     └decls
+         │        └Vec
+         │           └Type
+         │              └TypeDecl
+         │                 ├namespace
+         │                 │  └Symbol: Prelude.Int
+         │                 ├visibility
+         │                 │  └Public
+         │                 ├name
+         │                 │  └Qualified
+         │                 │     ├Prelude
+         │                 │     └Int
+         │                 ├binders
+         │                 │  └Vec
+         │                 └def
+         │                    └Abstract
+         ├Type
+         │  └TypeDecl
+         │     ├namespace
+         │     │  └Symbol: Shake
+         │     ├visibility
+         │     │  └Public
+         │     ├name
+         │     │  └Qualified
+         │     │     ├
+         │     │     └Shake
+         │     ├binders
+         │     │  └Vec
+         │     └def
+         │        └Sum
+         │           └SumDecl
+         │              └constructors
+         │                 └Vec
+         │                    ├Constructor
+         │                    │  ├name
+         │                    │  │  └Symbol: True
+         │                    │  ├args
+         │                    │  │  └Vec
+         │                    │  └typ
+         │                    │     └None
+         │                    └Constructor
+         │                       ├name
+         │                       │  └Symbol: False
+         │                       ├args
+         │                       │  └Vec
+         │                       └typ
+         │                          └None
+         ├Type
+         │  └TypeDecl
+         │     ├namespace
+         │     │  └Symbol: Priv
+         │     ├visibility
+         │     │  └Private
+         │     ├name
+         │     │  └Qualified
+         │     │     ├
+         │     │     └Priv
+         │     ├binders
+         │     │  └Vec
+         │     └def
+         │        └Sum
+         │           └SumDecl
+         │              └constructors
+         │                 └Vec
+         │                    ├Constructor
+         │                    │  ├name
+         │                    │  │  └Symbol: True
+         │                    │  ├args
+         │                    │  │  └Vec
+         │                    │  │     └Spanned
+         │                    │  │        ├105~110
+         │                    │  │        └Type
+         │                    │  │           └Qualified
+         │                    │  │              ├
+         │                    │  │              └Shake
+         │                    │  └typ
+         │                    │     └None
+         │                    └Constructor
+         │                       ├name
+         │                       │  └Symbol: False
+         │                       ├args
+         │                       │  └Vec
+         │                       └typ
+         │                          └None
+         └Module
+            └ModuleDecl
+               ├namespace
+               │  └Symbol: Ata
+               ├visibility
+               │  └Public
+               ├name
+               │  └Symbol: Ata
+               └decls
+                  └Vec
+                     ├Type
+                     │  └TypeDecl
+                     │     ├namespace
+                     │     │  └Symbol: Ata.Bool
+                     │     ├visibility
+                     │     │  └Private
+                     │     ├name
+                     │     │  └Qualified
+                     │     │     ├Ata
+                     │     │     └Bool
+                     │     ├binders
+                     │     │  └Vec
+                     │     └def
+                     │        └Sum
+                     │           └SumDecl
+                     │              └constructors
+                     │                 └Vec
+                     │                    ├Constructor
+                     │                    │  ├name
+                     │                    │  │  └Symbol: True
+                     │                    │  ├args
+                     │                    │  │  └Vec
+                     │                    │  └typ
+                     │                    │     └None
+                     │                    └Constructor
+                     │                       ├name
+                     │                       │  └Symbol: False
+                     │                       ├args
+                     │                       │  └Vec
+                     │                       └typ
+                     │                          └None
+                     └Let
+                        └LetDecl
+                           ├visibility
+                           │  └Private
+                           ├name
+                           │  └Symbol: ata
+                           ├binders
+                           │  └Vec
+                           ├ret
+                           │  └Tuple
+                           │     ├None
+                           │     └Spanned
+                           │        ├205~215
+                           │        └Type
+                           │           └Qualified
+                           │              ├
+                           │              └Shake
+                           └body
+                              └LetMode
+                                 └cases
+                                    └Vec
+                                       └LetCase
+                                          └pattern
+                                             └PatternArm
+                                                ├patterns
+                                                │  └Vec
+                                                ├expr
+                                                │  └Spanned
+                                                │     ├218~227
+                                                │     └Constructor
+                                                │        └Qualified
+                                                │           ├Ata.Bool
+                                                │           └True
+                                                └guard
+                                                   └None

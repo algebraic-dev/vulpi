@@ -249,6 +249,7 @@ impl<'a> Lexer<'a> {
             "in" => TokenData::In,
             "forall" => TokenData::Forall,
             "_" => TokenData::Wildcard,
+            "external" => TokenData::External,
             _ => TokenData::LowerIdent,
         }
     }

@@ -1,18 +1,18 @@
-mod Prelude where
-    pub type Bool = 
-        | True 
-        | False
-    
-    pub type String
+pub mod Prelude where
     pub type Int
-    pub type Unit
 
-    use Bool
+pub type Shake = 
+    | True
+    | False
 
-use Prelude
+type Priv =
+    | True Shake
+    | False
 
-let ata (x: Int) (z: Bool) (y: String) : Int = do
-    1
-    2
-    ()
-    
+pub mod Ata where
+    type Bool = 
+        | True
+        | False
+
+    let ata : Self.Shake = Bool.True
+

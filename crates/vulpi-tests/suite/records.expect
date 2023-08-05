@@ -1,31 +1,15 @@
-└ModuleTree: 0
-   ├User
-   │  └ModuleTree: 1
-   │     ├Namespace
-   │     │  ├values
-   │     │  │  └HashMap
-   │     │  │     ├Entry
-   │     │  │     │  ├Symbol: data
-   │     │  │     │  └Public 
-   │     │  │     │     └Field: 0.data
-   │     │  │     └Entry
-   │     │  │        ├Symbol: name
-   │     │  │        └Public 
-   │     │  │           └Field: 0.name
-   │     │  └types
-   │     │     └HashMap
-   │     └child
-   ├Namespace
-   │  ├values
-   │  │  └HashMap
-   │  │     └Entry
-   │  │        ├Symbol: main
-   │  │        └Private 
-   │  │           └Function: 0.main
-   │  └types
-   │     └HashMap
-   │        └Entry
-   │           ├Symbol: User
-   │           └Private 
-   │              └Qualified: 0.User
-   └child
+suite/records.vp:3:14: name not found: 
+
+    1 | type User (t: * -> *) = {
+    2 |     name : String,
+    3 |     data : t Int
+      |              ^^^
+    4 | }
+
+suite/records.vp:2:12: name not found: 
+
+    1 | type User (t: * -> *) = {
+    2 |     name : String,
+      |            ^^^^^^
+    3 |     data : t Int
+

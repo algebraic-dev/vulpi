@@ -27,6 +27,20 @@ pub trait Declare {
     fn define(&self, _context: Env) {}
 }
 
+impl Declare for ExternalDecl {
+    fn declare(&self, context: Env) {
+        let (typ, k) = self.ty.infer(&context);
+        k.unify(&context, &kind::Kind::star());
+
+        context
+            .modules
+            .borrow_mut()
+            .get(context.current_namespace())
+            .variables
+            .insert(self.name.clone(), typ);
+    }
+}
+
 impl Declare for TypeDecl {
     fn declare(&self, mut context: Env) {
         let mut kinds = Vec::new();
@@ -225,6 +239,12 @@ impl Declare for LetDecl {
             .binders
             .iter()
             .map(|x| x.ty.data.free_variables())
+            .chain(std::iter::once(
+                self.ret
+                    .as_ref()
+                    .map(|x| x.1.data.free_variables())
+                    .unwrap_or_default(),
+            ))
             .fold(HashSet::new(), |acc, x| acc.union(&x).cloned().collect());
 
         for fv in &fvs {
@@ -293,6 +313,12 @@ impl Declare for ModuleDecl {
                     decl.declare(context.clone());
                 }
             }
+
+            if let Some(externals) = self.externals() {
+                for decl in externals {
+                    decl.declare(context.clone());
+                }
+            }
         })
     }
 
@@ -318,6 +344,12 @@ impl Declare for ModuleDecl {
 
             if let Some(lets) = self.lets() {
                 for decl in lets {
+                    decl.define(context.clone());
+                }
+            }
+
+            if let Some(externals) = self.externals() {
+                for decl in externals {
                     decl.define(context.clone());
                 }
             }

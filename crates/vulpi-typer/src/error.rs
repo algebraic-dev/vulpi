@@ -14,6 +14,7 @@ pub enum TypeErrorKind {
     NotAFunctionKind,
     WrongArity(usize, usize),
     NotAFunction(Env, Type),
+    NotImplemented,
 }
 
 pub struct TypeError {
@@ -46,6 +47,7 @@ impl IntoDiagnostic for TypeError {
                 Text::from(format!("not a function: {}", ty.show(env.clone())))
             }
             TypeErrorKind::CannotFind(name) => Text::from(format!("cannot find: {}", name.get())),
+            TypeErrorKind::NotImplemented => Text::from("not implemented".to_string()),
         }
     }
 

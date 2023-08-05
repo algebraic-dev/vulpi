@@ -1,11 +1,10 @@
-└ModuleTree: 0
-   ├Namespace
-   │  ├values
-   │  │  └HashMap
-   │  │     └Entry
-   │  │        ├Symbol: tuple
-   │  │        └Private 
-   │  │           └Function: 0.tuple
-   │  └types
-   │     └HashMap
-   └child
+suite/tuple.vp:1:22: name not found: 
+
+    1 | let tuple : (String, Int) = ("Ata", 2)
+      |                      ^^^
+
+suite/tuple.vp:1:14: name not found: 
+
+    1 | let tuple : (String, Int) = ("Ata", 2)
+      |              ^^^^^^
+

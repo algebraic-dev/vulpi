@@ -71,3 +71,9 @@ pub struct Qualified {
     pub path: Path,
     pub name: Symbol,
 }
+
+impl Qualified {
+    pub fn symbol(&self) -> Symbol {
+        self.path.with(self.name.clone()).symbol()
+    }
+}

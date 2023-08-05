@@ -13,6 +13,7 @@ impl<'a> Parser<'a> {
         match self.token() {
             TokenData::Star => Ok(KindType::Star(self.bump())),
             TokenData::LPar => Ok(KindType::Parenthesis(self.parenthesis(Self::kind)?)),
+            TokenData::UpperIdent => Ok(KindType::Variable(self.upper()?)),
             _ => self.unexpected(),
         }
     }

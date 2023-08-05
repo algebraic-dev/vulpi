@@ -1,9 +1,9 @@
-mod Ata {
-    type A
-    type B
-}
+pub mod Ata where
+    pub type A
+    pub type B
 
-mod Beta {
+mod Beta where
     type C
-    use Ata
-}
+    use Self.Ata
+
+    let ata (x: A) (y: B) : C = 2

@@ -3,11 +3,12 @@ use vulpi_macros::Show;
 
 use crate::tokens::Token;
 
-use super::Parenthesis;
+use super::{Parenthesis, Upper};
 
 #[derive(Show)]
 pub enum KindType {
     Star(Token),
+    Variable(Upper),
     Arrow(Box<Kind>, Token, Box<Kind>),
     Parenthesis(Parenthesis<Box<Kind>>),
 }

@@ -172,6 +172,17 @@ pub struct EffectDecl {
 }
 
 #[derive(Show)]
+pub struct ExternalDecl {
+    pub visibility: Visibility,
+    pub external: Token,
+    pub name: Lower,
+    pub colon: Token,
+    pub typ: Box<Type>,
+    pub equal: Token,
+    pub str: Token,
+}
+
+#[derive(Show)]
 pub enum TopLevel {
     Let(Box<LetDecl>),
     Type(Box<TypeDecl>),
@@ -179,6 +190,7 @@ pub enum TopLevel {
     Module(Box<ModuleDecl>),
     Effect(Box<EffectDecl>),
     Error(Vec<Token>),
+    External(Box<ExternalDecl>),
 }
 
 #[derive(Show)]

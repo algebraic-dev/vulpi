@@ -1,21 +1,127 @@
-suite/abstract.vp:1:9: unexpected token 'LBrace'
-
-    1 | mod Ata {
-      |         ^
-    2 |     type A
-
-suite/abstract.vp:4:1: unexpected token 'RBrace'
-
-    2 |     type A
-    3 |     type B
-    4 | }
-      | ^
-    5 | 
-
-suite/abstract.vp:9:1: unexpected token 'RBrace'
-
-    7 |     type C
-    8 |     use Ata
-    9 | }
-      | ^
-
+└Module
+   └decls
+      └Vec
+         ├Module
+         │  └ModuleDecl
+         │     ├namespace
+         │     │  └Symbol: Ata
+         │     ├visibility
+         │     │  └Public
+         │     ├name
+         │     │  └Symbol: Ata
+         │     └decls
+         │        └Vec
+         │           ├Type
+         │           │  └TypeDecl
+         │           │     ├namespace
+         │           │     │  └Symbol: Ata.A
+         │           │     ├visibility
+         │           │     │  └Public
+         │           │     ├name
+         │           │     │  └Qualified
+         │           │     │     ├Ata
+         │           │     │     └A
+         │           │     ├binders
+         │           │     │  └Vec
+         │           │     └def
+         │           │        └Abstract
+         │           └Type
+         │              └TypeDecl
+         │                 ├namespace
+         │                 │  └Symbol: Ata.B
+         │                 ├visibility
+         │                 │  └Public
+         │                 ├name
+         │                 │  └Qualified
+         │                 │     ├Ata
+         │                 │     └B
+         │                 ├binders
+         │                 │  └Vec
+         │                 └def
+         │                    └Abstract
+         └Module
+            └ModuleDecl
+               ├namespace
+               │  └Symbol: Beta
+               ├visibility
+               │  └Private
+               ├name
+               │  └Symbol: Beta
+               └decls
+                  └Vec
+                     ├Type
+                     │  └TypeDecl
+                     │     ├namespace
+                     │     │  └Symbol: Beta.C
+                     │     ├visibility
+                     │     │  └Private
+                     │     ├name
+                     │     │  └Qualified
+                     │     │     ├Beta
+                     │     │     └C
+                     │     ├binders
+                     │     │  └Vec
+                     │     └def
+                     │        └Abstract
+                     └Let
+                        └LetDecl
+                           ├visibility
+                           │  └Private
+                           ├name
+                           │  └Symbol: ata
+                           ├binders
+                           │  └Vec
+                           │     ├Binder
+                           │     │  ├pattern
+                           │     │  │  └Spanned
+                           │     │  │     ├106~107
+                           │     │  │     └Variable
+                           │     │  │        └Symbol: x
+                           │     │  └ty
+                           │     │     └Spanned
+                           │     │        ├109~110
+                           │     │        └Type
+                           │     │           └Qualified
+                           │     │              ├Ata
+                           │     │              └A
+                           │     └Binder
+                           │        ├pattern
+                           │        │  └Spanned
+                           │        │     ├113~114
+                           │        │     └Variable
+                           │        │        └Symbol: y
+                           │        └ty
+                           │           └Spanned
+                           │              ├116~117
+                           │              └Type
+                           │                 └Qualified
+                           │                    ├Ata
+                           │                    └B
+                           ├ret
+                           │  └Tuple
+                           │     ├None
+                           │     └Spanned
+                           │        ├121~122
+                           │        └Type
+                           │           └Qualified
+                           │              ├Beta
+                           │              └C
+                           └body
+                              └LetMode
+                                 └cases
+                                    └Vec
+                                       └LetCase
+                                          └pattern
+                                             └PatternArm
+                                                ├patterns
+                                                │  └Vec
+                                                ├expr
+                                                │  └Spanned
+                                                │     ├125~126
+                                                │     └Literal
+                                                │        └Spanned
+                                                │           ├125~126
+                                                │           └Integer
+                                                │              └Symbol: 2
+                                                └guard
+                                                   └None

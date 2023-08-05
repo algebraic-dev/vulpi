@@ -1,11 +1,5 @@
-└ModuleTree: 0
-   ├Namespace
-   │  ├values
-   │  │  └HashMap
-   │  │     └Entry
-   │  │        ├Symbol: main
-   │  │        └Private 
-   │  │           └Function: 0.main
-   │  └types
-   │     └HashMap
-   └child
+suite/unicode_escape.vp:1:12: name not found: 
+
+    1 | let main : String = "ata\n\"teste ザ ワールド"
+      |            ^^^^^^
+

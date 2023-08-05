@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use vulpi_lexer::Lexer;
 use vulpi_parser::Parser;
+use vulpi_show::Show;
 
 use vulpi_report::renderer::classic::Classic;
 use vulpi_report::renderer::Reader;
@@ -8,8 +11,10 @@ use vulpi_report::{hash::HashReporter, Report};
 
 use vulpi_resolver::declare::Declare;
 use vulpi_resolver::declare::ImportResolve;
-use vulpi_resolver::module_tree::ModuleTree;
-use vulpi_resolver::namespace::{ModuleId, Namespace};
+use vulpi_resolver::module_tree::Tree;
+use vulpi_resolver::namespace::Namespace;
+use vulpi_resolver::namespace::Namespaces;
+use vulpi_resolver::scopes::Symbol;
 use vulpi_resolver::Resolve;
 
 use vulpi_vfs::real::RealFileSystem;
@@ -32,23 +37,20 @@ fn main() {
     let mut parser = Parser::new(lexer, id, reporter.clone());
     let program = parser.program();
 
-    let mut tree = ModuleTree::new(ModuleId(0));
-    let mut namespaces = vec![Namespace::new(None)];
+    let tree = Tree::new(Symbol::intern(""));
+    let mut namespaces = HashMap::new();
 
-    let mut resolver =
-        vulpi_resolver::declare::Context::new(reporter.clone(), &mut tree, &mut namespaces);
+    namespaces.insert(Symbol::intern(""), Namespace::new(Symbol::intern("")));
+
+    let mut namespaces = Namespaces { tree, namespaces };
+
+    let mut resolver = vulpi_resolver::Context::new(reporter.clone(), &mut namespaces);
 
     program.declare(&mut resolver);
     program.resolve_imports(&mut resolver);
+    let program = program.resolve(&mut resolver);
 
-    let size = namespaces.len();
-
-    let mut ctx = vulpi_resolver::Context::new(reporter.clone(), namespaces, tree);
-
-    let program = program.resolve(&mut ctx);
-
-    let env = vulpi_typer::env::Env::new(reporter.clone(), size, ctx.prelude.clone());
-
+    let env = vulpi_typer::env::Env::new(reporter.clone());
     program.declare(env.clone());
     program.define(env);
 
@@ -61,7 +63,7 @@ fn main() {
         let mut writer = Reader::default();
         let ctx = Classic::new(&vfs, cwd);
 
-        for diagnostic in report {
+        for diagnostic in report.iter().rev() {
             diagnostic.render(&ctx, &mut writer).unwrap();
         }
 

@@ -9,25 +9,26 @@ use vulpi_show::{Show, TreeDisplay};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenData {
-    Let,    // 'let' keyword
-    When,   // 'when' keyword
-    Is,     // 'is' keyword
-    With,   // 'with' keyword
-    If,     // 'if' keyword
-    Else,   // 'else' keyword
-    Then,   // 'then' keyword
-    Use,    // 'use' keyword
-    As,     // 'as' keyword
-    Type,   // 'type' keyword
-    Pub,    // 'pub' keyword
-    Do,     // 'do' keyword
-    In,     // 'in' keyword
-    Forall, // 'forall' keyword
-    Where,  // 'where' keyword
-    Mod,    // 'mod' keyword
-    Handle, // 'handle' keyword
-    Cases,  // 'request' keyword
-    Effect, // 'effect' keyword
+    Let,      // 'let' keyword
+    When,     // 'when' keyword
+    Is,       // 'is' keyword
+    With,     // 'with' keyword
+    If,       // 'if' keyword
+    Else,     // 'else' keyword
+    Then,     // 'then' keyword
+    Use,      // 'use' keyword
+    As,       // 'as' keyword
+    Type,     // 'type' keyword
+    Pub,      // 'pub' keyword
+    Do,       // 'do' keyword
+    In,       // 'in' keyword
+    Forall,   // 'forall' keyword
+    Where,    // 'where' keyword
+    Mod,      // 'mod' keyword
+    Handle,   // 'handle' keyword
+    Cases,    // 'request' keyword
+    Effect,   // 'effect' keyword
+    External, // 'external' keyword
 
     String, // String literal
     Int,    // Integer literal
@@ -197,6 +198,7 @@ impl ToString for Token {
             Handle => "handle".to_string(),
             Cases => "cases".to_string(),
             Effect => "effect".to_string(),
+            External => "external".to_string(),
         }
     }
 }

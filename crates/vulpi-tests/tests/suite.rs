@@ -1,6 +1,8 @@
 #![feature(custom_test_frameworks)]
 #![test_runner(vulpi_tests::test_runner)]
 
+use std::collections::HashMap;
+
 use vulpi_lexer::Lexer;
 use vulpi_parser::Parser;
 use vulpi_report::{
@@ -8,13 +10,15 @@ use vulpi_report::{
     renderer::{classic::Classic, Reader, Renderer},
     Report,
 };
-use vulpi_resolver::declare::ImportResolve;
+use vulpi_resolver::namespace::Namespaces;
 use vulpi_resolver::Resolve;
 use vulpi_resolver::{declare::Declare, namespace::Namespace};
-use vulpi_resolver::{module_tree::ModuleTree, namespace::ModuleId};
+use vulpi_resolver::{declare::ImportResolve, scopes::Symbol};
+use vulpi_resolver::{module_tree::Tree, namespace::ModuleId};
 use vulpi_show::Show;
 use vulpi_tests::test;
 use vulpi_typer::Declare as Decl;
+
 use vulpi_vfs::{real::RealFileSystem, FileSystem};
 
 test!("/suite", |file_name| {
@@ -30,26 +34,27 @@ test!("/suite", |file_name| {
     let mut parser = Parser::new(lexer, id, reporter.clone());
     let program = parser.program();
 
-    let mut tree = ModuleTree::new(ModuleId(0));
-    let mut namespaces = vec![Namespace::new(None)];
+    let tree = Tree::new(Symbol::intern(""));
+    let mut namespaces = HashMap::new();
 
-    let mut resolver =
-        vulpi_resolver::declare::Context::new(reporter.clone(), &mut tree, &mut namespaces);
+    namespaces.insert(Symbol::intern(""), Namespace::new(Symbol::intern("")));
+
+    let mut namespaces = Namespaces { tree, namespaces };
+
+    let mut resolver = vulpi_resolver::Context::new(reporter.clone(), &mut namespaces);
 
     program.declare(&mut resolver);
     program.resolve_imports(&mut resolver);
 
-    let size = namespaces.len();
-
-    let mut ctx = vulpi_resolver::Context::new(reporter.clone(), namespaces, tree);
-
-    let program = program.resolve(&mut ctx);
-
-    let env = vulpi_typer::env::Env::new(reporter.clone(), size, ctx.prelude.clone());
-
-    program.declare(env.clone());
-    program.define(env);
-
+    // let mut ctx = vulpi_resolver::Context::new(reporter.clone(), namespaces, tree);
+    //
+    let program = program.resolve(&mut resolver);
+    //
+    // let env = vulpi_typer::env::Env::new(reporter.clone());
+    //
+    // program.declare(env.clone());
+    // program.define(env);
+    //
     let report = reporter.all_diagnostics();
 
     if !reporter.has_errors() {
@@ -58,7 +63,7 @@ test!("/suite", |file_name| {
         let mut writer = Reader::default();
         let ctx = Classic::new(&vfs, cwd);
 
-        for diagnostic in report {
+        for diagnostic in report.iter().rev() {
             diagnostic.render(&ctx, &mut writer).unwrap();
         }
 

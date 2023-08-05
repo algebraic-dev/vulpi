@@ -246,6 +246,25 @@ impl<'a> Parser<'a> {
         })
     }
 
+    pub fn external_decl(&mut self, visibility: Visibility) -> Result<ExternalDecl> {
+        let external = self.expect(TokenData::External)?;
+        let name = self.lower()?;
+        let colon = self.expect(TokenData::Colon)?;
+        let typ = self.typ()?;
+        let equal = self.expect(TokenData::Equal)?;
+        let str = self.expect(TokenData::String)?;
+
+        Ok(ExternalDecl {
+            visibility,
+            external,
+            name,
+            colon,
+            typ,
+            equal,
+            str,
+        })
+    }
+
     pub fn top_level(&mut self) -> Result<TopLevel> {
         let vis = self.visibility()?;
         match self.token() {
@@ -254,6 +273,10 @@ impl<'a> Parser<'a> {
             TokenData::Use => self.use_decl(vis).map(Box::new).map(TopLevel::Use),
             TokenData::Effect => self.effect_decl(vis).map(Box::new).map(TopLevel::Effect),
             TokenData::Mod => self.mod_decl(vis).map(Box::new).map(TopLevel::Module),
+            TokenData::External => self
+                .external_decl(vis)
+                .map(Box::new)
+                .map(TopLevel::External),
             _ => self.unexpected(),
         }
     }

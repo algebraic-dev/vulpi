@@ -23,7 +23,10 @@ impl Show for Qualified {
 #[derive(Show)]
 pub enum KindType {
     Star,
+    Effect,
+    Constraint,
     Arrow(Kind, Kind),
+    Error,
 }
 
 pub type Kind = Box<Spanned<KindType>>;
@@ -408,6 +411,15 @@ impl ModuleDecl {
         })
     }
 
+    pub fn externals(&self) -> Option<impl Iterator<Item = &ExternalDecl>> {
+        self.decls.as_ref().map(|decls| {
+            decls.iter().filter_map(|decl| match *decl {
+                TopLevelDecl::External(ref decl) => Some(&**decl),
+                _ => None,
+            })
+        })
+    }
+
     pub fn lets(&self) -> Option<impl Iterator<Item = &LetDecl>> {
         self.decls.as_ref().map(|decls| {
             decls.iter().filter_map(|decl| match *decl {
@@ -445,11 +457,21 @@ pub struct EffectDecl {
 }
 
 #[derive(Show)]
+pub struct ExternalDecl {
+    pub namespace: Symbol,
+    pub visibility: Visibility,
+    pub name: Symbol,
+    pub ty: Type,
+    pub ret: Symbol,
+}
+
+#[derive(Show)]
 pub enum TopLevelDecl {
     Let(Box<LetDecl>),
     Type(Box<TypeDecl>),
     Module(Box<ModuleDecl>),
     Effect(Box<EffectDecl>),
+    External(Box<ExternalDecl>),
 }
 
 #[derive(Show)]
@@ -461,6 +483,13 @@ impl Module {
     pub fn lets(&self) -> impl Iterator<Item = &LetDecl> {
         self.decls.iter().filter_map(|decl| match *decl {
             TopLevelDecl::Let(ref decl) => Some(&**decl),
+            _ => None,
+        })
+    }
+
+    pub fn externals(&self) -> impl Iterator<Item = &ExternalDecl> {
+        self.decls.iter().filter_map(|decl| match *decl {
+            TopLevelDecl::External(ref decl) => Some(&**decl),
             _ => None,
         })
     }

@@ -48,13 +48,17 @@ impl Infer for r#abstract::Type {
 
                 let mut args = Vec::new();
 
-                for arg in &app.args {
-                    let (arg, k) = arg.infer(context);
+                for app in &app.args {
+                    let (arg, k) = app.infer(context);
+                    context.set_location(app.span.clone());
 
                     match kind.as_ref() {
                         KindType::Arrow(l, r) => {
                             l.unify(context, &k);
                             kind = r.clone();
+                        }
+                        KindType::Error => {
+                            return (Type::error(), Kind::error());
                         }
                         _ => {
                             context.report(TypeErrorKind::NotAFunctionKind);
