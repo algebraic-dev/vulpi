@@ -147,20 +147,21 @@ impl Namespaces {
         let symbol = name.symbol();
 
         self.namespaces
-            .entry(symbol)
-            .or_insert_with(|| Namespace::new(symbol));
+            .entry(symbol.clone())
+            .or_insert_with(|| Namespace::new(symbol.clone()));
 
         self.tree.add(name.slice(), symbol)
     }
 
-    pub fn resolve(&mut self, current: paths::Path, mut name: paths::Path) -> Resolve {
+    pub fn resolve(&self, current: paths::Path, mut name: paths::Path) -> Resolve {
         let module = self.tree.find(current.slice()).unwrap();
-        let mut id = module.id;
+        let mut id = module.id.clone();
         let mut namespace = self.namespaces.get(&module.id).unwrap();
 
         if let Some((head, tail)) = name.split_first() {
             if head.get() == "Self" {
                 namespace = self.namespaces.get(&self.tree.id).unwrap();
+                id = self.tree.id.clone();
                 name = tail;
             }
         }
@@ -168,17 +169,19 @@ impl Namespaces {
         while let Some((head, tail)) = name.split_first() {
             name = tail;
             if let Some(item) = namespace.modules.get(&head) {
-                if item.visibility == Visibility::Private && Some(module.id) != item.parent {
+                if item.visibility == Visibility::Private && Some(module.id.clone()) != item.parent
+                {
+                    println!("{:?} ~ {:?}", Some(module.id.clone()), item.parent);
                     return Resolve::PrivateModule(head);
                 } else {
                     namespace = self.namespaces.get(&item.item).unwrap();
-                    id = item.item;
+                    id = item.item.clone();
                 }
             } else {
                 return Resolve::ModuleNotFound(head);
             }
         }
 
-        Resolve::ModuleFound(namespace.name)
+        Resolve::ModuleFound(id)
     }
 }

@@ -1,7 +1,7 @@
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract;
 
-#[derive(Clone)]
+#[derive(Clone, Default, Debug)]
 pub struct Path {
     pub path: Vec<Symbol>,
 }

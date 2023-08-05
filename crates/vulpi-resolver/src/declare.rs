@@ -3,74 +3,46 @@
 
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
-use vulpi_report::{Diagnostic, Report};
 use vulpi_syntax::concrete::top_level::Visibility;
 use vulpi_syntax::concrete::tree::*;
 
-use crate::namespace;
+use crate::{namespace, Context};
+
 use crate::{
-    error::{ResolverError, ResolverErrorKind},
-    namespace::{Item, Namespace, Namespaces, Resolve, TypeValue, Value},
+    namespace::{Item, Namespace, TypeValue, Value},
     paths,
 };
+
 use vulpi_syntax::r#abstract::Qualified;
 
-pub struct Context<'a> {
-    pub reporter: Report,
-    pub namespaces: &'a mut Namespaces,
-    pub path: paths::Path,
-}
-
 impl<'a> Context<'a> {
-    pub fn scope<T>(&mut self, name: Symbol, function: impl FnOnce(&mut Context) -> T) -> T {
+    pub fn derive<T>(&mut self, name: Symbol, function: impl FnOnce(&mut Context) -> T) -> T {
         self.path.push(name);
-        self.namespaces.add(self.path);
+        self.namespaces.add(self.path.clone());
         let res = function(self);
         self.path.pop();
         res
     }
 
-    pub fn current(&self) -> Symbol {
-        self.path.symbol()
-    }
-
-    pub fn report(&self, error: crate::error::ResolverError) {
-        self.reporter.report(Diagnostic::new(error));
-    }
-
-    fn report_redeclareted(&mut self, span: Span, name: Symbol) {
-        self.report(ResolverError {
-            span,
-            kind: ResolverErrorKind::Redeclarated(name),
-        })
-    }
-
-    fn report_not_found(&mut self, name: paths::Path) {
-        self.report(ResolverError {
-            span: Span::default(),
-            kind: ResolverErrorKind::NotFound(name.path),
-        });
-    }
-
     pub fn add_value(&mut self, span: Span, path: Symbol, item: Item<Value>) {
-        let namespace = self.namespaces.get_mut(self.path).unwrap();
-        let old = namespace.values.insert(self.current(), item);
+        let namespace = self.namespaces.get_mut(self.path.clone()).unwrap();
+        let old = namespace.values.insert(path.clone(), item);
         if old.is_some() {
             self.report_redeclareted(span, path);
         }
     }
 
     pub fn add_type(&mut self, span: Span, path: Symbol, item: Item<TypeValue>) {
-        let namespace = self.namespaces.get_mut(self.path).unwrap();
-        let old = namespace.types.insert(self.current(), item);
+        let namespace = self.namespaces.get_mut(self.path.clone()).unwrap();
+        let old = namespace.types.insert(path.clone(), item);
         if old.is_some() {
             self.report_redeclareted(span, path);
         }
     }
 
     pub fn add_module(&mut self, span: Span, path: Symbol, item: Item<Symbol>) {
-        let namespace = self.namespaces.get_mut(self.path).unwrap();
-        let old = namespace.modules.insert(self.current(), item);
+        let namespace = self.namespaces.get_mut(self.path.clone()).unwrap();
+        let old = namespace.modules.insert(path.clone(), item);
         if old.is_some() {
             self.report_redeclareted(span, path);
         }
@@ -88,28 +60,6 @@ impl<'a> Context<'a> {
         for (key, value) in namespace.modules {
             self.add_module(value.span.clone(), key, value);
         }
-    }
-
-    pub fn resolve_module(&mut self, name: paths::Path) -> Option<Symbol> {
-        let resolved = self.namespaces.resolve(self.path, name);
-        match resolved {
-            Resolve::ModuleNotFound(_) => {
-                self.report_not_found(name);
-                None
-            }
-            Resolve::PrivateModule(name) => {
-                self.report_private(name);
-                None
-            }
-            Resolve::ModuleFound(name) => Some(name),
-        }
-    }
-
-    fn report_private(&mut self, name: Symbol) {
-        self.report(ResolverError {
-            span: Span::default(),
-            kind: ResolverErrorKind::PrivateDefinition,
-        })
     }
 
     fn qualify(&self, name: Symbol) -> Qualified {
@@ -154,8 +104,8 @@ impl Declare for EffectDecl {
             },
         );
 
-        ctx.scope(self.name.symbol(), |ctx| {
-            for field in self.fields {
+        ctx.derive(self.name.symbol(), |ctx| {
+            for field in &self.fields {
                 ctx.add_value(
                     field.0.name.0.value.span.clone(),
                     field.0.name.symbol(),
@@ -221,7 +171,7 @@ impl Declare for TypeDecl {
 
         ctx.add_type(
             self.name.0.value.span.clone(),
-            name,
+            name.clone(),
             Item {
                 visibility: self.visibility.clone().into(),
                 span: self.name.0.value.span.clone(),
@@ -242,11 +192,11 @@ impl Declare for TypeDecl {
                 visibility: self.visibility.clone().into(),
                 span: self.name.0.value.span.clone(),
                 item: ctx.path.with(self.name.symbol()).symbol(),
-                parent: Some(name),
+                parent: Some(ctx.path.symbol()),
             },
         );
 
-        ctx.scope(self.name.symbol(), |ctx| {
+        ctx.derive(self.name.symbol(), |ctx| {
             if let Some(some) = &self.def {
                 some.1.declare(ctx);
             }
@@ -277,12 +227,12 @@ impl Declare for ModuleDecl {
             Item {
                 visibility: self.visibility.clone().into(),
                 span: self.name.0.value.span.clone(),
-                item: ctx.path.symbol(),
-                parent: Some(ctx.path.symbol()),
+                item: ctx.path.with(self.name.symbol()).symbol(),
+                parent: None,
             },
         );
 
-        ctx.scope(self.name.symbol(), |ctx| {
+        ctx.derive(self.name.symbol(), |ctx| {
             if let Some(module) = &self.part {
                 for top_level in &module.top_levels {
                     top_level.declare(ctx);
@@ -327,13 +277,18 @@ pub trait ImportResolve {
 
 impl ImportResolve for UseDecl {
     fn resolve_imports(&self, ctx: &mut Context) {
-        let vec: Vec<_> = (&self.path).into();
+        let path = paths::Path {
+            path: self
+                .path
+                .segments
+                .iter()
+                .map(|x| x.0.symbol())
+                .chain(Some(self.path.last.symbol()))
+                .collect(),
+        };
 
-        let Some(sub_tree) = ctx.namespaces.tree.find(ctx.path.slice()) else {
-            return ctx.report(ResolverError {
-                span: self.path.span.clone(),
-                kind: ResolverErrorKind::NotFound(vec),
-            });
+        let Some(name) = ctx.resolve_module(self.path.span.clone(), path) else {
+            return;
         };
 
         if let Some(alias) = &self.alias {
@@ -343,12 +298,12 @@ impl ImportResolve for UseDecl {
                 Item {
                     visibility: namespace::Visibility::Public,
                     span: alias.alias.0.value.span.clone(),
-                    item: Value::Module(sub_tree.id),
+                    item: Value::Module(name),
                     parent: None,
                 },
             )
         } else {
-            let namespace = ctx.namespaces.find(sub_tree.id).cloned().unwrap();
+            let namespace = ctx.namespaces.find(name).cloned().unwrap();
             ctx.merge(namespace);
         }
     }
@@ -364,7 +319,7 @@ impl ImportResolve for TopLevel {
 
 impl ImportResolve for ModuleDecl {
     fn resolve_imports(&self, ctx: &mut Context) {
-        ctx.scope(self.name.symbol(), |ctx| {
+        ctx.derive(self.name.symbol(), |ctx| {
             if let Some(module) = &self.part {
                 for top_level in module.modules() {
                     top_level.resolve_imports(ctx);

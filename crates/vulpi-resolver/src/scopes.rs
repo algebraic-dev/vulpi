@@ -1,18 +1,8 @@
 pub mod scopable {
     pub enum Variable {}
     pub enum TypeVariable {}
-
-    mod sealed {
-        pub trait Scopable {}
-        impl Scopable for super::Variable {}
-        impl Scopable for super::TypeVariable {}
-    }
-
-    pub trait Scopable: sealed::Scopable {}
-    impl<T: sealed::Scopable> Scopable for T {}
 }
 
-pub use scopable::Scopable;
 pub use vulpi_intern::Symbol;
 
 #[derive(Clone)]
@@ -27,19 +17,14 @@ impl Default for Scope {
         }
     }
 }
-pub struct Scopes<'a>(Vec<&'a mut Scope>);
 
-impl<'a> Scopes<'a> {
+impl Scope {
     pub fn push(&mut self) {
-        for scope in self.0.iter_mut() {
-            scope.map.push(Default::default());
-        }
+        self.map.push(Default::default());
     }
 
     pub fn pop(&mut self) {
-        for scope in self.0.iter_mut() {
-            scope.map.pop();
-        }
+        self.map.pop();
     }
 }
 
@@ -57,47 +42,46 @@ pub trait Scoped {
     fn pop(kaleidoscope: &mut Kaleidoscope);
 }
 
-pub trait Scopeable {
-    fn scope(kaleidoscope: &mut Kaleidoscope) -> Scopes<'_>;
+pub trait Scopable {
+    fn scope(kaleidoscope: &mut Kaleidoscope) -> &mut Scope;
 }
 
-impl Scopeable for scopable::Variable {
-    fn scope(kaleidoscope: &mut Kaleidoscope) -> Scopes<'_> {
-        Scopes(vec![&mut kaleidoscope.variables])
+impl Scopable for scopable::Variable {
+    fn scope(kaleidoscope: &mut Kaleidoscope) -> &mut Scope {
+        &mut kaleidoscope.variables
     }
 }
 
-impl Scopeable for scopable::TypeVariable {
-    fn scope(kaleidoscope: &mut Kaleidoscope) -> Scopes<'_> {
-        Scopes(vec![&mut kaleidoscope.type_variables])
+impl Scopable for scopable::TypeVariable {
+    fn scope(kaleidoscope: &mut Kaleidoscope) -> &mut Scope {
+        &mut kaleidoscope.type_variables
     }
 }
 
 impl Kaleidoscope {
-    pub fn push<T: Scopeable>(&mut self) {
+    pub fn push<T: Scopable>(&mut self) {
         T::scope(self).push();
     }
 
-    pub fn pop<T: Scopeable>(&mut self) {
+    pub fn pop<T: Scopable>(&mut self) {
         T::scope(self).pop();
     }
 
-    pub fn scope<T: Scopeable>(&mut self, fun: impl FnOnce(&mut Self)) {
+    pub fn scope<T: Scopable>(&mut self, fun: impl FnOnce(&mut Self)) {
         self.push::<T>();
         fun(self);
         self.pop::<T>();
     }
 
-    pub fn add<T: Scopeable>(&mut self, name: Symbol) {
-        for scope in T::scope(self).0.iter_mut() {
-            scope.map.last_mut().unwrap().insert(name.clone());
-        }
+    pub fn add<T: Scopable>(&mut self, name: Symbol) {
+        T::scope(self).map.last_mut().unwrap().insert(name);
     }
 
-    pub fn contains<T: Scopeable>(&mut self, name: &Symbol) -> bool {
+    pub fn contains<T: Scopable>(&mut self, name: &Symbol) -> bool {
         T::scope(self)
-            .0
+            .map
             .iter()
-            .any(|scope| scope.map.iter().any(|x| x.contains(name)))
+            .rev()
+            .any(|scope| scope.contains(name))
     }
 }
