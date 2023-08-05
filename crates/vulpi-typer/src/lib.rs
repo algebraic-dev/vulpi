@@ -45,13 +45,16 @@ impl Declare for TypeDecl {
             .into_iter()
             .rfold(kind::Kind::star(), |acc, x| kind::Kind::arrow(x, acc));
 
-        context.modules.borrow_mut().modules[self.name.path]
+        context
+            .modules
+            .borrow_mut()
+            .get(self.name.path.clone())
             .types
             .insert(
                 self.name.name.clone(),
                 TypeData {
                     kind: arrow,
-                    module: self.id,
+                    module: self.namespace.clone(),
                 },
             );
     }
@@ -106,7 +109,10 @@ impl Declare for TypeDecl {
                         .into_iter()
                         .rfold(typ.clone(), |acc, (n, k)| types::Type::forall(n, k, acc));
 
-                    context.modules.borrow_mut().modules[context.current_id()]
+                    context
+                        .modules
+                        .borrow_mut()
+                        .get(self.namespace.clone())
                         .constructors
                         .insert(cons.name.clone(), (typ, cons.args.len()));
                 }
@@ -122,7 +128,10 @@ impl Declare for TypeDecl {
 
                     k.unify(&context, &kind::Kind::star());
 
-                    context.modules.borrow_mut().modules[context.current_id()]
+                    context
+                        .modules
+                        .borrow_mut()
+                        .get(context.current_namespace())
                         .fields
                         .insert(field.0.clone(), typ);
                 }
@@ -153,13 +162,18 @@ impl Declare for EffectDecl {
                 kind::Kind::arrow(x, acc)
             });
 
-        context.modules.borrow_mut().modules[self.id].types.insert(
-            self.name.clone(),
-            TypeData {
-                kind: arrow,
-                module: self.id,
-            },
-        );
+        context
+            .modules
+            .borrow_mut()
+            .get(self.qualified.path.clone())
+            .types
+            .insert(
+                self.qualified.name.clone(),
+                TypeData {
+                    kind: arrow,
+                    module: self.namespace.clone(),
+                },
+            );
     }
 
     fn define(&self, mut context: Env) {
@@ -195,7 +209,10 @@ impl Declare for EffectDecl {
                 .into_iter()
                 .rfold(typ.clone(), |acc, (n, k)| types::Type::forall(n, k, acc));
 
-            context.modules.borrow_mut().modules[context.current_id()]
+            context
+                .modules
+                .borrow_mut()
+                .get(context.current_namespace())
                 .effects
                 .insert(eff.name.clone(), typ);
         }
@@ -237,7 +254,10 @@ impl Declare for LetDecl {
             types::Type::forall(x, kind::Kind::star(), acc)
         });
 
-        context.modules.borrow_mut().modules[context.current_id()]
+        context
+            .modules
+            .borrow_mut()
+            .get(context.current_namespace())
             .variables
             .insert(self.name.clone(), typ);
     }
@@ -249,15 +269,9 @@ impl Declare for LetDecl {
 
 impl Declare for ModuleDecl {
     fn declare(&self, mut context: Env) {
-        context.on(self.id, |context| {
+        context.on(self.namespace.clone(), |context| {
             if let Some(types) = self.types() {
                 for decl in types {
-                    decl.declare(context.clone());
-                }
-            }
-
-            if let Some(lets) = self.lets() {
-                for decl in lets {
                     decl.declare(context.clone());
                 }
             }
@@ -270,6 +284,12 @@ impl Declare for ModuleDecl {
 
             if let Some(modules) = self.modules() {
                 for decl in modules {
+                    decl.declare(context.clone());
+                }
+            }
+
+            if let Some(lets) = self.lets() {
+                for decl in lets {
                     decl.declare(context.clone());
                 }
             }
@@ -277,15 +297,9 @@ impl Declare for ModuleDecl {
     }
 
     fn define(&self, mut context: Env) {
-        context.on(self.id, |context| {
+        context.on(self.namespace.clone(), |context| {
             if let Some(types) = self.types() {
                 for decl in types {
-                    decl.define(context.clone());
-                }
-            }
-
-            if let Some(lets) = self.lets() {
-                for decl in lets {
                     decl.define(context.clone());
                 }
             }
@@ -298,6 +312,12 @@ impl Declare for ModuleDecl {
 
             if let Some(modules) = self.modules() {
                 for decl in modules {
+                    decl.define(context.clone());
+                }
+            }
+
+            if let Some(lets) = self.lets() {
+                for decl in lets {
                     decl.define(context.clone());
                 }
             }
@@ -307,16 +327,16 @@ impl Declare for ModuleDecl {
 
 impl Declare for Module {
     fn declare(&self, context: Env) {
-        for modules in self.modules() {
-            modules.declare(context.clone());
-        }
-
         for decl in self.types() {
             decl.declare(context.clone());
         }
 
         for effs in self.effects() {
             effs.declare(context.clone());
+        }
+
+        for modules in self.modules() {
+            modules.declare(context.clone());
         }
 
         for del in self.lets() {

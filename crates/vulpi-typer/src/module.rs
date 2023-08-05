@@ -2,12 +2,14 @@
 //! module is the [Module] structure that is responsible for storing the types of the top level
 //! items.
 
+use std::collections::HashMap;
+
 use vulpi_intern::Symbol;
 
 #[derive(Clone)]
 pub struct TypeData {
     pub kind: crate::kind::Kind,
-    pub module: usize,
+    pub module: Symbol,
 }
 
 #[derive(Default, Clone)]
@@ -31,21 +33,17 @@ pub struct Module {
 #[derive(Default)]
 pub struct Modules {
     /// The modules.
-    pub modules: Vec<Module>,
+    pub modules: HashMap<Symbol, Module>,
 }
 
 impl Modules {
-    pub fn new(size: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            modules: vec![Module::default(); size],
+            modules: Default::default(),
         }
     }
-    /// Adds a new module to the modules.
-    pub fn add_module(&mut self, module: Module) {
-        self.modules.push(module);
-    }
 
-    pub fn get(&self, id: usize) -> Option<&Module> {
-        self.modules.get(id)
+    pub fn get(&mut self, id: Symbol) -> &mut Module {
+        self.modules.entry(id).or_default()
     }
 }

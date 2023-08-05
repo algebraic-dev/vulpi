@@ -1,11 +1,7 @@
 //! The environment. This is the module responsible for the creating a structure called
 //! [Env] that is responsible for storing the types of the variables and types of types.
 
-use std::{
-    cell::{Cell, RefCell},
-    collections::HashMap,
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
@@ -47,14 +43,11 @@ pub struct Env {
     pub modules: Rc<RefCell<Modules>>,
 
     /// The current id of the module.
-    pub current_id: Cell<usize>,
-
-    /// Prelude imports
-    pub imports: HashMap<Symbol, Qualified>,
+    pub current_id: RefCell<Symbol>,
 }
 
 impl Env {
-    pub fn new(reporter: Report, modules: usize, imports: HashMap<Symbol, Qualified>) -> Self {
+    pub fn new(reporter: Report) -> Self {
         Self {
             reporter,
             level: 0,
@@ -63,16 +56,24 @@ impl Env {
             names: im_rc::Vector::new(),
             counter: Rc::new(RefCell::new(0)),
             location: RefCell::new(Span::default()),
-            current_id: Cell::new(0),
-            modules: Rc::new(RefCell::new(Modules::new(modules))),
-
-            imports,
+            current_id: RefCell::new(Symbol::intern("Project")),
+            modules: Rc::new(RefCell::new(Modules::new())),
         }
     }
 
-    pub fn import(&mut self, name: &str) -> Option<Qualified> {
-        if let Some(qualified) = self.imports.get(&Symbol::intern(name)) {
-            Some(qualified.clone())
+    pub fn import(&self, name: &str) -> Option<Qualified> {
+        if self
+            .modules
+            .borrow_mut()
+            .modules
+            .get(&Symbol::intern("Prelude"))
+            .and_then(|x| x.types.get(&Symbol::intern(name)))
+            .is_some()
+        {
+            Some(Qualified {
+                path: Symbol::intern("Prelude"),
+                name: Symbol::intern(name),
+            })
         } else {
             self.report(crate::error::TypeErrorKind::CannotFind(Symbol::intern(
                 name,
@@ -88,8 +89,7 @@ impl Env {
     pub fn get_module_ty(&self, app: &vulpi_syntax::r#abstract::Qualified) -> TypeData {
         self.modules
             .borrow_mut()
-            .get(app.path)
-            .unwrap()
+            .get(app.path.clone())
             .types
             .get(&app.name)
             .unwrap()
@@ -102,8 +102,7 @@ impl Env {
     ) -> (crate::types::Type, usize) {
         self.modules
             .borrow_mut()
-            .get(app.path)
-            .unwrap()
+            .get(app.path.clone())
             .constructors
             .get(&app.name)
             .unwrap()
@@ -113,27 +112,26 @@ impl Env {
     pub fn get_module_let(&self, app: &vulpi_syntax::r#abstract::Qualified) -> crate::types::Type {
         self.modules
             .borrow_mut()
-            .get(app.path)
-            .unwrap()
+            .get(app.path.clone())
             .variables
             .get(&app.name)
             .unwrap()
             .clone()
     }
 
-    pub fn set_module(&self, id: usize) {
+    pub fn set_module(&self, id: Symbol) {
         self.current_id.replace(id);
     }
 
-    pub fn on(&mut self, id: usize, func: impl FnOnce(&mut Self)) {
-        let old = self.current_id.get();
+    pub fn on(&mut self, id: Symbol, func: impl FnOnce(&mut Self)) {
+        let old = self.current_namespace();
         self.set_module(id);
         func(self);
         self.set_module(old);
     }
 
-    pub fn current_id(&self) -> usize {
-        self.current_id.get()
+    pub fn current_namespace(&self) -> Symbol {
+        self.current_id.borrow().clone()
     }
 
     pub fn new_hole(&self) -> Type {

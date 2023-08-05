@@ -100,8 +100,8 @@ impl Infer for r#abstract::Type {
                 }
             }
             TypeKind::Type(q) => {
-                let borrow_mut = &context.modules.borrow_mut();
-                let module = borrow_mut.get(q.path).unwrap();
+                let mut borrow_mut = context.modules.borrow_mut();
+                let module = borrow_mut.get(q.path.clone());
                 let ty = module.types.get(&q.name).unwrap();
                 (Type::variable(q.clone()), ty.kind.clone())
             }

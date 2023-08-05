@@ -3,7 +3,6 @@ use crate::check::Check;
 use crate::{env::Env, types::Type, Infer};
 
 use im_rc::HashMap;
-use vulpi_intern::Symbol;
 use vulpi_syntax::{
     r#abstract::Expr, r#abstract::ExprKind, r#abstract::PatternArm, r#abstract::StatementKind,
 };
@@ -27,8 +26,8 @@ impl Infer for PatternArm {
         }
 
         if let Some(guard) = &self.guard {
-            let right = context.imports.get(&Symbol::intern("Bool")).unwrap();
-            let right = Type::variable(right.clone());
+            let right = context.import("Bool").unwrap();
+            let right = Type::variable(right);
 
             guard.check(right, context.clone());
         }

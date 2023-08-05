@@ -1058,22 +1058,19 @@ impl Resolve for TypeDecl {
     type Output = abs::TypeDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        let path = ctx.current();
-        ctx.scope_namespace(self.name.symbol(), |ctx| {
-            ctx.scope::<TypeVariable, _>(|ctx| abs::TypeDecl {
-                namespace: ctx.current(),
-                visibility: self.visibility.resolve(ctx),
-                name: Qualified {
-                    path,
-                    name: self.name.symbol(),
-                },
-                binders: self.binders.resolve(ctx),
-                def: if let Some(res) = self.def {
-                    res.1.resolve(ctx)
-                } else {
-                    abs::TypeDef::Abstract
-                },
-            })
+        ctx.scope::<TypeVariable, _>(|ctx| abs::TypeDecl {
+            namespace: ctx.path.with(self.name.symbol()).symbol(),
+            visibility: self.visibility.resolve(ctx),
+            name: Qualified {
+                path: ctx.current(),
+                name: self.name.symbol(),
+            },
+            binders: self.binders.resolve(ctx),
+            def: if let Some(res) = self.def {
+                res.1.resolve(ctx)
+            } else {
+                abs::TypeDef::Abstract
+            },
         })
     }
 }
