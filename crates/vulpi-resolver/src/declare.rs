@@ -62,7 +62,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn qualify(&self, name: Symbol) -> Qualified {
+    pub fn qualify(&self, name: Symbol) -> Qualified {
         self.path.qualify(name).into()
     }
 }

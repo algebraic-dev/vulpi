@@ -171,7 +171,6 @@ impl Namespaces {
             if let Some(item) = namespace.modules.get(&head) {
                 if item.visibility == Visibility::Private && Some(module.id.clone()) != item.parent
                 {
-                    println!("{:?} ~ {:?}", Some(module.id.clone()), item.parent);
                     return Resolve::PrivateModule(head);
                 } else {
                     namespace = self.namespaces.get(&item.item).unwrap();

@@ -1,5 +1,7 @@
 use crate::apply::Apply;
 use crate::check::Check;
+use crate::module::Def;
+use crate::types::TypeKind;
 use crate::{env::Env, types::Type, Infer};
 
 use im_rc::HashMap;
@@ -181,9 +183,42 @@ impl Infer for Expr {
             }
             ExprKind::Error => Type::error(),
 
-            ExprKind::Projection(_) => {
-                context.report(crate::error::TypeErrorKind::NotImplemented);
-                Type::error()
+            ExprKind::Projection(proj) => {
+                let typ = proj.expr.infer(context.clone());
+
+                match typ.destruct() {
+                    Some((n, args)) => {
+                        let data = context.get_module_ty(&n);
+                        match data.def {
+                            Def::Record(fields) => {
+                                let field = fields.iter().find(|x| x.name == proj.field);
+                                if let Some(res) = field {
+                                    let mut find = context.get_module_field(res);
+
+                                    let mut i = 0;
+                                    while let TypeKind::Forall(name, _, to) = find.deref().as_ref()
+                                    {
+                                        find = to.substitute(name.clone(), args[i].clone());
+                                        i += 1;
+                                    }
+
+                                    find
+                                } else {
+                                    context.report(crate::error::TypeErrorKind::NotImplemented);
+                                    Type::error()
+                                }
+                            }
+                            _ => {
+                                context.report(crate::error::TypeErrorKind::NotImplemented);
+                                Type::error()
+                            }
+                        }
+                    }
+                    _ => {
+                        context.report(crate::error::TypeErrorKind::NotImplemented);
+                        Type::error()
+                    }
+                }
             }
             ExprKind::RecordInstance(_) => {
                 context.report(crate::error::TypeErrorKind::NotImplemented);

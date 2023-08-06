@@ -57,7 +57,7 @@ fn main() {
     let report = reporter.all_diagnostics();
 
     if !reporter.has_errors() {
-        println!("Ok!");
+        println!("Ok!")
     } else {
         println!("Err!");
         let mut writer = Reader::default();

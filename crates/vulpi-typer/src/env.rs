@@ -96,6 +96,19 @@ impl Env {
             .clone()
     }
 
+    pub fn get_module_field(
+        &self,
+        app: &vulpi_syntax::r#abstract::Qualified,
+    ) -> crate::types::Type {
+        self.modules
+            .borrow_mut()
+            .get(app.path.clone())
+            .fields
+            .get(&app.name)
+            .unwrap()
+            .clone()
+    }
+
     pub fn get_module_constructor(
         &self,
         app: &vulpi_syntax::r#abstract::Qualified,

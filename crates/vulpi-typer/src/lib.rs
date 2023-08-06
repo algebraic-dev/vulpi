@@ -6,6 +6,7 @@
 use std::collections::HashSet;
 
 use env::Env;
+use module::Def;
 use module::TypeData;
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::*;
@@ -59,6 +60,15 @@ impl Declare for TypeDecl {
             .into_iter()
             .rfold(kind::Kind::star(), |acc, x| kind::Kind::arrow(x, acc));
 
+        let def = match &self.def {
+            TypeDef::Sum(cons) => {
+                Def::Enum(cons.constructors.iter().map(|x| x.name.clone()).collect())
+            }
+            TypeDef::Record(rec) => Def::Record(rec.fields.iter().map(|x| x.0.clone()).collect()),
+            TypeDef::Synonym(_) => Def::Type,
+            TypeDef::Abstract => Def::Type,
+        };
+
         context
             .modules
             .borrow_mut()
@@ -69,6 +79,7 @@ impl Declare for TypeDecl {
                 TypeData {
                     kind: arrow,
                     module: self.namespace.clone(),
+                    def,
                 },
             );
     }
@@ -126,9 +137,9 @@ impl Declare for TypeDecl {
                     context
                         .modules
                         .borrow_mut()
-                        .get(self.namespace.clone())
+                        .get(cons.name.path.clone())
                         .constructors
-                        .insert(cons.name.clone(), (typ, cons.args.len()));
+                        .insert(cons.name.name.clone(), (typ, cons.args.len()));
                 }
             }
             TypeDef::Record(rec) => {
@@ -145,9 +156,9 @@ impl Declare for TypeDecl {
                     context
                         .modules
                         .borrow_mut()
-                        .get(context.current_namespace())
+                        .get(field.0.path.clone())
                         .fields
-                        .insert(field.0.clone(), typ);
+                        .insert(field.0.name.clone(), typ);
                 }
             }
             TypeDef::Synonym(_) => todo!(),
@@ -186,6 +197,7 @@ impl Declare for EffectDecl {
                 TypeData {
                     kind: arrow,
                     module: self.namespace.clone(),
+                    def: Def::Effect(self.fields.iter().map(|x| x.name.clone()).collect()),
                 },
             );
     }
@@ -228,7 +240,7 @@ impl Declare for EffectDecl {
                 .borrow_mut()
                 .get(context.current_namespace())
                 .effects
-                .insert(eff.name.clone(), typ);
+                .insert(eff.name.name.clone(), typ);
         }
     }
 }

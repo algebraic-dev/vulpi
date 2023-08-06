@@ -63,6 +63,30 @@ impl Type {
     pub fn error() -> Type {
         Type::new(TypeKind::Error)
     }
+
+    pub fn destruct(&self) -> Option<(Qualified, Vec<Type>)> {
+        match self.deref().as_ref() {
+            TypeKind::App(left, right) => {
+                let mut args = vec![right.clone()];
+
+                let mut ty = left.clone();
+
+                while let TypeKind::App(left, right) = ty.deref().as_ref() {
+                    args.push(right.clone());
+                    ty = left.clone();
+                }
+
+                match ty.deref().as_ref() {
+                    TypeKind::Variable(qualified) => {
+                        args.reverse();
+                        Some((qualified.clone(), args))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 pub struct Effect {
@@ -141,6 +165,12 @@ impl Hole {
 }
 
 impl Type {
+    pub fn deref(&self) -> Type {
+        match *self.0 {
+            TypeKind::Hole(ref hole) => hole.deref(),
+            _ => self.clone(),
+        }
+    }
     fn print(&self, env: Env, fmt: &mut Formatter) -> std::fmt::Result {
         match *self.0 {
             TypeKind::Variable(ref name) => write!(fmt, "~{}", name.name.get()),

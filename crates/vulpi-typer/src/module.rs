@@ -5,11 +5,21 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
+use vulpi_syntax::r#abstract::Qualified;
+
+#[derive(Clone)]
+pub enum Def {
+    Enum(Vec<Qualified>),
+    Record(Vec<Qualified>),
+    Effect(Vec<Qualified>),
+    Type,
+}
 
 #[derive(Clone)]
 pub struct TypeData {
     pub kind: crate::kind::Kind,
     pub module: Symbol,
+    pub def: Def,
 }
 
 #[derive(Default, Clone)]

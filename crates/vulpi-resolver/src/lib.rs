@@ -1008,7 +1008,7 @@ impl Resolve for Constructor {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::Constructor {
-            name: self.name.symbol(),
+            name: ctx.qualify(self.name.symbol()),
             args: self.args.resolve(ctx),
             typ: self.typ.map(|x| x.1.resolve(ctx)),
         }
@@ -1026,10 +1026,10 @@ impl Resolve for SumDecl {
 }
 
 impl Resolve for Field {
-    type Output = (Symbol, abs::Type);
+    type Output = (Qualified, abs::Type);
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        (self.name.symbol(), self.ty.resolve(ctx))
+        (ctx.qualify(self.name.symbol()), self.ty.resolve(ctx))
     }
 }
 
@@ -1059,11 +1059,12 @@ impl Resolve for TypeDecl {
     type Output = abs::TypeDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
+        let path = ctx.current();
         ctx.scope::<TypeVariable, _>(|ctx| abs::TypeDecl {
             namespace: ctx.path.with(self.name.symbol()).symbol(),
             visibility: self.visibility.resolve(ctx),
             name: Qualified {
-                path: ctx.current(),
+                path,
                 name: self.name.symbol(),
             },
             binders: self.binders.resolve(ctx),
@@ -1134,7 +1135,7 @@ impl Resolve for EffectField {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::EffectField {
             visibility: self.visibility.resolve(ctx),
-            name: self.name.symbol(),
+            name: ctx.qualify(self.name.symbol()),
             args: self.args.resolve(ctx),
             ty: self.ret.resolve(ctx),
         }

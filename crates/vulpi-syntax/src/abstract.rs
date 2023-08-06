@@ -352,7 +352,7 @@ pub struct LetDecl {
 
 #[derive(Show)]
 pub struct Constructor {
-    pub name: Symbol,
+    pub name: Qualified,
     pub args: Vec<Type>,
     pub typ: Option<Type>,
 }
@@ -364,7 +364,7 @@ pub struct SumDecl {
 
 #[derive(Show)]
 pub struct RecordDecl {
-    pub fields: Vec<(Symbol, Type)>,
+    pub fields: Vec<(Qualified, Type)>,
 }
 
 #[derive(Show)]
@@ -442,7 +442,7 @@ impl ModuleDecl {
 #[derive(Show)]
 pub struct EffectField {
     pub visibility: Visibility,
-    pub name: Symbol,
+    pub name: Qualified,
     pub args: Vec<Type>,
     pub ty: Type,
 }
