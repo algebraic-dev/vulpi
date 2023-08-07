@@ -345,7 +345,7 @@ impl Resolve for KindType {
 }
 
 impl Resolve for Effect {
-    type Output = abs::Effect;
+    type Output = abs::TypeKind;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
@@ -353,15 +353,21 @@ impl Resolve for Effect {
                 let vec: Vec<_> = (&upper).into();
                 let args = args.resolve(ctx);
 
-                match ctx.find_type(upper.span, &vec) {
+                match ctx.find_type(upper.span.clone(), &vec) {
                     Some(Item {
                         item: TypeValue::Effect(qual),
                         ..
-                    }) => abs::Effect::Application(qual, args),
-                    _ => abs::Effect::Error,
+                    }) => abs::TypeKind::Application(abs::TypeApplication {
+                        func: Box::new(Spanned {
+                            data: abs::TypeKind::Type(qual),
+                            span: upper.span,
+                        }),
+                        args,
+                    }),
+                    _ => abs::TypeKind::Error,
                 }
             }
-            Effect::Variable(name) => abs::Effect::Variable(name.symbol()),
+            Effect::Variable(name) => abs::TypeKind::TypeVariable(name.symbol()),
         }
     }
 }
@@ -371,7 +377,11 @@ impl Resolve for Effects {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::Effects {
-            effects: self.effects.into_iter().map(|x| x.0.resolve(ctx)).collect(),
+            effects: self
+                .effects
+                .into_iter()
+                .map(|x| Box::new(x.0.resolve(ctx)))
+                .collect(),
         }
     }
 }
@@ -577,8 +587,8 @@ impl Resolve for LambdaExpr {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.scope::<Variable, _>(|ctx| {
-            let body = self.expr.resolve(ctx);
             let params = self.patterns.resolve(ctx);
+            let body = self.expr.resolve(ctx);
 
             params.into_iter().rfold(body, |body, param| {
                 Box::new(Spanned {

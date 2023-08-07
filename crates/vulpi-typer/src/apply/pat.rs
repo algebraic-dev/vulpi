@@ -20,24 +20,28 @@ impl Apply for Pattern {
         match ty.as_ref() {
             TypeKind::Hole(hole) => match hole.0.borrow().clone() {
                 HoleInner::Filled(ty) => self.apply(ty, (env, map)),
-                HoleInner::Empty(_) => {
-                    let ret = env.new_hole();
+                HoleInner::Empty(_, k) => {
+                    let ret = env.new_hole(k.clone());
+                    let e = env.new_hole(k);
                     let arg = self.infer((env, map));
 
                     hole.0
-                        .replace(HoleInner::Filled(Type::arrow(arg, ret.clone())));
+                        .replace(HoleInner::Filled(Type::arrow(arg, e, ret.clone())));
 
                     ret
                 }
+                HoleInner::Lacks(_) => unreachable!(),
             },
-            TypeKind::Arrow(l, r) => {
+            TypeKind::Arrow(l, _, r) => {
                 let arg = self.infer((env.clone(), map));
+
                 Type::unify(env, arg, l.clone());
                 r.clone()
             }
-            TypeKind::Forall(p, _, t) => {
-                self.apply(t.instantiate(env.clone(), p.clone()), (env, map))
+            TypeKind::Forall(p, k, t) => {
+                self.apply(t.instantiate(env.clone(), p.clone(), k.clone()), (env, map))
             }
+            TypeKind::Error => Type::error(),
             _ => {
                 env.report(crate::error::TypeErrorKind::NotAFunction(
                     env.clone(),

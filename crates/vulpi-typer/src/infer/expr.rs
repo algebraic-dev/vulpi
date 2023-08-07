@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
+use crate::ambient::Ambient;
 use crate::apply::Apply;
 use crate::check::Check;
+use crate::kind::Kind;
 use crate::module::Def;
 use crate::types::TypeKind;
 use crate::{env::Env, types::Type, Infer};
@@ -15,29 +17,29 @@ use vulpi_syntax::{
 impl Infer for PatternArm {
     type Return = (Vec<Type>, Type);
 
-    type Context<'a> = Env;
+    type Context<'a> = (&'a mut Ambient, Env);
 
-    fn infer(&self, mut context: Self::Context<'_>) -> Self::Return {
+    fn infer(&self, (ambient, mut env): Self::Context<'_>) -> Self::Return {
         let mut tys = Vec::new();
 
         let mut bindings = HashMap::new();
 
         for pat in &self.patterns {
-            tys.push(pat.infer((context.clone(), &mut bindings)))
+            tys.push(pat.infer((env.clone(), &mut bindings)))
         }
 
         for binding in bindings {
-            context.add_variable(binding.0, binding.1 .1)
+            env.add_variable(binding.0, binding.1 .1)
         }
 
         if let Some(guard) = &self.guard {
-            let right = context.import("Bool").unwrap();
+            let right = env.import("Bool").unwrap();
             let right = Type::variable(right);
 
-            guard.check(right, context.clone());
+            guard.check(right, (ambient, env.clone()));
         }
 
-        let result = self.expr.infer(context);
+        let result = self.expr.infer((ambient, env));
 
         (tys, result)
     }
@@ -46,12 +48,14 @@ impl Infer for PatternArm {
 impl Infer for (usize, &Vec<&PatternArm>) {
     type Return = (Vec<Type>, Type);
 
-    type Context<'a> = Env;
+    type Context<'a> = (&'a mut Ambient, Env);
 
-    fn infer(&self, context: Self::Context<'_>) -> Self::Return {
+    fn infer(&self, (ambient, context): Self::Context<'_>) -> Self::Return {
         let (size, arms) = self;
-        let types = (0..*size).map(|_| context.new_hole()).collect::<Vec<_>>();
-        let ret = context.new_hole();
+        let types = (0..*size)
+            .map(|_| context.new_hole(Kind::star()))
+            .collect::<Vec<_>>();
+        let ret = context.new_hole(Kind::star());
 
         for arm in *arms {
             if arm.patterns.len() != *size {
@@ -62,7 +66,7 @@ impl Infer for (usize, &Vec<&PatternArm>) {
                 return (Vec::new(), Type::error());
             }
 
-            let tys = arm.check(ret.clone(), context.clone());
+            let tys = arm.check(ret.clone(), (ambient, context.clone()));
 
             for (left, right) in types.iter().zip(tys.into_iter()) {
                 left.sub(context.clone(), right);
@@ -76,56 +80,56 @@ impl Infer for (usize, &Vec<&PatternArm>) {
 impl Infer for Expr {
     type Return = Type;
 
-    type Context<'a> = Env;
+    type Context<'a> = (&'a mut Ambient, Env);
 
-    fn infer(&self, mut context: Self::Context<'_>) -> Self::Return {
-        context.set_location(self.span.clone());
+    fn infer(&self, (ambient, mut env): Self::Context<'_>) -> Self::Return {
+        env.set_location(self.span.clone());
 
         match &self.data {
             ExprKind::Lambda(lam) => {
                 let mut bindings = HashMap::new();
-                let ty = lam.param.infer((context.clone(), &mut bindings));
+                let ty = lam.param.infer((env.clone(), &mut bindings));
 
                 for (k, (_, t)) in bindings {
-                    context.add_variable(k, t)
+                    env.add_variable(k, t)
                 }
 
-                let body = lam.body.infer(context);
+                let body = lam.body.infer((ambient, env.clone()));
 
-                Type::arrow(ty, body)
+                Type::arrow(ty, env.new_hole(Kind::effect()), body)
             }
-            ExprKind::Variable(var) => context.variables.get(var).unwrap().clone(),
-            ExprKind::Constructor(cons) => context.get_module_constructor(cons).0,
-            ExprKind::Function(name) => context.get_module_let(name),
+            ExprKind::Variable(var) => env.variables.get(var).unwrap().clone(),
+            ExprKind::Constructor(cons) => env.get_module_constructor(cons).0,
+            ExprKind::Function(name) => env.get_module_let(name),
             ExprKind::Let(let_) => {
                 let mut bindings = HashMap::new();
-                let ty = let_.pattern.infer((context.clone(), &mut bindings));
+                let ty = let_.pattern.infer((env.clone(), &mut bindings));
 
-                let_.body.check(ty, context.clone());
+                let_.body.check(ty, (ambient, env.clone()));
 
                 for (k, (_, t)) in bindings {
-                    context.add_variable(k, t)
+                    env.add_variable(k, t)
                 }
 
-                let_.value.infer(context)
+                let_.value.infer((ambient, env))
             }
 
             ExprKind::When(when) => {
-                let scrutinee = when.scrutinee.infer(context.clone());
+                let scrutinee = when.scrutinee.infer((ambient, env.clone()));
 
                 let (types, ret) =
-                    (1, &when.arms.iter().collect::<Vec<_>>()).infer(context.clone());
+                    (1, &when.arms.iter().collect::<Vec<_>>()).infer((ambient, env.clone()));
 
                 if types.len() == 1 {
                     let ty = types.first().unwrap().clone();
-                    Type::unify(context.clone(), scrutinee, ty);
+                    Type::unify(env.clone(), scrutinee, ty);
                     ret
                 } else {
                     Type::error()
                 }
             }
             ExprKind::Do(not) => {
-                let Some(unit_qual) = context.import("Unit") else {
+                let Some(unit_qual) = env.import("Unit") else {
                     return Type::error();
                 };
 
@@ -134,22 +138,22 @@ impl Infer for Expr {
                 let mut res_ty = unit.clone();
 
                 for expr in &not.statements {
-                    context.set_location(expr.span.clone());
+                    env.set_location(expr.span.clone());
                     match &expr.data {
                         StatementKind::Let(let_) => {
                             let mut bindings = HashMap::new();
-                            let ty = let_.pattern.infer((context.clone(), &mut bindings));
+                            let ty = let_.pattern.infer((env.clone(), &mut bindings));
 
-                            let_.expr.check(ty, context.clone());
+                            let_.expr.check(ty, (ambient, env.clone()));
 
                             for (k, (_, t)) in bindings {
-                                context.add_variable(k, t)
+                                env.add_variable(k, t)
                             }
 
                             res_ty = unit.clone()
                         }
                         StatementKind::Expr(e) => {
-                            res_ty = e.infer(context.clone());
+                            res_ty = e.infer((ambient, env.clone()));
                         }
                         StatementKind::Error => todo!(),
                     }
@@ -158,20 +162,20 @@ impl Infer for Expr {
                 res_ty
             }
             ExprKind::Application(app) => {
-                let mut ty = app.func.infer(context.clone());
+                let mut ty = app.func.infer((ambient, env.clone()));
 
                 for arg in &app.args {
-                    let ty2 = arg.apply(ty, context.clone());
+                    let ty2 = arg.apply(ty, (ambient, env.clone()));
                     ty = ty2;
                 }
 
                 ty
             }
 
-            ExprKind::Literal(l) => l.infer(&context),
+            ExprKind::Literal(l) => l.infer(&env),
             ExprKind::Annotation(ann) => {
-                let (ty, _) = ann.ty.infer(&context);
-                ann.expr.check(ty.clone(), context.clone());
+                let (ty, _) = ann.ty.infer(&env);
+                ann.expr.check(ty.clone(), (ambient, env.clone()));
                 ty
             }
 
@@ -179,42 +183,42 @@ impl Infer for Expr {
                 let mut types = Vec::new();
 
                 for expr in &tuple.exprs {
-                    types.push(expr.infer(context.clone()));
+                    types.push(expr.infer((ambient, env.clone())));
                 }
 
                 Type::tuple(types)
             }
             ExprKind::Projection(proj) => {
-                let typ = proj.expr.infer(context.clone());
+                let typ = proj.expr.infer((ambient, env.clone()));
 
                 let Some((n, args)) = typ.destruct() else {
-                    context.report(crate::error::TypeErrorKind::NotImplemented);
+                    env.report(crate::error::TypeErrorKind::NotImplemented);
                     return Type::error()
                 };
 
-                let data = context.get_module_ty(&n);
+                let data = env.get_module_ty(&n);
 
                 let Def::Record(fields) = data.def else {
-                    context.report(crate::error::TypeErrorKind::NotImplemented);
+                    env.report(crate::error::TypeErrorKind::NotImplemented);
                     return Type::error()
                 };
 
                 let Some(field) = fields.iter().find(|x| x.name == proj.field) else {
-                    context.report(crate::error::TypeErrorKind::NotImplemented);
+                    env.report(crate::error::TypeErrorKind::NotImplemented);
                     return Type::error()
                 };
 
-                let mut find = context.get_module_field(field);
+                let mut find = env.get_module_field(field);
 
                 instantiate_with(&mut find, args);
 
                 find
             }
             ExprKind::RecordInstance(inst) => {
-                let rec = context.get_module_ty(&inst.name);
+                let rec = env.get_module_ty(&inst.name);
 
                 let Def::Record(fields) = rec.def else {
-                    context.report(crate::error::TypeErrorKind::NotARecord);
+                    env.report(crate::error::TypeErrorKind::NotARecord);
                     return Type::error()
                 };
 
@@ -222,31 +226,31 @@ impl Infer for Expr {
 
                 let available = fields
                     .iter()
-                    .map(|x| (x.name.clone(), context.get_module_field(x)))
+                    .map(|x| (x.name.clone(), env.get_module_field(x)))
                     .collect::<HashMap<Symbol, Type>>();
 
                 let binders = (0..rec.binders)
-                    .map(|_| context.new_hole())
+                    .map(|_| env.new_hole(Kind::new_hole()))
                     .collect::<Vec<_>>();
 
                 for field in &inst.fields {
-                    context.set_location(field.1.span.clone());
+                    env.set_location(field.1.span.clone());
 
-                    let ty = field.1.infer(context.clone());
+                    let ty = field.1.infer((ambient, env.clone()));
 
                     let Some(mut typ) = available.get(&field.0).cloned() else {
-                        context.report(crate::error::TypeErrorKind::NotFoundField);
+                        env.report(crate::error::TypeErrorKind::NotFoundField);
                         return Type::error()
                     };
 
                     instantiate_with(&mut typ, binders.clone());
 
                     if !used.insert(field.0.clone()) {
-                        context.report(crate::error::TypeErrorKind::DuplicatedField);
+                        env.report(crate::error::TypeErrorKind::DuplicatedField);
                         return Type::error();
                     }
 
-                    Type::unify(context.clone(), ty, typ.clone());
+                    Type::unify(env.clone(), ty, typ.clone());
                 }
 
                 let available = available.keys().cloned().collect::<HashSet<_>>();
@@ -255,9 +259,8 @@ impl Infer for Expr {
 
                 if !diff.is_empty() {
                     for available in diff {
-                        context.set_location(self.span.clone());
-                        context
-                            .report(crate::error::TypeErrorKind::MissingField(available.clone()));
+                        env.set_location(self.span.clone());
+                        env.report(crate::error::TypeErrorKind::MissingField(available.clone()));
                     }
                     return Type::error();
                 }
@@ -266,17 +269,17 @@ impl Infer for Expr {
             }
 
             ExprKind::RecordUpdate(rec) => {
-                let expr_ty = rec.expr.infer(context.clone());
+                let expr_ty = rec.expr.infer((ambient, env.clone()));
 
                 let Some((n, binders)) = expr_ty.destruct() else {
-                    context.report(crate::error::TypeErrorKind::NotImplemented);
+                    env.report(crate::error::TypeErrorKind::NotImplemented);
                     return Type::error()
                 };
 
-                let record = context.get_module_ty(&n);
+                let record = env.get_module_ty(&n);
 
                 let Def::Record(fields) = record.def else {
-                    context.report(crate::error::TypeErrorKind::NotARecord);
+                    env.report(crate::error::TypeErrorKind::NotARecord);
                     return Type::error()
                 };
 
@@ -284,44 +287,41 @@ impl Infer for Expr {
 
                 let available = fields
                     .iter()
-                    .map(|x| (x.name.clone(), context.get_module_field(x)))
+                    .map(|x| (x.name.clone(), env.get_module_field(x)))
                     .collect::<HashMap<Symbol, Type>>();
 
                 for field in &rec.fields {
-                    context.set_location(field.1.span.clone());
+                    env.set_location(field.1.span.clone());
 
-                    let ty = field.1.infer(context.clone());
+                    let ty = field.1.infer((ambient, env.clone()));
 
                     let Some(mut typ) = available.get(&field.0).cloned() else {
-                        context.report(crate::error::TypeErrorKind::NotFoundField);
+                        env.report(crate::error::TypeErrorKind::NotFoundField);
                         return Type::error()
                     };
 
                     instantiate_with(&mut typ, binders.clone());
 
                     if !used.insert(field.0.clone()) {
-                        context.report(crate::error::TypeErrorKind::DuplicatedField);
+                        env.report(crate::error::TypeErrorKind::DuplicatedField);
                         return Type::error();
                     }
 
-                    Type::unify(context.clone(), ty, typ.clone());
+                    Type::unify(env.clone(), ty, typ.clone());
                 }
 
                 expr_ty
             }
 
             ExprKind::Handler(_) => {
-                context.report(crate::error::TypeErrorKind::NotImplemented);
+                env.report(crate::error::TypeErrorKind::NotImplemented);
                 Type::error()
             }
             ExprKind::Cases(_) => {
-                context.report(crate::error::TypeErrorKind::NotImplemented);
+                env.report(crate::error::TypeErrorKind::NotImplemented);
                 Type::error()
             }
-            ExprKind::Effect(_) => {
-                context.report(crate::error::TypeErrorKind::NotImplemented);
-                Type::error()
-            }
+            ExprKind::Effect(app) => env.get_module_effect(app),
 
             ExprKind::Error => Type::error(),
         }

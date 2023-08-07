@@ -6,7 +6,7 @@ use vulpi_macros::Show;
 
 use vulpi_show::{Show, TreeDisplay};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Qualified {
     pub path: Symbol,
     pub name: Symbol,
@@ -34,15 +34,8 @@ pub type Kind = Box<Spanned<KindType>>;
 // Types
 
 #[derive(Show)]
-pub enum Effect {
-    Application(Qualified, Vec<Type>),
-    Variable(Symbol),
-    Error,
-}
-
-#[derive(Show)]
 pub struct Effects {
-    pub effects: Vec<Effect>,
+    pub effects: Vec<Type>,
 }
 
 #[derive(Show)]
@@ -91,6 +84,13 @@ impl TypeKind {
             TypeKind::Pi(pi) => {
                 let mut set = pi.left.data.free_variables();
                 set.extend(pi.right.data.free_variables());
+
+                if let Some(effs) = &pi.effects {
+                    for eff in &effs.effects {
+                        set.extend(eff.data.free_variables());
+                    }
+                }
+
                 set
             }
             TypeKind::Tuple(t) => {

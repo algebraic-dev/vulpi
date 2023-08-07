@@ -37,13 +37,7 @@ impl Infer for Literal {
                     Type::error()
                 }
             }
-            LiteralKind::Unit => {
-                if let Some(name) = context.import("Unit") {
-                    Type::variable(name)
-                } else {
-                    Type::error()
-                }
-            }
+            LiteralKind::Unit => Type::tuple(vec![]),
         }
     }
 }

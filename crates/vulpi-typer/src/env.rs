@@ -56,7 +56,7 @@ impl Env {
             names: im_rc::Vector::new(),
             counter: Rc::new(RefCell::new(0)),
             location: RefCell::new(Span::default()),
-            current_id: RefCell::new(Symbol::intern("Project")),
+            current_id: RefCell::new(Symbol::intern("")),
             modules: Rc::new(RefCell::new(Modules::new())),
         }
     }
@@ -122,13 +122,26 @@ impl Env {
             .clone()
     }
 
+    pub fn get_module_effect(
+        &self,
+        app: &vulpi_syntax::r#abstract::Qualified,
+    ) -> crate::types::Type {
+        self.modules
+            .borrow_mut()
+            .get(app.path.clone())
+            .effects
+            .get(&app.name)
+            .unwrap()
+            .clone()
+    }
+
     pub fn get_module_let(&self, app: &vulpi_syntax::r#abstract::Qualified) -> crate::types::Type {
         self.modules
             .borrow_mut()
             .get(app.path.clone())
             .variables
             .get(&app.name)
-            .unwrap()
+            .unwrap_or_else(|| panic!("Cannot find {}.{}", app.path.get(), app.name.get()))
             .clone()
     }
 
@@ -147,8 +160,8 @@ impl Env {
         self.current_id.borrow().clone()
     }
 
-    pub fn new_hole(&self) -> Type {
-        Type::new(TypeKind::Hole(Hole::new(self.level)))
+    pub fn new_hole(&self, k: Kind) -> Type {
+        Type::new(TypeKind::Hole(Hole::new(self.level, k)))
     }
 
     pub fn set_location(&self, location: Span) {

@@ -3,7 +3,9 @@ use im_rc::HashMap;
 use vulpi_syntax::r#abstract::{ExprKind, StatementKind};
 use vulpi_syntax::{r#abstract::Expr, r#abstract::PatternArm};
 
+use crate::ambient::Ambient;
 use crate::infer::Infer;
+use crate::kind;
 use crate::{env::Env, types::Type};
 
 use super::Check;
@@ -11,9 +13,9 @@ use super::Check;
 impl Check for PatternArm {
     type Return = Vec<Type>;
 
-    type Context<'a> = Env;
+    type Context<'a> = (&'a mut Ambient, Env);
 
-    fn check(&self, ty: Type, mut context: Self::Context<'_>) -> Self::Return {
+    fn check(&self, ty: Type, (ambient, mut context): Self::Context<'_>) -> Self::Return {
         let mut tys = Vec::new();
 
         let mut bindings = HashMap::new();
@@ -33,10 +35,10 @@ impl Check for PatternArm {
 
             let right = Type::variable(right);
 
-            guard.check(right, context.clone());
+            guard.check(right, (ambient, context.clone()));
         }
 
-        self.expr.check(ty, context);
+        self.expr.check(ty, (ambient, context));
 
         tys
     }
@@ -45,11 +47,13 @@ impl Check for PatternArm {
 impl Check for (usize, &Vec<&PatternArm>) {
     type Return = Vec<Type>;
 
-    type Context<'a> = Env;
+    type Context<'a> = (&'a mut Ambient, Env);
 
-    fn check(&self, ty: Type, context: Self::Context<'_>) -> Self::Return {
+    fn check(&self, ty: Type, (ambient, context): Self::Context<'_>) -> Self::Return {
         let (size, arms) = self;
-        let types = (0..*size).map(|_| context.new_hole()).collect::<Vec<_>>();
+        let types = (0..*size)
+            .map(|_| context.new_hole(kind::Kind::star()))
+            .collect::<Vec<_>>();
 
         for arm in *arms {
             if arm.patterns.len() != *size {
@@ -60,7 +64,7 @@ impl Check for (usize, &Vec<&PatternArm>) {
                 return Vec::new();
             }
 
-            let tys = arm.check(ty.clone(), context.clone());
+            let tys = arm.check(ty.clone(), (ambient, context.clone()));
 
             for (left, right) in types.iter().zip(tys.into_iter()) {
                 left.sub(context.clone(), right);
@@ -74,40 +78,40 @@ impl Check for (usize, &Vec<&PatternArm>) {
 impl Check for Expr {
     type Return = ();
 
-    type Context<'a> = Env;
+    type Context<'a> = (&'a mut Ambient, Env);
 
-    fn check(&self, ty: Type, mut context: Self::Context<'_>) -> Self::Return {
-        context.set_location(self.span.clone());
+    fn check(&self, ty: Type, (ambient, mut env): Self::Context<'_>) -> Self::Return {
+        env.set_location(self.span.clone());
 
         match &self.data {
             ExprKind::Do(block) => {
-                let Some(unit_qual) = context.import("Unit") else {
+                let Some(unit_qual) = env.import("Unit") else {
                     return;
                 };
 
                 let unit = Type::variable(unit_qual);
 
                 if block.statements.is_empty() {
-                    unit.sub(context.clone(), ty);
+                    unit.sub(env.clone(), ty);
                     return;
                 }
 
                 for expr in block.statements.iter().take(block.statements.len() - 1) {
-                    context.set_location(expr.span.clone());
+                    env.set_location(expr.span.clone());
 
                     match &expr.data {
                         StatementKind::Let(let_) => {
                             let mut bindings = HashMap::new();
-                            let ty = let_.pattern.infer((context.clone(), &mut bindings));
+                            let ty = let_.pattern.infer((env.clone(), &mut bindings));
 
-                            let_.expr.check(ty.clone(), context.clone());
+                            let_.expr.check(ty.clone(), (ambient, env.clone()));
 
                             for (k, (_, t)) in bindings {
-                                context.add_variable(k, t)
+                                env.add_variable(k, t)
                             }
                         }
                         StatementKind::Expr(e) => {
-                            e.infer(context.clone());
+                            e.infer((ambient, env.clone()));
                         }
                         StatementKind::Error => (),
                     };
@@ -115,22 +119,22 @@ impl Check for Expr {
 
                 let expr = block.statements.last().unwrap();
 
-                context.set_location(expr.span.clone());
+                env.set_location(expr.span.clone());
 
                 match &expr.data {
                     StatementKind::Let(let_) => {
                         let mut bindings = HashMap::new();
-                        let pat_ty = let_.pattern.infer((context.clone(), &mut bindings));
-                        let_.expr.check(pat_ty, context.clone());
-                        Type::unify(context.clone(), ty, unit);
+                        let pat_ty = let_.pattern.infer((env.clone(), &mut bindings));
+                        let_.expr.check(pat_ty, (ambient, env.clone()));
+                        Type::unify(env.clone(), ty, unit);
                     }
-                    StatementKind::Expr(e) => e.check(ty, context.clone()),
+                    StatementKind::Expr(e) => e.check(ty, (ambient, env.clone())),
                     StatementKind::Error => (),
                 }
             }
             _ => {
-                let infered = self.infer(context.clone());
-                ty.sub(context.clone(), infered);
+                let infered = self.infer((ambient, env.clone()));
+                ty.sub(env.clone(), infered);
             }
         }
     }

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use vulpi_lexer::Lexer;
 use vulpi_parser::Parser;
-use vulpi_show::Show;
 
 use vulpi_report::renderer::classic::Classic;
 use vulpi_report::renderer::Reader;
@@ -49,6 +48,7 @@ fn main() {
     program.declare(&mut resolver);
     program.resolve_imports(&mut resolver);
     let program = program.resolve(&mut resolver);
+    use vulpi_show::Show;
 
     let env = vulpi_typer::env::Env::new(reporter.clone());
     program.declare(env.clone());

@@ -26,10 +26,12 @@ impl Infer for r#abstract::Type {
                 let (left, k) = pi.left.infer(context);
                 k.unify(context, &Kind::star());
 
+                let e = pi.effects.infer(context);
+
                 let (right, k) = pi.right.infer(context);
                 k.unify(context, &Kind::star());
 
-                (Type::arrow(left, right), Kind::star())
+                (Type::arrow(left, e, right), Kind::star())
             }
             TypeKind::Tuple(t) => {
                 let types = t

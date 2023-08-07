@@ -11,8 +11,10 @@ use module::TypeData;
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::*;
 
+pub mod ambient;
 pub mod apply;
 pub mod check;
+pub mod coverage;
 pub mod env;
 pub mod error;
 pub mod infer;
@@ -29,7 +31,13 @@ pub trait Declare {
 }
 
 impl Declare for ExternalDecl {
-    fn declare(&self, context: Env) {
+    fn declare(&self, mut context: Env) {
+        let fvs = self.ty.data.free_variables();
+
+        for fv in fvs {
+            context.types.insert(fv, kind::Kind::new_hole());
+        }
+
         let (typ, k) = self.ty.infer(&context);
         k.unify(&context, &kind::Kind::star());
 
@@ -128,7 +136,9 @@ impl Declare for TypeDecl {
                         ret.clone()
                     };
 
-                    let typ = types.rfold(ret.clone(), |acc, x| types::Type::arrow(x, acc));
+                    let typ = types.rfold(ret.clone(), |acc, x| {
+                        types::Type::arrow(x, types::Type::empty_row(), acc)
+                    });
 
                     let typ = kinds
                         .clone()
@@ -206,7 +216,7 @@ impl Declare for EffectDecl {
 
     fn define(&self, mut context: Env) {
         let mut kinds = Vec::new();
-        let mut types = Vec::new();
+        let mut binders = Vec::new();
 
         for binder in &self.binders {
             let (name, kind) = match binder {
@@ -217,20 +227,48 @@ impl Declare for EffectDecl {
             context.types.insert(name.clone(), kind.clone());
 
             kinds.push((name.clone(), kind));
-            types.push(types::Type::named(name));
+            binders.push(types::Type::named(name));
         }
 
+        let effects = types::Type::app(
+            types::Type::variable(self.qualified.clone()),
+            binders.clone(),
+        );
+
         for eff in &self.fields {
-            let types = eff.args.iter().map(|x| {
-                let (t, k) = x.infer(&context);
-                k.unify(&context, &kind::Kind::star());
-                t
-            });
+            let mut types = eff
+                .args
+                .iter()
+                .map(|x| {
+                    let (t, k) = x.infer(&context);
+                    k.unify(&context, &kind::Kind::star());
+                    t
+                })
+                .collect::<Vec<_>>();
 
             let (init, k) = eff.ty.infer(&context);
             k.unify(&context, &kind::Kind::star());
 
-            let typ = types.rfold(init, |acc, x| types::Type::arrow(x, acc));
+            let first = types.pop().unwrap_or_else(|| {
+                types::Type::app(
+                    types::Type::variable(context.import("Unit").unwrap()),
+                    vec![],
+                )
+            });
+
+            let init = types::Type::arrow(
+                first,
+                types::Type::extend_row(
+                    self.qualified.clone(),
+                    effects.clone(),
+                    types::Type::empty_row(),
+                ),
+                init.clone(),
+            );
+
+            let typ = types.into_iter().rfold(init, |acc, x| {
+                types::Type::arrow(x, types::Type::empty_row(), acc)
+            });
 
             let typ = kinds
                 .clone()
@@ -240,7 +278,7 @@ impl Declare for EffectDecl {
             context
                 .modules
                 .borrow_mut()
-                .get(context.current_namespace())
+                .get(eff.name.path.clone())
                 .effects
                 .insert(eff.name.name.clone(), typ);
         }
@@ -262,19 +300,22 @@ impl Declare for LetDecl {
             .fold(HashSet::new(), |acc, x| acc.union(&x).cloned().collect());
 
         for fv in &fvs {
-            context.types.insert(fv.clone(), kind::Kind::star());
+            context.types.insert(fv.clone(), kind::Kind::new_hole());
         }
 
-        let ret = match &self.ret {
-            Some((_, t)) => {
+        let (e, ret) = match &self.ret {
+            Some((e, t)) => {
                 let (t, k) = t.infer(&context);
                 k.unify(&context, &kind::Kind::star());
-                t
+                (e.infer(&context), t)
             }
-            None => context.new_hole(),
+            None => (
+                types::Type::empty_row(),
+                context.new_hole(kind::Kind::star()),
+            ),
         };
 
-        let typ = self
+        let mut types = self
             .binders
             .iter()
             .map(|x| {
@@ -282,7 +323,20 @@ impl Declare for LetDecl {
                 k.unify(&context, &kind::Kind::star());
                 t
             })
-            .rfold(ret, |acc, x| types::Type::arrow(x, acc));
+            .collect::<Vec<_>>();
+
+        let first = types.pop().unwrap_or_else(|| {
+            types::Type::app(
+                types::Type::variable(context.import("Unit").unwrap()),
+                vec![],
+            )
+        });
+
+        let ret = types::Type::arrow(first, e, ret);
+
+        let typ = types.into_iter().rfold(ret, |acc, x| {
+            types::Type::arrow(x, types::Type::empty_row(), acc)
+        });
 
         let typ = fvs.into_iter().fold(typ, |acc, x| {
             types::Type::forall(x, kind::Kind::star(), acc)
@@ -388,6 +442,10 @@ impl Declare for Module {
         for del in self.lets() {
             del.declare(context.clone());
         }
+
+        for del in self.externals() {
+            del.declare(context.clone());
+        }
     }
 
     fn define(&self, context: Env) {
@@ -405,6 +463,10 @@ impl Declare for Module {
 
         for lets in self.lets() {
             lets.define(context.clone());
+        }
+
+        for del in self.externals() {
+            del.define(context.clone());
         }
     }
 }

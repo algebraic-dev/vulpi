@@ -3,7 +3,7 @@
 //! generalization, subsumption, etc.
 
 use crate::{env::Env, error::TypeErrorKind, kind::Kind};
-use std::{cell::RefCell, fmt::Display, fmt::Formatter, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, fmt::Display, fmt::Formatter, hash::Hash, rc::Rc};
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 
@@ -28,12 +28,24 @@ impl Type {
         Type(Rc::new(ty))
     }
 
-    pub fn hole(level: usize) -> Type {
-        Type::new(TypeKind::Hole(Hole::new(level)))
+    pub fn lacks(labels: HashSet<Qualified>) -> Self {
+        Type::new(TypeKind::Hole(Hole::lacks(labels)))
     }
 
-    pub fn arrow(left: Type, right: Type) -> Type {
-        Type::new(TypeKind::Arrow(left, right))
+    pub fn hole(level: usize, kind: Kind) -> Type {
+        Type::new(TypeKind::Hole(Hole::new(level, kind)))
+    }
+
+    pub fn arrow(left: Type, effs: Type, right: Type) -> Type {
+        Type::new(TypeKind::Arrow(left, effs, right))
+    }
+
+    pub fn empty_row() -> Type {
+        Type::new(TypeKind::RowEmpty)
+    }
+
+    pub fn extend_row(label: Qualified, ty: Type, rest: Type) -> Type {
+        Type::new(TypeKind::RowExtend(label, ty, rest))
     }
 
     pub fn tuple(types: Vec<Type>) -> Type {
@@ -84,14 +96,10 @@ impl Type {
                     _ => None,
                 }
             }
+            TypeKind::Variable(qualified) => Some((qualified.clone(), vec![])),
             _ => None,
         }
     }
-}
-
-pub struct Effect {
-    pub name: Symbol,
-    pub args: Vec<Type>,
 }
 
 pub enum TypeKind {
@@ -105,7 +113,7 @@ pub enum TypeKind {
     Named(Symbol),
 
     /// The type of a function.
-    Arrow(Type, Type),
+    Arrow(Type, Type, Type),
 
     /// The type of a type application.
     App(Type, Type),
@@ -119,6 +127,12 @@ pub enum TypeKind {
     /// A empty or filled hole.
     Hole(Hole),
 
+    /// Row Empty for algebraic effects that are row polymorphic
+    RowEmpty,
+
+    /// Row Extend for algebraic effects that are row polymorphic
+    RowExtend(Qualified, Type, Type),
+
     /// The type of a type variable.
     Error,
 }
@@ -128,7 +142,8 @@ pub enum TypeKind {
 #[derive(Clone)]
 pub enum HoleInner {
     Filled(Type),
-    Empty(usize),
+    Lacks(HashSet<Qualified>),
+    Empty(usize, Kind),
 }
 
 /// A hole in the type checker. This is used to represent a type that is not yet known.4
@@ -144,8 +159,12 @@ impl PartialEq for Hole {
 impl Eq for Hole {}
 
 impl Hole {
-    pub fn new(level: usize) -> Self {
-        Hole(Rc::new(RefCell::new(HoleInner::Empty(level))))
+    pub fn new(level: usize, kind: Kind) -> Self {
+        Hole(Rc::new(RefCell::new(HoleInner::Empty(level, kind))))
+    }
+
+    pub fn lacks(labels: HashSet<Qualified>) -> Self {
+        Hole(Rc::new(RefCell::new(HoleInner::Lacks(labels))))
     }
 
     pub fn fill(&self, ty: Type) {
@@ -156,10 +175,15 @@ impl Hole {
         matches!(*self.0.borrow(), HoleInner::Filled(_))
     }
 
+    pub fn is_lacks(&self) -> bool {
+        matches!(*self.0.borrow(), HoleInner::Lacks(_))
+    }
+
     pub fn deref(&self) -> Type {
         match *self.0.borrow() {
             HoleInner::Filled(ref ty) => ty.clone(),
-            HoleInner::Empty(_) => Type(Rc::new(TypeKind::Error)),
+            HoleInner::Empty(_, _) => Type(Rc::new(TypeKind::Hole(self.clone()))),
+            HoleInner::Lacks(_) => Type(Rc::new(TypeKind::Hole(self.clone()))),
         }
     }
 }
@@ -176,10 +200,17 @@ impl Type {
             TypeKind::Variable(ref name) => write!(fmt, "~{}", name.name.get()),
             TypeKind::Bound(lvl) => write!(fmt, "!{}", env.names[env.level - lvl - 1].0.get()),
             TypeKind::Named(ref name) => write!(fmt, "^{}", name.get()),
-            TypeKind::Arrow(ref ty1, ref ty2) => {
+            TypeKind::Arrow(ref ty1, ref e, ref ty2) => {
                 write!(fmt, "(")?;
                 ty1.print(env.clone(), fmt)?;
                 write!(fmt, " -> ")?;
+
+                if !matches!(e.deref().as_ref(), TypeKind::RowEmpty) {
+                    write!(fmt, "{{")?;
+                    e.print(env.clone(), fmt)?;
+                    write!(fmt, "}}")?;
+                }
+
                 ty2.print(env, fmt)?;
                 write!(fmt, ")")
             }
@@ -215,14 +246,22 @@ impl Type {
                 }
             }
             TypeKind::Error => write!(fmt, "<ERROR>"),
+            TypeKind::RowEmpty => "{}".fmt(fmt),
+            TypeKind::RowExtend(_, ref t, ref n) => {
+                write!(fmt, "|")?;
+                t.print(env.clone(), fmt)?;
+                write!(fmt, ", ")?;
+                n.print(env, fmt)
+            }
         }
     }
 
     pub fn substitute(&self, name: Symbol, to: Type) -> Type {
         match self.0.as_ref() {
             TypeKind::Named(ref name2) if name == *name2 => to,
-            TypeKind::Arrow(ref from, ref r) => Type::new(TypeKind::Arrow(
+            TypeKind::Arrow(ref from, ref e, ref r) => Type::new(TypeKind::Arrow(
                 from.substitute(name.clone(), to.clone()),
+                e.substitute(name.clone(), to.clone()),
                 r.substitute(name, to),
             )),
             TypeKind::App(ref from, ref p) => Type::new(TypeKind::App(
@@ -241,8 +280,8 @@ impl Type {
         }
     }
 
-    pub fn instantiate(&self, env: Env, name: Symbol) -> Type {
-        let hole = env.new_hole();
+    pub fn instantiate(&self, env: Env, name: Symbol, k: Kind) -> Type {
+        let hole = env.new_hole(k);
         self.substitute(name, hole)
     }
 
@@ -250,8 +289,9 @@ impl Type {
     pub fn generalize(&self, env: &mut Env) -> Type {
         fn generalize_over(this: Type, new_vars: &mut Vec<Symbol>, env: &mut Env) {
             match this.0.as_ref() {
-                TypeKind::Arrow(ref from, ref to) => {
+                TypeKind::Arrow(ref from, ref e, ref to) => {
                     generalize_over(from.clone(), new_vars, env);
+                    generalize_over(e.clone(), new_vars, env);
                     generalize_over(to.clone(), new_vars, env);
                 }
                 TypeKind::App(ref from, ref to) => {
@@ -300,8 +340,9 @@ impl Type {
                     true
                 }
             }
-            TypeKind::Arrow(l, r) => {
+            TypeKind::Arrow(l, e, r) => {
                 l.clone().occurs(env.clone(), hole.clone(), scope)
+                    && e.clone().occurs(env.clone(), hole.clone(), scope)
                     && r.clone().occurs(env, hole, scope)
             }
             TypeKind::App(f, a) => {
@@ -321,17 +362,18 @@ impl Type {
                     false
                 } else {
                     let mut hole1 = hole1.0.borrow_mut();
-                    match *hole1 {
-                        HoleInner::Empty(l) => {
-                            if l > scope {
-                                *hole1 = HoleInner::Empty(scope);
+                    match &*hole1 {
+                        HoleInner::Empty(l, k) => {
+                            if *l > scope {
+                                *hole1 = HoleInner::Empty(scope, k.clone());
                             }
                             true
                         }
-                        HoleInner::Filled(ref mut typ1) => {
+                        HoleInner::Filled(typ1) => {
                             typ1.clone().occurs(env, hole, scope);
                             true
                         }
+                        HoleInner::Lacks(_) => todo!(),
                     }
                 }
             }
@@ -346,6 +388,24 @@ impl Type {
             } else {
                 Type::unify(env, hole.deref(), ty);
             }
+        } else if hole.is_lacks() {
+            let HoleInner::Lacks(lacks) = hole.0.borrow().clone() else { unreachable!() };
+
+            let (list, mv) = &ty.to_list();
+            let list = list.iter().map(|x| x.0.clone()).collect::<HashSet<_>>();
+
+            let intersection = lacks.intersection(&list).collect::<Vec<_>>();
+
+            if intersection.is_empty() && mv.is_none() {
+                hole.fill(ty);
+            } else if let Some(hole2) = mv {
+                let HoleInner::Lacks(lacks1) = hole2.0.borrow().clone() else { unreachable!() };
+                let union = lacks.union(&lacks1).cloned().collect();
+                hole.fill(ty);
+                hole2.fill(Type::lacks(union))
+            } else {
+                unreachable!()
+            }
         } else {
             if let TypeKind::Hole(hole1) = ty.0.as_ref() {
                 if hole == *hole1 {
@@ -359,10 +419,45 @@ impl Type {
         }
     }
 
+    pub fn rewrite_row(env: Env, typ: Type, new_label: Qualified) -> (Type, Type) {
+        match typ.deref().as_ref() {
+            TypeKind::RowEmpty => panic!("cannot insert"),
+            TypeKind::RowExtend(label, field_ty, row_tail) => {
+                if *label == new_label {
+                    (field_ty.clone(), row_tail.clone())
+                } else if let TypeKind::Hole(hole) = row_tail.deref().as_ref() {
+                    let beta = Type::lacks(vec![new_label.clone()].into_iter().collect());
+                    let gamma = env.new_hole(Kind::effect());
+
+                    Type::unify_hole(
+                        env,
+                        hole.clone(),
+                        Type::extend_row(new_label, gamma.deref(), beta.clone()),
+                        false,
+                    );
+
+                    (
+                        gamma,
+                        Type::extend_row(label.clone(), field_ty.clone(), beta),
+                    )
+                } else {
+                    let (field_ty2, row_tail2) =
+                        Type::rewrite_row(env, row_tail.clone(), new_label);
+                    (
+                        field_ty2,
+                        Type::extend_row(label.clone(), field_ty.clone(), row_tail2),
+                    )
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
     pub fn unify(mut env: Env, left: Type, right: Type) {
         match (left.0.as_ref(), right.0.as_ref()) {
             (TypeKind::Hole(x), _) if x.is_filled() => Type::unify(env, x.deref(), right),
             (_, TypeKind::Hole(x)) if x.is_filled() => Type::unify(env, left, x.deref()),
+            (TypeKind::RowEmpty, TypeKind::RowEmpty) => (),
 
             //
             //     α /∈ FV(A)     Γ [^α] ⊢ ^α := A ⊣ ∆
@@ -393,8 +488,9 @@ impl Type {
                 Type::unify(env, b.clone(), d.clone());
             }
 
-            (TypeKind::Arrow(a, b), TypeKind::Arrow(c, d)) => {
+            (TypeKind::Arrow(a, e, b), TypeKind::Arrow(c, f, d)) => {
                 Type::unify(env.clone(), a.clone(), c.clone());
+                Type::unify(env.clone(), e.clone(), f.clone());
                 Type::unify(env, b.clone(), d.clone());
             }
 
@@ -414,6 +510,16 @@ impl Type {
                     tb.substitute(nb.clone(), ty),
                 );
             }
+
+            (TypeKind::RowExtend(label1, field_ty1, row_tail1), TypeKind::RowExtend(_, _, _)) => {
+                let (field_ty2, row_tail2) =
+                    Type::rewrite_row(env.clone(), right.clone(), label1.clone());
+
+                // Needs occur check of these things sob sob
+                Type::unify(env.clone(), field_ty1.clone(), field_ty2);
+                Type::unify(env.clone(), row_tail1.clone(), row_tail2);
+            }
+
             (TypeKind::Error, _) | (_, TypeKind::Error) => (),
             _ => env.report(TypeErrorKind::TypeMismatch(env.clone(), left, right)),
         }
@@ -434,19 +540,22 @@ impl Type {
             // Γ [^α2, ^α1, ^α = ^α1 → ^α2] ⊢ A1 =<: ^α1 a Θ Θ ⊣ ^α2 :=< [Θ]A2 a ∆
             // ------------------------------------------------------------------- InstLArr
             //                    Γ [^α] ⊢ ^α :=< A1 → A2 ⊣ ∆
-            TypeKind::Arrow(a, b) => {
-                let HoleInner::Empty(scope) = *hole.0.borrow() else { unreachable!() };
+            TypeKind::Arrow(a, e, b) => {
+                let HoleInner::Empty(scope, k) = hole.0.borrow().clone() else { unreachable!() };
 
-                let hole_a = Hole::new(scope);
-                let hole_b = Hole::new(scope);
+                let hole_a = Hole::new(scope, k.clone());
+                let hole_e = Hole::new(scope, Kind::effect());
+                let hole_b = Hole::new(scope, k);
 
                 hole.fill(Type::arrow(
                     Type::new(TypeKind::Hole(hole_a.clone())),
+                    Type::new(TypeKind::Hole(hole_e.clone())),
                     Type::new(TypeKind::Hole(hole_b.clone())),
                 ));
 
                 Type::sub_type_hole(env.clone(), a.clone(), hole_a);
-                Type::sub_hole_type(env, hole_b, b.clone());
+                Type::sub_hole_type(env.clone(), hole_b, b.clone());
+                Type::unify_hole(env, hole_e, e.clone(), false);
             }
 
             _ => Type::unify_hole(env, hole, ty, false),
@@ -460,8 +569,8 @@ impl Type {
             // ----------------------------------------------------  InstRAllL
             //              Γ [^α] ⊢ ∀β. B =<: ^α ⊣ ∆
             //
-            TypeKind::Forall(n, _, t) => {
-                let a_1 = t.instantiate(env.clone(), n.clone());
+            TypeKind::Forall(n, k, t) => {
+                let a_1 = t.instantiate(env.clone(), n.clone(), k.clone());
                 Type::sub_type_hole(env, a_1, hole)
             }
 
@@ -470,19 +579,22 @@ impl Type {
             // ----------------------------------------------------------------------- InstRArr
             //                     Γ [^α] ⊢ A1 → A2 =<: ^α ⊣ ∆
             //
-            TypeKind::Arrow(a, b) => {
-                let HoleInner::Empty(scope) = *hole.0.borrow() else { unreachable!() };
+            TypeKind::Arrow(a, e, b) => {
+                let HoleInner::Empty(scope, k) = hole.0.borrow().clone() else { unreachable!() };
 
-                let hole_a = Hole::new(scope);
-                let hole_b = Hole::new(scope);
+                let hole_a = Hole::new(scope, k.clone());
+                let hole_e = Hole::new(scope, Kind::effect());
+                let hole_b = Hole::new(scope, k);
 
                 hole.fill(Type::arrow(
                     Type::new(TypeKind::Hole(hole_a.clone())),
+                    Type::new(TypeKind::Hole(hole_e.clone())),
                     Type::new(TypeKind::Hole(hole_b.clone())),
                 ));
 
                 Type::sub_hole_type(env.clone(), hole_a, a.clone());
-                Type::sub_type_hole(env, b.clone(), hole_b);
+                Type::sub_type_hole(env.clone(), b.clone(), hole_b);
+                Type::unify_hole(env, hole_e, e.clone(), true);
             }
             _ => Type::unify_hole(env, hole, ty, true),
         }
@@ -528,8 +640,8 @@ impl Type {
             // ------------------------------------- <:∀L
             //       Γ ⊢ ∀α. A <: B ⊣ ∆ <:∀L
             //
-            (TypeKind::Forall(n, _, t), _) => {
-                let a_1 = t.instantiate(env.clone(), n.clone());
+            (TypeKind::Forall(n, k, t), _) => {
+                let a_1 = t.instantiate(env.clone(), n.clone(), k.clone());
                 a_1.sub(env, ty)
             }
 
@@ -539,6 +651,23 @@ impl Type {
 
     pub fn show(&self, env: Env) -> ShowPair {
         ShowPair(env, self.clone())
+    }
+
+    pub fn to_list(&self) -> (Vec<(Qualified, Type)>, Option<Hole>) {
+        fn to_list(typ: Type, vec: &mut Vec<(Qualified, Type)>) -> Option<Hole> {
+            match typ.deref().as_ref() {
+                TypeKind::Hole(hole) => Some(hole.clone()),
+                TypeKind::RowEmpty => None,
+                TypeKind::RowExtend(label, ty, rest) => {
+                    vec.push((label.clone(), ty.clone()));
+                    to_list(rest.clone(), vec)
+                }
+                _ => unreachable!(),
+            }
+        }
+        let mut vec = Vec::new();
+        let res = to_list(self.clone(), &mut vec);
+        (vec, res)
     }
 }
 

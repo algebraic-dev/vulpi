@@ -1,6 +1,7 @@
 //! This is the module responsible for Kinds that are types of types.
 
 use std::{
+    cell::RefCell,
     fmt::{Display, Formatter},
     rc::Rc,
 };
@@ -28,6 +29,10 @@ impl Kind {
         Kind::new(KindType::Variable(Symbol::intern("*")))
     }
 
+    pub fn effect() -> Self {
+        Kind::new(KindType::Variable(Symbol::intern("Effect")))
+    }
+
     pub fn var(name: Symbol) -> Self {
         Kind::new(KindType::Variable(name))
     }
@@ -41,10 +46,25 @@ impl Kind {
 pub enum KindType {
     Variable(Symbol),
     Arrow(Kind, Kind),
+    Hole(Rc<RefCell<Option<Kind>>>),
     Error,
 }
 
 impl Kind {
+    pub fn new_hole() -> Self {
+        Kind::new(KindType::Hole(Rc::new(RefCell::new(None))))
+    }
+
+    pub fn deref(&self) -> Self {
+        match &*self.0 {
+            KindType::Hole(hole) => match hole.borrow().as_ref() {
+                Some(kind) => kind.deref(),
+                None => self.clone(),
+            },
+            _ => self.clone(),
+        }
+    }
+
     pub fn print(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &*self.0 {
             KindType::Variable(name) => write!(fmt, "{}", name.get()),
@@ -56,6 +76,10 @@ impl Kind {
                 write!(fmt, ")")
             }
             KindType::Error => write!(fmt, "Error"),
+            KindType::Hole(hole) => match hole.borrow().as_ref() {
+                Some(kind) => kind.print(fmt),
+                None => write!(fmt, "_"),
+            },
         }
     }
 
@@ -65,6 +89,24 @@ impl Kind {
             (KindType::Arrow(from1, to1), KindType::Arrow(from2, to2)) => {
                 from1.unify(env, from2);
                 to1.unify(env, to2);
+            }
+            (KindType::Hole(n), _) => {
+                let kind = n.borrow().clone();
+                match kind {
+                    Some(kind) => kind.unify(env, other),
+                    None => {
+                        *n.borrow_mut() = Some(other.clone());
+                    }
+                }
+            }
+            (_, KindType::Hole(n)) => {
+                let kind = n.borrow().clone();
+                match kind {
+                    Some(kind) => self.unify(env, &kind),
+                    None => {
+                        *n.borrow_mut() = Some(self.clone());
+                    }
+                }
             }
             (KindType::Error, _) => (),
             (_, KindType::Error) => (),

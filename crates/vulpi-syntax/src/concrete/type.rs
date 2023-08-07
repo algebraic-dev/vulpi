@@ -16,7 +16,7 @@ pub enum Effect {
 #[derive(Show)]
 pub struct Effects {
     pub left_brace: Token,
-    pub effects: Vec<(Effect, Option<Token>)>,
+    pub effects: Vec<(Spanned<Effect>, Option<Token>)>,
     pub right_brace: Token,
 }
 

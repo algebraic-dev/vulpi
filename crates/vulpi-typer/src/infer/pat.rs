@@ -3,7 +3,7 @@ use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_syntax::{r#abstract::Pattern, r#abstract::PatternKind};
 
-use crate::{apply::Apply, env::Env, types::Type, Infer};
+use crate::{apply::Apply, env::Env, kind::Kind, types::Type, Infer};
 
 impl Infer for Pattern {
     type Return = Type;
@@ -14,9 +14,9 @@ impl Infer for Pattern {
         env.set_location(self.span.clone());
 
         match &self.data {
-            PatternKind::Wildcard => env.new_hole(),
+            PatternKind::Wildcard => env.new_hole(Kind::star()),
             PatternKind::Variable(name) => {
-                let ty = env.new_hole();
+                let ty = env.new_hole(Kind::star());
                 map.insert(name.clone(), (self.span.clone(), ty.clone()));
                 ty
             }

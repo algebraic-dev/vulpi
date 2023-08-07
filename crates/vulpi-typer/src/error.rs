@@ -15,6 +15,7 @@ pub enum TypeErrorKind {
     WrongArity(usize, usize),
     NotAFunction(Env, Type),
     NotImplemented,
+    NotEffect,
 
     DuplicatedField,
     NotFoundField,
@@ -59,6 +60,7 @@ impl IntoDiagnostic for TypeError {
             TypeErrorKind::MissingField(name) => {
                 Text::from(format!("missing field: {}", name.get()))
             }
+            TypeErrorKind::NotEffect => Text::from("not effect".to_string()),
         }
     }
 
