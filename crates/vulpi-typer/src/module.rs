@@ -18,6 +18,7 @@ pub enum Def {
 #[derive(Clone)]
 pub struct TypeData {
     pub kind: crate::kind::Kind,
+    pub binders: usize,
     pub module: Symbol,
     pub def: Def,
 }

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::apply::Apply;
 use crate::check::Check;
 use crate::module::Def;
@@ -5,6 +7,7 @@ use crate::types::TypeKind;
 use crate::{env::Env, types::Type, Infer};
 
 use im_rc::HashMap;
+use vulpi_intern::Symbol;
 use vulpi_syntax::{
     r#abstract::Expr, r#abstract::ExprKind, r#abstract::PatternArm, r#abstract::StatementKind,
 };
@@ -181,52 +184,130 @@ impl Infer for Expr {
 
                 Type::tuple(types)
             }
-            ExprKind::Error => Type::error(),
-
             ExprKind::Projection(proj) => {
                 let typ = proj.expr.infer(context.clone());
 
-                match typ.destruct() {
-                    Some((n, args)) => {
-                        let data = context.get_module_ty(&n);
-                        match data.def {
-                            Def::Record(fields) => {
-                                let field = fields.iter().find(|x| x.name == proj.field);
-                                if let Some(res) = field {
-                                    let mut find = context.get_module_field(res);
+                let Some((n, args)) = typ.destruct() else {
+                    context.report(crate::error::TypeErrorKind::NotImplemented);
+                    return Type::error()
+                };
 
-                                    let mut i = 0;
-                                    while let TypeKind::Forall(name, _, to) = find.deref().as_ref()
-                                    {
-                                        find = to.substitute(name.clone(), args[i].clone());
-                                        i += 1;
-                                    }
+                let data = context.get_module_ty(&n);
 
-                                    find
-                                } else {
-                                    context.report(crate::error::TypeErrorKind::NotImplemented);
-                                    Type::error()
-                                }
-                            }
-                            _ => {
-                                context.report(crate::error::TypeErrorKind::NotImplemented);
-                                Type::error()
-                            }
-                        }
+                let Def::Record(fields) = data.def else {
+                    context.report(crate::error::TypeErrorKind::NotImplemented);
+                    return Type::error()
+                };
+
+                let Some(field) = fields.iter().find(|x| x.name == proj.field) else {
+                    context.report(crate::error::TypeErrorKind::NotImplemented);
+                    return Type::error()
+                };
+
+                let mut find = context.get_module_field(field);
+
+                instantiate_with(&mut find, args);
+
+                find
+            }
+            ExprKind::RecordInstance(inst) => {
+                let rec = context.get_module_ty(&inst.name);
+
+                let Def::Record(fields) = rec.def else {
+                    context.report(crate::error::TypeErrorKind::NotARecord);
+                    return Type::error()
+                };
+
+                let mut used = HashSet::new();
+
+                let available = fields
+                    .iter()
+                    .map(|x| (x.name.clone(), context.get_module_field(x)))
+                    .collect::<HashMap<Symbol, Type>>();
+
+                let binders = (0..rec.binders)
+                    .map(|_| context.new_hole())
+                    .collect::<Vec<_>>();
+
+                for field in &inst.fields {
+                    context.set_location(field.1.span.clone());
+
+                    let ty = field.1.infer(context.clone());
+
+                    let Some(mut typ) = available.get(&field.0).cloned() else {
+                        context.report(crate::error::TypeErrorKind::NotFoundField);
+                        return Type::error()
+                    };
+
+                    instantiate_with(&mut typ, binders.clone());
+
+                    if !used.insert(field.0.clone()) {
+                        context.report(crate::error::TypeErrorKind::DuplicatedField);
+                        return Type::error();
                     }
-                    _ => {
-                        context.report(crate::error::TypeErrorKind::NotImplemented);
-                        Type::error()
-                    }
+
+                    Type::unify(context.clone(), ty, typ.clone());
                 }
+
+                let available = available.keys().cloned().collect::<HashSet<_>>();
+
+                let diff = available.difference(&used).collect::<Vec<_>>();
+
+                if !diff.is_empty() {
+                    for available in diff {
+                        context.set_location(self.span.clone());
+                        context
+                            .report(crate::error::TypeErrorKind::MissingField(available.clone()));
+                    }
+                    return Type::error();
+                }
+
+                Type::app(Type::variable(inst.name.clone()), binders)
             }
-            ExprKind::RecordInstance(_) => {
-                context.report(crate::error::TypeErrorKind::NotImplemented);
-                Type::error()
-            }
-            ExprKind::RecordUpdate(_) => {
-                context.report(crate::error::TypeErrorKind::NotImplemented);
-                Type::error()
+
+            ExprKind::RecordUpdate(rec) => {
+                let expr_ty = rec.expr.infer(context.clone());
+
+                let Some((n, binders)) = expr_ty.destruct() else {
+                    context.report(crate::error::TypeErrorKind::NotImplemented);
+                    return Type::error()
+                };
+
+                let record = context.get_module_ty(&n);
+
+                let Def::Record(fields) = record.def else {
+                    context.report(crate::error::TypeErrorKind::NotARecord);
+                    return Type::error()
+                };
+
+                let mut used = HashSet::new();
+
+                let available = fields
+                    .iter()
+                    .map(|x| (x.name.clone(), context.get_module_field(x)))
+                    .collect::<HashMap<Symbol, Type>>();
+
+                for field in &rec.fields {
+                    context.set_location(field.1.span.clone());
+
+                    let ty = field.1.infer(context.clone());
+
+                    let Some(mut typ) = available.get(&field.0).cloned() else {
+                        context.report(crate::error::TypeErrorKind::NotFoundField);
+                        return Type::error()
+                    };
+
+                    instantiate_with(&mut typ, binders.clone());
+
+                    if !used.insert(field.0.clone()) {
+                        context.report(crate::error::TypeErrorKind::DuplicatedField);
+                        return Type::error();
+                    }
+
+                    Type::unify(context.clone(), ty, typ.clone());
+                }
+
+                expr_ty
             }
 
             ExprKind::Handler(_) => {
@@ -241,6 +322,16 @@ impl Infer for Expr {
                 context.report(crate::error::TypeErrorKind::NotImplemented);
                 Type::error()
             }
+
+            ExprKind::Error => Type::error(),
         }
+    }
+}
+
+fn instantiate_with(find: &mut Type, args: Vec<Type>) {
+    let mut i = 0;
+    while let TypeKind::Forall(name, _, to) = find.deref().as_ref() {
+        *find = to.substitute(name.clone(), args[i].clone());
+        i += 1;
     }
 }

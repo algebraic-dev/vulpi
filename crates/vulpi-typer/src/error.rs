@@ -15,6 +15,11 @@ pub enum TypeErrorKind {
     WrongArity(usize, usize),
     NotAFunction(Env, Type),
     NotImplemented,
+
+    DuplicatedField,
+    NotFoundField,
+    NotARecord,
+    MissingField(Symbol),
 }
 
 pub struct TypeError {
@@ -48,6 +53,12 @@ impl IntoDiagnostic for TypeError {
             }
             TypeErrorKind::CannotFind(name) => Text::from(format!("cannot find: {}", name.get())),
             TypeErrorKind::NotImplemented => Text::from("not implemented".to_string()),
+            TypeErrorKind::DuplicatedField => Text::from("duplicated field".to_string()),
+            TypeErrorKind::NotFoundField => Text::from("not found field".to_string()),
+            TypeErrorKind::NotARecord => Text::from("not a record".to_string()),
+            TypeErrorKind::MissingField(name) => {
+                Text::from(format!("missing field: {}", name.get()))
+            }
         }
     }
 

@@ -79,6 +79,7 @@ impl Declare for TypeDecl {
                 TypeData {
                     kind: arrow,
                     module: self.namespace.clone(),
+                    binders: self.binders.len(),
                     def,
                 },
             );
@@ -197,6 +198,7 @@ impl Declare for EffectDecl {
                 TypeData {
                     kind: arrow,
                     module: self.namespace.clone(),
+                    binders: self.binders.len(),
                     def: Def::Effect(self.fields.iter().map(|x| x.name.clone()).collect()),
                 },
             );
