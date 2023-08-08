@@ -1,0 +1,23 @@
+pub mod Prelude where
+  pub type Unit = | Unit
+  pub type Int
+  pub type String
+
+use Prelude
+
+pub effect Exn where
+    pub raise () : ()
+
+pub effect Pudding where
+    pub pudding () : ()
+
+pub effect Lero where
+    pub lero () : ()
+
+let f (s: (() -> {Exn,  e} ())) : {e} () = ()
+
+let be : Int = 2
+                
+let ata : {Lero} () = do
+    Lero.lero ()
+    Lero.lero ()

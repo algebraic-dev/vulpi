@@ -76,7 +76,7 @@ impl<'a> Renderer<Classic<'a>> for Text {
             }
             Text::Styled(style, t) => (style, t.as_str()).render(ctx, writer),
             Text::Colored(color, t) => (color, t.as_str()).render(ctx, writer),
-            Text::Text(text) => write!(writer, "{}", text),
+            Text::Text(text) => write!(writer, "{}", Paint::new(text).bold()),
             Text::Break => writeln!(writer),
         }
     }
@@ -99,16 +99,30 @@ impl<'a> Renderer<Classic<'a>> for Diagnostic {
 
         write!(
             writer,
-            "{}:{}:{}: ",
+            "  {} ",
+            yansi::Color::White
+                .style()
+                .bg(yansi::Color::Red)
+                .paint(" ERROR ")
+        )?;
+
+        self.message().render(ctx, writer)?;
+
+        let guide = Paint::new("┌─>").fg(yansi::Color::Cyan).dimmed();
+
+        writeln!(writer)?;
+        writeln!(writer)?;
+        writeln!(
+            writer,
+            "      {guide} {}:{}:{} ",
             relative.display(),
             start.0 + 1,
             start.1 + 1
         )?;
 
-        self.message().render(ctx, writer)?;
+        let vbar = Paint::new("│").fg(yansi::Color::Cyan).dimmed();
 
-        writeln!(writer)?;
-        writeln!(writer)?;
+        writeln!(writer, "      {vbar} ")?;
 
         let is_inline = start.0 == end.0;
 
@@ -120,7 +134,7 @@ impl<'a> Renderer<Classic<'a>> for Diagnostic {
         for (i, line) in lines[minimum..maximum].iter().enumerate() {
             let line_number = minimum + i + 1;
 
-            write!(writer, "  {:>3} | ", line_number)?;
+            write!(writer, "  {:>3} {vbar} ", line_number)?;
 
             if is_inline && line_number == start.0 + 1 {
                 let line = line.to_string();
@@ -129,9 +143,11 @@ impl<'a> Renderer<Classic<'a>> for Diagnostic {
 
                 writeln!(
                     writer,
-                    "      | {}{}",
+                    "      {vbar} {}{}",
                     " ".repeat(start.1),
-                    "^".repeat(end.1 - start.1)
+                    Paint::new("^".repeat(end.1 - start.1))
+                        .bold()
+                        .fg(yansi::Color::Red)
                 )?;
             } else if is_inline && line_number == end.0 + 1 {
                 let mut line = line.to_string();

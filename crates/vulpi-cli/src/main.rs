@@ -59,7 +59,7 @@ fn main() {
     if !reporter.has_errors() {
         println!("Ok!")
     } else {
-        println!("Err!");
+        eprintln!("");
         let mut writer = Reader::default();
         let ctx = Classic::new(&vfs, cwd);
 
@@ -67,6 +67,6 @@ fn main() {
             diagnostic.render(&ctx, &mut writer).unwrap();
         }
 
-        print!("{}", writer.to_string());
+        eprint!("{}", writer.to_string());
     }
 }
