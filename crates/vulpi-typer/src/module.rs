@@ -56,7 +56,12 @@ impl Modules {
         }
     }
 
-    pub fn get(&mut self, id: Symbol) -> &mut Module {
-        self.modules.entry(id).or_default()
+    pub fn typ(&mut self, qualified: &Qualified) -> TypeData {
+        let module = self.get(&qualified.path);
+        module.types.get(&qualified.name).unwrap().clone()
+    }
+
+    pub fn get(&mut self, id: &Symbol) -> &mut Module {
+        self.modules.entry(id.clone()).or_default()
     }
 }

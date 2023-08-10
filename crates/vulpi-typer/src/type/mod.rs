@@ -91,6 +91,8 @@ pub enum TypeKind<S: State> {
 #[derive(Clone)]
 pub struct Type<S: State>(Rc<TypeKind<S>>);
 
+pub type Effect<S> = Type<S>;
+
 /// A type of a type is the same as a type!
 pub type Kind<S> = Type<S>;
 
@@ -106,6 +108,34 @@ impl<S: State> Type<S> {
 
     pub(crate) fn forall(forall: S::Forall) -> Self {
         Self::new(TypeKind::Forall(forall))
+    }
+
+    pub(crate) fn typ() -> Type<S> {
+        Type::new(TypeKind::Type)
+    }
+
+    pub(crate) fn effect() -> Type<S> {
+        Type::new(TypeKind::Effect)
+    }
+
+    pub(crate) fn row() -> Type<S> {
+        Type::new(TypeKind::Row)
+    }
+
+    pub(crate) fn variable(name: Qualified) -> Type<S> {
+        Type::new(TypeKind::Variable(name))
+    }
+
+    pub(crate) fn error() -> Type<S> {
+        Type::new(TypeKind::Error)
+    }
+
+    pub(crate) fn bound(level: S::Bound) -> Type<S> {
+        Type::new(TypeKind::Bound(level))
+    }
+
+    pub(crate) fn tuple(types: Vec<S::Type>) -> Type<S> {
+        Type::new(TypeKind::Tuple(types))
     }
 }
 
@@ -184,6 +214,7 @@ pub mod r#virtual {
     pub struct Env {
         pub names: im_rc::Vector<Option<Symbol>>,
         pub types: im_rc::Vector<Type<Virtual>>,
+        pub kinds: im_rc::Vector<Kind<Virtual>>,
         pub level: Level,
         pub span: RefCell<Span>,
     }
@@ -192,6 +223,15 @@ pub mod r#virtual {
         /// Sets the location of the environment. It is used for error reporting.
         pub fn on(&self, span: Span) {
             *self.span.borrow_mut() = span;
+        }
+
+        pub fn find(&self, name: &Symbol) -> Option<(usize, Type<Virtual>)> {
+            self.names
+                .iter()
+                .zip(self.types.iter())
+                .enumerate()
+                .find(|(_, (n, _))| n.as_ref() == Some(name))
+                .map(|(i, (_, ty))| (i, ty.clone()))
         }
 
         /// Adds a type to the environment.
@@ -276,6 +316,18 @@ pub mod r#virtual {
                 TypeKind::Hole(e) => (Some(e.clone()), spine),
                 _ => (None, spine),
             }
+        }
+
+        pub(crate) fn arrow(
+            ty: Type<Virtual>,
+            effs: Type<Virtual>,
+            body: Type<Virtual>,
+        ) -> Type<Virtual> {
+            Type::new(TypeKind::Arrow(Pi { ty, effs, body }))
+        }
+
+        pub(crate) fn hole(hole: Hole<Virtual>) -> Type<Virtual> {
+            Type::new(TypeKind::Hole(hole))
         }
     }
 }

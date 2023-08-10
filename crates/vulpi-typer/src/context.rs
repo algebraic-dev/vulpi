@@ -1,7 +1,10 @@
 //! This file declares a mutable environment that is useful to keep track of information that does
 //! not need to be immutable like the Env.
 
-use crate::r#type::{eval::Eval, Index};
+use crate::{
+    module::Modules,
+    r#type::{eval::Eval, Index},
+};
 use im_rc::HashSet;
 use vulpi_intern::Symbol;
 use vulpi_report::{Diagnostic, Report};
@@ -23,6 +26,7 @@ use crate::{
 pub struct Context {
     pub counter: usize,
     pub reporter: Report,
+    pub modules: Modules,
 }
 
 impl Context {
