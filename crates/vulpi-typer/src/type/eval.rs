@@ -18,13 +18,10 @@ pub trait Eval<T> {
 impl Eval<Type<Virtual>> for Type<Real> {
     fn eval(&self, env: &Env) -> Type<Virtual> {
         match self.as_ref() {
-            TypeKind::Pi(pi) => Type::new(TypeKind::Pi(r#virtual::Pi {
+            TypeKind::Arrow(pi) => Type::new(TypeKind::Arrow(r#virtual::Pi {
                 ty: pi.ty.clone().eval(env),
                 effs: pi.effs.clone().eval(env),
-                body: r#virtual::Closure {
-                    env: env.clone(),
-                    body: pi.body.clone(),
-                },
+                body: pi.body.clone().eval(env),
             })),
             TypeKind::Forall(f) => Type::new(TypeKind::Forall(r#virtual::Forall {
                 name: f.name.clone(),
@@ -34,6 +31,7 @@ impl Eval<Type<Virtual>> for Type<Real> {
                     body: f.body.clone(),
                 },
             })),
+            TypeKind::Row => Type::new(TypeKind::Row),
             TypeKind::Type => Type::new(TypeKind::Type),
             TypeKind::Effect => Type::new(TypeKind::Effect),
             TypeKind::Hole(r) => r.eval(env),
@@ -104,14 +102,12 @@ impl Quote<Type<Real>> for Type<Virtual> {
     fn quote(&self, depth: Level) -> Type<Real> {
         match self.as_ref() {
             TypeKind::Type => Type::new(TypeKind::Type),
+            TypeKind::Row => Type::new(TypeKind::Row),
             TypeKind::Effect => Type::new(TypeKind::Effect),
-            TypeKind::Pi(pi) => Type::new(TypeKind::Pi(real::Pi {
+            TypeKind::Arrow(pi) => Type::new(TypeKind::Arrow(real::Pi {
                 ty: pi.ty.clone().quote(depth),
                 effs: pi.effs.clone().quote(depth),
-                body: pi
-                    .body
-                    .apply(None, Type::new(TypeKind::Bound(depth)))
-                    .quote(depth.inc()),
+                body: pi.body.clone().quote(depth.inc()),
             })),
             TypeKind::Forall(f) => Type::new(TypeKind::Forall(real::Forall {
                 name: f.name.clone(),

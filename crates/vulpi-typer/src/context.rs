@@ -2,8 +2,10 @@
 //! not need to be immutable like the Env.
 
 use crate::r#type::{eval::Eval, Index};
+use im_rc::HashSet;
 use vulpi_intern::Symbol;
 use vulpi_report::{Diagnostic, Report};
+use vulpi_syntax::r#abstract::Qualified;
 
 use crate::{
     errors::{TypeError, TypeErrorKind},
@@ -11,7 +13,6 @@ use crate::{
         eval::Quote,
         r#virtual::Env,
         r#virtual::Virtual,
-        r#virtual::{Closure, Forall},
         real::{self, Real},
         HoleInner, Level, Type, TypeKind,
     },
@@ -48,8 +49,8 @@ impl Context {
     }
 
     /// Creates a "lacks" hole that stores effects that should lack.
-    pub fn lacks(&mut self, env: &Env) -> Type<Virtual> {
-        env.lacks(self.new_name())
+    pub fn lacks(&mut self, env: &Env, hash_set: HashSet<Qualified>) -> Type<Virtual> {
+        env.lacks(self.new_name(), hash_set)
     }
 
     /// Instantiates a poly type to a monotype.
@@ -57,8 +58,8 @@ impl Context {
         match ty.deref().as_ref() {
             TypeKind::Forall(forall) => {
                 // Determines if a hole should be lack or not checking if it has effect kind.
-                let arg = if forall.kind.is_effect() {
-                    env.lacks(forall.name.clone())
+                let arg = if forall.kind.is_row() {
+                    env.lacks(forall.name.clone(), Default::default())
                 } else {
                     env.hole(forall.kind.clone(), forall.name.clone())
                 };
@@ -74,7 +75,7 @@ impl Context {
     pub fn generalize(&mut self, env: &Env, ty: &Type<Virtual>) -> Type<Virtual> {
         fn go(level: Level, ty: Type<Real>, new_vars: &mut Vec<(Symbol, Type<Real>)>) {
             match ty.as_ref() {
-                TypeKind::Pi(p) => {
+                TypeKind::Arrow(p) => {
                     go(level, p.ty.clone(), new_vars);
                     go(level, p.effs.clone(), new_vars);
                     go(level.inc(), p.body.clone(), new_vars);
@@ -90,7 +91,7 @@ impl Context {
                         hole.0.replace(HoleInner::Filled(arg));
                     }
                     HoleInner::Row(n, _, _) => {
-                        new_vars.push((n, Type::new(TypeKind::Effect)));
+                        new_vars.push((n, Type::new(TypeKind::Row)));
                         let arg = Type::new(TypeKind::Bound(Index(new_vars.len() - 1 + level.0)));
                         hole.0.replace(HoleInner::Filled(arg));
                     }
@@ -116,6 +117,7 @@ impl Context {
                 TypeKind::Bound(_) => (),
                 TypeKind::Variable(_) => (),
                 TypeKind::Error => (),
+                TypeKind::Row => (),
             }
         }
 

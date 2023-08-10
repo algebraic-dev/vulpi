@@ -53,8 +53,11 @@ pub enum TypeKind<S: State> {
     /// The type of effects
     Effect,
 
+    /// The type of the rows
+    Row,
+
     /// The pi type is used for dependent functions.
-    Pi(S::Pi),
+    Arrow(S::Pi),
 
     /// The forall type is used for polymorphic functions.
     Forall(S::Forall),
@@ -96,12 +99,12 @@ impl<S: State> Type<S> {
         Self(Rc::new(kind))
     }
 
-    /// Checks if the type is a effect type.
-    pub fn is_effect(&self) -> bool {
-        matches!(self.0.as_ref(), TypeKind::Effect)
+    /// Checks if the type is a row type.
+    pub fn is_row(&self) -> bool {
+        matches!(self.0.as_ref(), TypeKind::Row)
     }
 
-    pub fn forall(forall: S::Forall) -> Self {
+    pub(crate) fn forall(forall: S::Forall) -> Self {
         Self::new(TypeKind::Forall(forall))
     }
 }
@@ -117,19 +120,38 @@ impl<S: State> AsRef<TypeKind<S>> for Type<S> {
 #[derive(Clone)]
 pub enum HoleInner<S: State> {
     Empty(Symbol, Kind<S>, Level),
-    Row(Symbol, Level, HashSet<Symbol>),
+    Row(Symbol, Level, HashSet<Qualified>),
     Filled(Type<S>),
 }
 
 /// A hole is a type that is not yet known. It is used for type inference.
+#[derive(Clone)]
 pub struct Hole<S: State>(pub Rc<RefCell<HoleInner<S>>>);
+
+impl<S: State> PartialEq for Hole<S> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl<S: State> Eq for Hole<S> {}
+
+impl<S: State> Hole<S> {
+    pub fn is_empty(&self) -> bool {
+        matches!(&*self.0.borrow(), HoleInner::Empty(_, _, _))
+    }
+
+    pub fn is_lacks(&self) -> bool {
+        matches!(&*self.0.borrow(), HoleInner::Row(_, _, _))
+    }
+}
 
 impl<S: State> Hole<S> {
     pub fn new(hole_inner: HoleInner<S>) -> Self {
         Self(Rc::new(RefCell::new(hole_inner)))
     }
 
-    pub fn row(name: Symbol, level: Level, labels: HashSet<Symbol>) -> Self {
+    pub fn row(name: Symbol, level: Level, labels: HashSet<Qualified>) -> Self {
         Self(Rc::new(RefCell::new(HoleInner::Row(name, level, labels))))
     }
 
@@ -145,8 +167,10 @@ impl<S: State> Hole<S> {
 pub mod r#virtual {
     use std::cell::RefCell;
 
+    use im_rc::HashSet;
     use vulpi_intern::Symbol;
     use vulpi_location::Span;
+    use vulpi_syntax::r#abstract::Qualified;
 
     use super::{eval::Eval, real::Real, Hole, HoleInner, Kind, Level, State, Type, TypeKind};
 
@@ -183,12 +207,8 @@ pub mod r#virtual {
             Type::new(TypeKind::Hole(Hole::empty(label, kind, self.level)))
         }
 
-        pub fn lacks(&self, symbol: Symbol) -> Type<Virtual> {
-            Type::new(TypeKind::Hole(Hole::row(
-                symbol,
-                self.level,
-                im_rc::HashSet::new(),
-            )))
+        pub fn lacks(&self, symbol: Symbol, hash_set: HashSet<Qualified>) -> Type<Virtual> {
+            Type::new(TypeKind::Hole(Hole::row(symbol, self.level, hash_set)))
         }
     }
 
@@ -209,7 +229,7 @@ pub mod r#virtual {
     pub struct Pi {
         pub ty: Type<Virtual>,
         pub effs: Type<Virtual>,
-        pub body: Closure,
+        pub body: Type<Virtual>,
     }
 
     /// A forall with binder so we can bind on types that have higher kinds and ranks.
@@ -235,6 +255,26 @@ pub mod r#virtual {
                     _ => self.clone(),
                 },
                 _ => self.clone(),
+            }
+        }
+
+        pub fn extend(label: Qualified, ty: Type<Virtual>, typ: Type<Virtual>) -> Type<Virtual> {
+            Type::new(TypeKind::Extend(label, ty, typ))
+        }
+
+        pub(crate) fn row_spine(&self) -> (Option<Hole<Virtual>>, Vec<(Qualified, Self)>) {
+            let mut spine = Vec::new();
+            let mut current = self.clone();
+
+            while let TypeKind::Extend(label, ty, rest) = current.as_ref() {
+                spine.push((label.clone(), ty.clone()));
+                current = rest.clone();
+            }
+
+            match current.as_ref() {
+                TypeKind::Empty => (None, spine),
+                TypeKind::Hole(e) => (Some(e.clone()), spine),
+                _ => (None, spine),
             }
         }
     }
@@ -341,9 +381,10 @@ pub mod real {
     impl Formattable for Type<Real> {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self.as_ref() {
+                TypeKind::Row => write!(f, "Row"),
                 TypeKind::Type => write!(f, "Type"),
                 TypeKind::Effect => write!(f, "Effect"),
-                TypeKind::Pi(pi) => {
+                TypeKind::Arrow(pi) => {
                     write!(f, "(")?;
                     pi.ty.format(env, f)?;
                     write!(f, " -> ")?;

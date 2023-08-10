@@ -1,8 +1,9 @@
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::{IntoDiagnostic, Text};
+use vulpi_syntax::r#abstract::Qualified;
 
-use crate::r#type::{r#virtual::Env, r#virtual::Virtual, real::Real, Type};
+use crate::r#type::{r#virtual::Env, real::Real, Type};
 
 pub enum TypeErrorKind {
     UnboundTypeVariable(Symbol),
@@ -16,6 +17,8 @@ pub enum TypeErrorKind {
     NotAFunction(Env, Type<Real>),
     NotImplemented,
     NotEffect,
+    MissingLabel(Qualified),
+    InvalidLabels(Vec<Qualified>),
 
     DuplicatedField,
     NotFoundField,
@@ -63,6 +66,17 @@ impl IntoDiagnostic for TypeError {
                 Text::from(format!("missing field: {}", name.get()))
             }
             TypeErrorKind::NotEffect => Text::from("not effect".to_string()),
+            TypeErrorKind::MissingLabel(name) => {
+                Text::from(format!("missing label: {}", name.name.get()))
+            }
+            TypeErrorKind::InvalidLabels(labels) => Text::from(format!(
+                "invalid labels: {}",
+                labels
+                    .iter()
+                    .map(|label| label.name.get())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
         }
     }
 
