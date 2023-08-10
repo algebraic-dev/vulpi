@@ -3,6 +3,7 @@
 //! is only used in the type checker as a evaluated state.
 
 pub mod eval;
+pub mod unify;
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -262,7 +263,7 @@ pub mod real {
     /// A forall with binder so we can bind on types that have higher kinds and ranks.
     pub struct Forall {
         pub name: Symbol,
-        pub ty: Type<Real>,
+        pub kind: Type<Real>,
         pub body: Type<Real>,
     }
 
@@ -353,7 +354,7 @@ pub mod real {
                     write!(f, "forall ")?;
                     write!(f, "({}", forall.name.get())?;
                     write!(f, " : ")?;
-                    forall.ty.format(env, f)?;
+                    forall.kind.format(env, f)?;
                     write!(f, ") . ")?;
                     forall.body.format(&env.add(Some(forall.name.clone())), f)?;
                     write!(f, "")

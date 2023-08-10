@@ -3,4 +3,5 @@
 //! and type checking of the ambient effects system.
 
 pub mod context;
+pub mod errors;
 pub mod r#type;

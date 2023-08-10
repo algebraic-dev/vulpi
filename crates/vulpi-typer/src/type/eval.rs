@@ -28,7 +28,7 @@ impl Eval<Type<Virtual>> for Type<Real> {
             })),
             TypeKind::Forall(f) => Type::new(TypeKind::Forall(r#virtual::Forall {
                 name: f.name.clone(),
-                kind: f.ty.clone().eval(env),
+                kind: f.kind.clone().eval(env),
                 body: r#virtual::Closure {
                     env: env.clone(),
                     body: f.body.clone(),
@@ -115,7 +115,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
             })),
             TypeKind::Forall(f) => Type::new(TypeKind::Forall(real::Forall {
                 name: f.name.clone(),
-                ty: f.kind.clone().quote(depth),
+                kind: f.kind.clone().quote(depth),
                 body: f
                     .body
                     .apply(Some(f.name.clone()), Type::new(TypeKind::Bound(depth)))

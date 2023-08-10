@@ -1,23 +1,37 @@
 //! This file declares a mutable environment that is useful to keep track of information that does
 //! not need to be immutable like the Env.
 
+use crate::r#type::{eval::Eval, Index};
 use vulpi_intern::Symbol;
+use vulpi_report::{Diagnostic, Report};
 
-use crate::r#type::{
-    eval::Quote,
-    r#virtual::Env,
-    r#virtual::Virtual,
-    r#virtual::{Closure, Forall},
-    HoleInner, Level, Type, TypeKind,
+use crate::{
+    errors::{TypeError, TypeErrorKind},
+    r#type::{
+        eval::Quote,
+        r#virtual::Env,
+        r#virtual::Virtual,
+        r#virtual::{Closure, Forall},
+        real::{self, Real},
+        HoleInner, Level, Type, TypeKind,
+    },
 };
 
 /// A mutable context that is used differently from [Env]. It is used to keep data between every
 /// thing inside the type checker.
 pub struct Context {
     pub counter: usize,
+    pub reporter: Report,
 }
 
 impl Context {
+    pub fn report(&mut self, env: &Env, kind: TypeErrorKind) {
+        self.reporter.report(Diagnostic::new(TypeError {
+            span: env.span.borrow().clone(),
+            kind,
+        }));
+    }
+
     fn inc_counter(&mut self) -> usize {
         self.counter += 1;
         self.counter - 1
@@ -58,57 +72,43 @@ impl Context {
 
     /// Generalizes a monotype to a poly type.
     pub fn generalize(&mut self, env: &Env, ty: &Type<Virtual>) -> Type<Virtual> {
-        fn go(
-            ctx: &mut Context,
-            env: &Env,
-            ty: Type<Virtual>,
-            new_vars: &mut Vec<(Symbol, Type<Virtual>)>,
-        ) {
+        fn go(level: Level, ty: Type<Real>, new_vars: &mut Vec<(Symbol, Type<Real>)>) {
             match ty.as_ref() {
                 TypeKind::Pi(p) => {
-                    go(ctx, env, p.ty.clone(), new_vars);
-                    go(ctx, env, p.effs.clone(), new_vars);
-                    let arg = Type::new(TypeKind::Bound(env.level));
-                    go(
-                        ctx,
-                        &env.add(None, arg.clone()),
-                        p.body.apply(None, arg),
-                        new_vars,
-                    );
+                    go(level, p.ty.clone(), new_vars);
+                    go(level, p.effs.clone(), new_vars);
+                    go(level.inc(), p.body.clone(), new_vars);
                 }
                 TypeKind::Forall(forall) => {
-                    let arg = Type::new(TypeKind::Bound(env.level));
-                    go(ctx, env, forall.kind.clone(), new_vars);
-                    go(
-                        ctx,
-                        &env.add(None, arg.clone()),
-                        forall.body.apply(None, arg),
-                        new_vars,
-                    );
+                    go(level, forall.kind.clone(), new_vars);
+                    go(level.inc(), forall.body.clone(), new_vars);
                 }
                 TypeKind::Hole(hole) => match hole.0.borrow().clone() {
-                    HoleInner::Empty(_, k, _) => {
-                        let name = ctx.new_name();
-                        new_vars.push((name, k));
-                        hole.fill(Type::new(TypeKind::Bound(Level(
-                            env.level.0 + new_vars.len() - 1,
-                        ))));
+                    HoleInner::Empty(n, k, _) => {
+                        new_vars.push((n, k));
+                        let arg = Type::new(TypeKind::Bound(Index(new_vars.len() - 1 + level.0)));
+                        hole.0.replace(HoleInner::Filled(arg));
                     }
-                    HoleInner::Row(_, _, _) => (),
-                    HoleInner::Filled(filled) => go(ctx, env, filled, new_vars),
+                    HoleInner::Row(n, _, _) => {
+                        new_vars.push((n, Type::new(TypeKind::Effect)));
+                        let arg = Type::new(TypeKind::Bound(Index(new_vars.len() - 1 + level.0)));
+                        hole.0.replace(HoleInner::Filled(arg));
+                    }
+
+                    HoleInner::Filled(filled) => go(level, filled, new_vars),
                 },
                 TypeKind::Tuple(t) => {
                     for ty in t.iter() {
-                        go(ctx, env, ty.clone(), new_vars);
+                        go(level, ty.clone(), new_vars);
                     }
                 }
                 TypeKind::Application(f, a) => {
-                    go(ctx, env, f.clone(), new_vars);
-                    go(ctx, env, a.clone(), new_vars);
+                    go(level, f.clone(), new_vars);
+                    go(level, a.clone(), new_vars);
                 }
                 TypeKind::Extend(_, t, u) => {
-                    go(ctx, env, t.clone(), new_vars);
-                    go(ctx, env, u.clone(), new_vars);
+                    go(level, t.clone(), new_vars);
+                    go(level, u.clone(), new_vars);
                 }
                 TypeKind::Type => (),
                 TypeKind::Effect => (),
@@ -121,17 +121,18 @@ impl Context {
 
         let mut vars = Vec::new();
 
-        go(self, env, ty.clone(), &mut vars);
+        let real = ty.clone().quote(env.level);
 
-        vars.iter().fold(ty.clone(), |rest, (name, kind)| {
-            Type::forall(Forall {
+        go(env.level, real.clone(), &mut vars);
+
+        let real = vars.iter().fold(real, |rest, (name, kind)| {
+            Type::forall(real::Forall {
                 name: name.clone(),
                 kind: kind.clone(),
-                body: Closure {
-                    env: env.clone(),
-                    body: rest.quote(env.level),
-                },
+                body: rest,
             })
-        })
+        });
+
+        real.eval(env)
     }
 }
