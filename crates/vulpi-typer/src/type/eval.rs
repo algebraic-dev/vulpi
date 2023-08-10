@@ -4,7 +4,7 @@
 
 use super::{
     r#virtual,
-    r#virtual::TypingEnv,
+    r#virtual::Env,
     r#virtual::Virtual,
     real::{self, Real},
     Hole, HoleInner, Level, Type, TypeKind,
@@ -12,14 +12,15 @@ use super::{
 
 /// Trait for evaluation of types.
 pub trait Eval<T> {
-    fn eval(&self, env: &TypingEnv) -> T;
+    fn eval(&self, env: &Env) -> T;
 }
 
 impl Eval<Type<Virtual>> for Type<Real> {
-    fn eval(&self, env: &TypingEnv) -> Type<Virtual> {
+    fn eval(&self, env: &Env) -> Type<Virtual> {
         match self.as_ref() {
             TypeKind::Pi(pi) => Type::new(TypeKind::Pi(r#virtual::Pi {
                 ty: pi.ty.clone().eval(env),
+                effs: pi.effs.clone().eval(env),
                 body: r#virtual::Closure {
                     env: env.clone(),
                     body: pi.body.clone(),
@@ -54,13 +55,13 @@ impl Eval<Type<Virtual>> for Type<Real> {
 }
 
 impl Eval<Vec<Type<Virtual>>> for Vec<Type<Real>> {
-    fn eval(&self, env: &TypingEnv) -> Vec<Type<Virtual>> {
+    fn eval(&self, env: &Env) -> Vec<Type<Virtual>> {
         self.iter().map(|v| v.eval(env)).collect()
     }
 }
 
 impl Eval<Type<Virtual>> for Hole<Real> {
-    fn eval(&self, env: &TypingEnv) -> Type<Virtual> {
+    fn eval(&self, env: &Env) -> Type<Virtual> {
         match &*self.0.borrow() {
             HoleInner::Empty(l) => Type::new(TypeKind::Hole(Hole::empty(*l))),
             HoleInner::Row(l, r) => Type::new(TypeKind::Hole(Hole::row(*l, r.clone()))),
@@ -69,6 +70,7 @@ impl Eval<Type<Virtual>> for Hole<Real> {
     }
 }
 
+/// Quotation of types.
 pub trait Quote<T> {
     fn quote(&self, lvl: Level) -> T;
 }
@@ -95,6 +97,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
             TypeKind::Type => Type::new(TypeKind::Type),
             TypeKind::Pi(pi) => Type::new(TypeKind::Pi(real::Pi {
                 ty: pi.ty.clone().quote(depth),
+                effs: pi.effs.clone().quote(depth),
                 body: pi
                     .body
                     .apply(None, Type::new(TypeKind::Bound(depth)))
@@ -110,7 +113,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
             })),
             TypeKind::Hole(h) => h.quote(depth),
             TypeKind::Variable(v) => Type::new(TypeKind::Variable(v.clone())),
-            TypeKind::Bound(i) => Type::new(TypeKind::Bound(*i)),
+            TypeKind::Bound(i) => Type::new(TypeKind::Bound(Level::to_index(depth, *i))),
             TypeKind::Tuple(p) => Type::new(TypeKind::Tuple(p.quote(depth))),
             TypeKind::Application(func, arg) => {
                 let func = func.quote(depth);
