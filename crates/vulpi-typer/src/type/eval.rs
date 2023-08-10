@@ -35,6 +35,7 @@ impl Eval<Type<Virtual>> for Type<Real> {
                 },
             })),
             TypeKind::Type => Type::new(TypeKind::Type),
+            TypeKind::Effect => Type::new(TypeKind::Effect),
             TypeKind::Hole(r) => r.eval(env),
             TypeKind::Variable(v) => Type::new(TypeKind::Variable(v.clone())),
             TypeKind::Bound(v) => env.types[v.0].clone(),
@@ -95,6 +96,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
     fn quote(&self, depth: Level) -> Type<Real> {
         match self.as_ref() {
             TypeKind::Type => Type::new(TypeKind::Type),
+            TypeKind::Effect => Type::new(TypeKind::Effect),
             TypeKind::Pi(pi) => Type::new(TypeKind::Pi(real::Pi {
                 ty: pi.ty.clone().quote(depth),
                 effs: pi.effs.clone().quote(depth),

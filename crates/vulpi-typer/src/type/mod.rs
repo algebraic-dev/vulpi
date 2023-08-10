@@ -19,14 +19,17 @@ pub struct Level(usize);
 pub struct Index(usize);
 
 impl Level {
+    /// Increment the level
     pub fn inc(self) -> Self {
         Self(self.0 + 1)
     }
 
+    /// Decrements the level.
     pub fn dec(self) -> Self {
         Self(self.0 - 1)
     }
 
+    /// Transforms a level into an index.
     pub fn to_index(base: Level, current: Level) -> Index {
         Index(base.0 - current.0 - 1)
     }
@@ -45,6 +48,9 @@ pub trait State {
 pub enum TypeKind<S: State> {
     /// The type of types
     Type,
+
+    /// The type of effects
+    Effect,
 
     /// The pi type is used for dependent functions.
     Pi(S::Pi),
@@ -191,7 +197,7 @@ pub mod r#virtual {
     }
 
     impl Type<Virtual> {
-        pub fn application_spine(&self) -> (Self, Vec<Self>) {
+        pub(crate) fn application_spine(&self) -> (Self, Vec<Self>) {
             let mut spine = Vec::new();
             let mut current = self.clone();
 
@@ -205,7 +211,7 @@ pub mod r#virtual {
             (current, spine)
         }
 
-        pub fn row_spine(&self) -> (Option<Self>, Vec<(Qualified, Self)>) {
+        pub(crate) fn row_spine(&self) -> (Option<Self>, Vec<(Qualified, Self)>) {
             let mut spine = Vec::new();
             let mut current = self.clone();
 
@@ -223,6 +229,8 @@ pub mod r#virtual {
 }
 
 pub mod real {
+    use std::fmt::Display;
+
     use vulpi_intern::Symbol;
     use vulpi_syntax::r#abstract::Qualified;
 
@@ -273,7 +281,7 @@ pub mod real {
     }
 
     impl Type<Real> {
-        pub fn application_spine(&self) -> (Self, Vec<Self>) {
+        pub(crate) fn application_spine(&self) -> (Self, Vec<Self>) {
             let mut spine = Vec::new();
             let mut current = self.clone();
 
@@ -287,7 +295,7 @@ pub mod real {
             (current, spine)
         }
 
-        pub fn row_spine(&self) -> (Option<Self>, Vec<(Qualified, Self)>) {
+        pub(crate) fn row_spine(&self) -> (Option<Self>, Vec<(Qualified, Self)>) {
             let mut spine = Vec::new();
             let mut current = self.clone();
 
@@ -321,6 +329,7 @@ pub mod real {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self.as_ref() {
                 TypeKind::Type => write!(f, "Type"),
+                TypeKind::Effect => write!(f, "Effect"),
                 TypeKind::Pi(pi) => {
                     write!(f, "(")?;
                     pi.ty.format(env, f)?;
@@ -357,12 +366,17 @@ pub mod real {
                     }
                     write!(f, ")")
                 }
-                TypeKind::Application(p, a) => {
+                TypeKind::Application(_, _) => {
+                    let (p, args) = self.application_spine();
+                    write!(f, "(")?;
                     p.format(env, f)?;
-                    write!(f, " ")?;
-                    a.format(env, f)
+                    for arg in args {
+                        write!(f, " ")?;
+                        arg.format(env, f)?;
+                    }
+                    write!(f, ")")
                 }
-                TypeKind::Empty => write!(f, "Empty"),
+                TypeKind::Empty => write!(f, "{{}}"),
                 TypeKind::Extend(_, _, _) => {
                     let (last, args) = self.row_spine();
 
@@ -384,6 +398,22 @@ pub mod real {
                 }
                 TypeKind::Error => write!(f, "<ERROR>"),
             }
+        }
+    }
+
+    impl Type<Real> {
+        /// Function that generates a [Show] object responsible for the pretty printing of the type.
+        pub fn show(&self, env: &Env) -> Show {
+            Show(self.clone(), env.clone().into())
+        }
+    }
+
+    /// A interface to show types with the correct names.
+    pub struct Show(Type<Real>, NameEnv);
+
+    impl Display for Show {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            self.0.format(&self.1, f)
         }
     }
 }
