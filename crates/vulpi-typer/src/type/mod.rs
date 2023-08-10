@@ -142,11 +142,10 @@ impl<S: State> Hole<S> {
 }
 
 pub mod r#virtual {
-    use std::{borrow::BorrowMut, cell::RefCell};
+    use std::cell::RefCell;
 
     use vulpi_intern::Symbol;
     use vulpi_location::Span;
-    use vulpi_syntax::r#abstract::Qualified;
 
     use super::{eval::Eval, real::Real, Hole, HoleInner, Kind, Level, State, Type, TypeKind};
 
@@ -225,37 +224,6 @@ pub mod r#virtual {
         type Hole = Hole<Virtual>;
         type Type = Type<Virtual>;
         type Bound = Level;
-    }
-
-    impl Type<Virtual> {
-        pub(crate) fn application_spine(&self) -> (Self, Vec<Self>) {
-            let mut spine = Vec::new();
-            let mut current = self.clone();
-
-            while let TypeKind::Application(left, right) = current.as_ref() {
-                spine.push(right.clone());
-                current = left.clone();
-            }
-
-            spine.reverse();
-
-            (current, spine)
-        }
-
-        pub(crate) fn row_spine(&self) -> (Option<Self>, Vec<(Qualified, Self)>) {
-            let mut spine = Vec::new();
-            let mut current = self.clone();
-
-            while let TypeKind::Extend(label, ty, rest) = current.as_ref() {
-                spine.push((label.clone(), ty.clone()));
-                current = rest.clone();
-            }
-
-            match current.as_ref() {
-                TypeKind::Empty => (None, spine),
-                _ => (Some(current), spine),
-            }
-        }
     }
 
     impl Type<Virtual> {
