@@ -12,11 +12,11 @@ use vulpi_syntax::r#abstract::Qualified;
 
 /// The level of the type. It is used for type checking and type inference.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Level(usize);
+pub struct Level(pub usize);
 
 /// The inverse of a the type. It is used for type checking and type inference.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Index(usize);
+pub struct Index(pub usize);
 
 impl Level {
     /// Increment the level
@@ -94,6 +94,15 @@ impl<S: State> Type<S> {
     pub fn new(kind: TypeKind<S>) -> Self {
         Self(Rc::new(kind))
     }
+
+    /// Checks if the type is a effect type.
+    pub fn is_effect(&self) -> bool {
+        matches!(self.0.as_ref(), TypeKind::Effect)
+    }
+
+    pub fn forall(forall: S::Forall) -> Self {
+        Self::new(TypeKind::Forall(forall))
+    }
 }
 
 impl<S: State> AsRef<TypeKind<S>> for Type<S> {
@@ -104,14 +113,15 @@ impl<S: State> AsRef<TypeKind<S>> for Type<S> {
 
 /// The inside of a hole. It contains a Level in the Empty in order to avoid infinite loops and
 /// the hole to go out of scope.
+#[derive(Clone)]
 pub enum HoleInner<S: State> {
-    Empty(Symbol, Level),
+    Empty(Symbol, Kind<S>, Level),
     Row(Symbol, Level, HashSet<Symbol>),
     Filled(Type<S>),
 }
 
 /// A hole is a type that is not yet known. It is used for type inference.
-pub struct Hole<S: State>(Rc<RefCell<HoleInner<S>>>);
+pub struct Hole<S: State>(pub Rc<RefCell<HoleInner<S>>>);
 
 impl<S: State> Hole<S> {
     pub fn new(hole_inner: HoleInner<S>) -> Self {
@@ -122,8 +132,8 @@ impl<S: State> Hole<S> {
         Self(Rc::new(RefCell::new(HoleInner::Row(name, level, labels))))
     }
 
-    pub fn empty(name: Symbol, level: Level) -> Self {
-        Self(Rc::new(RefCell::new(HoleInner::Empty(name, level))))
+    pub fn empty(name: Symbol, kind: Kind<S>, level: Level) -> Self {
+        Self(Rc::new(RefCell::new(HoleInner::Empty(name, kind, level))))
     }
 
     pub fn fill(&self, ty: Type<S>) {
@@ -132,13 +142,13 @@ impl<S: State> Hole<S> {
 }
 
 pub mod r#virtual {
-    use std::cell::RefCell;
+    use std::{borrow::BorrowMut, cell::RefCell};
 
     use vulpi_intern::Symbol;
     use vulpi_location::Span;
     use vulpi_syntax::r#abstract::Qualified;
 
-    use super::{eval::Eval, real::Real, Hole, Level, State, Type, TypeKind};
+    use super::{eval::Eval, real::Real, Hole, HoleInner, Kind, Level, State, Type, TypeKind};
 
     /// The virtual state is used as label for the [State] trait as a way to express that the type
     /// contains closures and can be executed.
@@ -169,8 +179,8 @@ pub mod r#virtual {
             clone
         }
 
-        pub fn hole(&self, label: Symbol) -> Type<Virtual> {
-            Type::new(TypeKind::Hole(Hole::empty(label, self.level)))
+        pub fn hole(&self, kind: Kind<Virtual>, label: Symbol) -> Type<Virtual> {
+            Type::new(TypeKind::Hole(Hole::empty(label, kind, self.level)))
         }
 
         pub fn lacks(&self, symbol: Symbol) -> Type<Virtual> {
@@ -205,7 +215,7 @@ pub mod r#virtual {
     /// A forall with binder so we can bind on types that have higher kinds and ranks.
     pub struct Forall {
         pub name: Symbol,
-        pub ty: Type<Virtual>,
+        pub kind: Type<Virtual>,
         pub body: Closure,
     }
 
@@ -244,6 +254,18 @@ pub mod r#virtual {
             match current.as_ref() {
                 TypeKind::Empty => (None, spine),
                 _ => (Some(current), spine),
+            }
+        }
+    }
+
+    impl Type<Virtual> {
+        pub fn deref(&self) -> Type<Virtual> {
+            match self.as_ref() {
+                TypeKind::Hole(h) => match &*h.0.borrow() {
+                    HoleInner::Filled(ty) => ty.deref(),
+                    _ => self.clone(),
+                },
+                _ => self.clone(),
             }
         }
     }
@@ -340,7 +362,7 @@ pub mod real {
     impl Formattable for Hole<Real> {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &*self.0.borrow() {
-                HoleInner::Empty(s, _) => write!(f, "^{}", s.get()),
+                HoleInner::Empty(s, _, _) => write!(f, "^{}", s.get()),
                 HoleInner::Row(s, _, _) => write!(f, "~{}", s.get()),
                 HoleInner::Filled(forall) => forall.format(env, f),
             }

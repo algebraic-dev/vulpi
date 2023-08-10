@@ -28,7 +28,7 @@ impl Eval<Type<Virtual>> for Type<Real> {
             })),
             TypeKind::Forall(f) => Type::new(TypeKind::Forall(r#virtual::Forall {
                 name: f.name.clone(),
-                ty: f.ty.clone().eval(env),
+                kind: f.ty.clone().eval(env),
                 body: r#virtual::Closure {
                     env: env.clone(),
                     body: f.body.clone(),
@@ -64,7 +64,9 @@ impl Eval<Vec<Type<Virtual>>> for Vec<Type<Real>> {
 impl Eval<Type<Virtual>> for Hole<Real> {
     fn eval(&self, env: &Env) -> Type<Virtual> {
         match &*self.0.borrow() {
-            HoleInner::Empty(s, l) => Type::new(TypeKind::Hole(Hole::empty(s.clone(), *l))),
+            HoleInner::Empty(s, k, l) => {
+                Type::new(TypeKind::Hole(Hole::empty(s.clone(), k.eval(env), *l)))
+            }
             HoleInner::Row(s, l, r) => {
                 Type::new(TypeKind::Hole(Hole::row(s.clone(), *l, r.clone())))
             }
@@ -79,13 +81,15 @@ pub trait Quote<T> {
 }
 
 impl Quote<Type<Real>> for Hole<Virtual> {
-    fn quote(&self, lvl: Level) -> Type<Real> {
+    fn quote(&self, depth: Level) -> Type<Real> {
         match &*self.0.borrow() {
-            HoleInner::Empty(s, l) => Type::new(TypeKind::Hole(Hole::empty(s.clone(), *l))),
+            HoleInner::Empty(s, k, l) => {
+                Type::new(TypeKind::Hole(Hole::empty(s.clone(), k.quote(depth), *l)))
+            }
             HoleInner::Row(s, l, r) => {
                 Type::new(TypeKind::Hole(Hole::row(s.clone(), *l, r.clone())))
             }
-            HoleInner::Filled(f) => f.clone().quote(lvl),
+            HoleInner::Filled(f) => f.clone().quote(depth),
         }
     }
 }
@@ -111,7 +115,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
             })),
             TypeKind::Forall(f) => Type::new(TypeKind::Forall(real::Forall {
                 name: f.name.clone(),
-                ty: f.ty.clone().quote(depth),
+                ty: f.kind.clone().quote(depth),
                 body: f
                     .body
                     .apply(Some(f.name.clone()), Type::new(TypeKind::Bound(depth)))
