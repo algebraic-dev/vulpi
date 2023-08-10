@@ -224,6 +224,7 @@ pub mod r#virtual {
 
 pub mod real {
     use vulpi_intern::Symbol;
+    use vulpi_syntax::r#abstract::Qualified;
 
     use super::{r#virtual::Env, Hole, HoleInner, Index, State, Type, TypeKind};
 
@@ -259,7 +260,7 @@ pub mod real {
 
     impl From<Env> for NameEnv {
         fn from(env: Env) -> Self {
-            Self(env.names.clone())
+            Self(env.names)
         }
     }
 
@@ -270,6 +271,38 @@ pub mod real {
             clone
         }
     }
+
+    impl Type<Real> {
+        pub fn application_spine(&self) -> (Self, Vec<Self>) {
+            let mut spine = Vec::new();
+            let mut current = self.clone();
+
+            while let TypeKind::Application(left, right) = current.as_ref() {
+                spine.push(right.clone());
+                current = left.clone();
+            }
+
+            spine.reverse();
+
+            (current, spine)
+        }
+
+        pub fn row_spine(&self) -> (Option<Self>, Vec<(Qualified, Self)>) {
+            let mut spine = Vec::new();
+            let mut current = self.clone();
+
+            while let TypeKind::Extend(label, ty, rest) = current.as_ref() {
+                spine.push((label.clone(), ty.clone()));
+                current = rest.clone();
+            }
+
+            match current.as_ref() {
+                TypeKind::Empty => (None, spine),
+                _ => (Some(current), spine),
+            }
+        }
+    }
+
     trait Formattable {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
     }
@@ -278,7 +311,7 @@ pub mod real {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &*self.0.borrow() {
                 HoleInner::Empty(e) => write!(f, "^{}", e.0),
-                HoleInner::Row(e, s) => write!(f, "~{}", e.0),
+                HoleInner::Row(e, _) => write!(f, "~{}", e.0),
                 HoleInner::Filled(forall) => forall.format(env, f),
             }
         }
@@ -329,9 +362,27 @@ pub mod real {
                     write!(f, " ")?;
                     a.format(env, f)
                 }
-                TypeKind::Empty => todo!(),
-                TypeKind::Extend(_, _, _) => todo!(),
-                TypeKind::Error => todo!(),
+                TypeKind::Empty => write!(f, "Empty"),
+                TypeKind::Extend(_, _, _) => {
+                    let (last, args) = self.row_spine();
+
+                    write!(f, "{{")?;
+
+                    for (i, (_, e)) in args.iter().enumerate() {
+                        e.format(env, f)?;
+                        if i != args.len() - 1 {
+                            write!(f, ", ")?;
+                        }
+                    }
+
+                    if let Some(last) = last {
+                        write!(f, " | ")?;
+                        last.format(env, f)?;
+                    }
+
+                    write!(f, "}}")
+                }
+                TypeKind::Error => write!(f, "<ERROR>"),
             }
         }
     }
