@@ -36,7 +36,7 @@ impl Eval<Type<Virtual>> for Type<Real> {
             TypeKind::Type => Type::new(TypeKind::Type),
             TypeKind::Hole(r) => r.eval(env),
             TypeKind::Variable(v) => Type::new(TypeKind::Variable(v.clone())),
-            TypeKind::Bound(v) => Type::new(TypeKind::Bound(*v)),
+            TypeKind::Bound(v) => env.types[v.0].clone(),
             TypeKind::Tuple(v) => Type::new(TypeKind::Tuple(v.clone().eval(env))),
             TypeKind::Application(v, u) => Type::new(TypeKind::Application(
                 v.clone().eval(env),
