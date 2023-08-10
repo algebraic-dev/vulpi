@@ -14,6 +14,16 @@ use vulpi_syntax::r#abstract::Qualified;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Level(usize);
 
+impl Level {
+    pub fn inc(self) -> Self {
+        Self(self.0 + 1)
+    }
+
+    pub fn dec(self) -> Self {
+        Self(self.0 - 1)
+    }
+}
+
 /// The state of the type. It's used for diferentiating between the real and virtual type.
 pub trait State {
     type Pi;
@@ -40,7 +50,7 @@ pub enum TypeKind<S: State> {
     Variable(Qualified),
 
     /// De brujin indexed type.
-    Bound(usize),
+    Bound(Level),
 
     /// The type for tuples.
     Tuple(Vec<S::Type>),
@@ -106,7 +116,7 @@ impl<S: State> Hole<S> {
 pub mod r#virtual {
     use vulpi_intern::Symbol;
 
-    use super::{real::Real, Hole, Level, State, Type};
+    use super::{eval::Eval, real::Real, Hole, Level, State, Type};
 
     /// The virtual state is used as label for the [State] trait as a way to express that the type
     /// contains closures and can be executed.
@@ -116,14 +126,30 @@ pub mod r#virtual {
     /// The typing environment is used for type checking and type inference.
     #[derive(Clone)]
     pub struct TypingEnv {
-        pub names: im_rc::Vector<Symbol>,
+        pub names: im_rc::Vector<Option<Symbol>>,
         pub types: im_rc::Vector<Type<Virtual>>,
         pub level: Level,
+    }
+
+    impl TypingEnv {
+        pub fn add(&self, name: Option<Symbol>, ty: Type<Virtual>) -> Self {
+            let mut clone = self.clone();
+            clone.names.push_back(name);
+            clone.types.push_back(ty);
+            clone.level = clone.level.inc();
+            clone
+        }
     }
 
     pub struct Closure {
         pub env: TypingEnv,
         pub body: Type<Real>,
+    }
+
+    impl Closure {
+        pub fn apply(&self, name: Option<Symbol>, arg: Type<Virtual>) -> Type<Virtual> {
+            self.body.eval(&self.env.add(name, arg))
+        }
     }
 
     /// A pi type without binder. It's used for a bunch of things but not right now :>

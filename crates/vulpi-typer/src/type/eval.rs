@@ -3,8 +3,11 @@
 //! types.
 
 use super::{
-    r#virtual, r#virtual::TypingEnv, r#virtual::Virtual, real::Real, Hole, HoleInner, Type,
-    TypeKind,
+    r#virtual,
+    r#virtual::TypingEnv,
+    r#virtual::Virtual,
+    real::{self, Real},
+    Hole, HoleInner, Level, Type, TypeKind,
 };
 
 /// Trait for evaluation of types.
@@ -62,6 +65,65 @@ impl Eval<Type<Virtual>> for Hole<Real> {
             HoleInner::Empty(l) => Type::new(TypeKind::Hole(Hole::empty(*l))),
             HoleInner::Row(l, r) => Type::new(TypeKind::Hole(Hole::row(*l, r.clone()))),
             HoleInner::Filled(f) => f.clone().eval(env),
+        }
+    }
+}
+
+pub trait Quote<T> {
+    fn quote(&self, lvl: Level) -> T;
+}
+
+impl Quote<Type<Real>> for Hole<Virtual> {
+    fn quote(&self, lvl: Level) -> Type<Real> {
+        match &*self.0.borrow() {
+            HoleInner::Empty(l) => Type::new(TypeKind::Hole(Hole::empty(*l))),
+            HoleInner::Row(l, r) => Type::new(TypeKind::Hole(Hole::row(*l, r.clone()))),
+            HoleInner::Filled(f) => f.clone().quote(lvl),
+        }
+    }
+}
+
+impl Quote<Vec<Type<Real>>> for Vec<Type<Virtual>> {
+    fn quote(&self, lvl: Level) -> Vec<Type<Real>> {
+        self.iter().map(|v| v.quote(lvl)).collect()
+    }
+}
+
+impl Quote<Type<Real>> for Type<Virtual> {
+    fn quote(&self, depth: Level) -> Type<Real> {
+        match self.as_ref() {
+            TypeKind::Type => Type::new(TypeKind::Type),
+            TypeKind::Pi(pi) => Type::new(TypeKind::Pi(real::Pi {
+                ty: pi.ty.clone().quote(depth),
+                body: pi
+                    .body
+                    .apply(None, Type::new(TypeKind::Bound(depth)))
+                    .quote(depth.inc()),
+            })),
+            TypeKind::Forall(f) => Type::new(TypeKind::Forall(real::Forall {
+                name: f.name.clone(),
+                ty: f.ty.clone().quote(depth),
+                body: f
+                    .body
+                    .apply(Some(f.name.clone()), Type::new(TypeKind::Bound(depth)))
+                    .quote(depth.inc()),
+            })),
+            TypeKind::Hole(h) => h.quote(depth),
+            TypeKind::Variable(v) => Type::new(TypeKind::Variable(v.clone())),
+            TypeKind::Bound(i) => Type::new(TypeKind::Bound(*i)),
+            TypeKind::Tuple(p) => Type::new(TypeKind::Tuple(p.quote(depth))),
+            TypeKind::Application(func, arg) => {
+                let func = func.quote(depth);
+                let arg = arg.quote(depth);
+                Type::new(TypeKind::Application(func, arg))
+            }
+            TypeKind::Empty => Type::new(TypeKind::Empty),
+            TypeKind::Extend(label, t, u) => Type::new(TypeKind::Extend(
+                label.clone(),
+                t.clone().quote(depth),
+                u.clone().quote(depth),
+            )),
+            TypeKind::Error => Type::new(TypeKind::Error),
         }
     }
 }
