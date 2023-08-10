@@ -64,8 +64,10 @@ impl Eval<Vec<Type<Virtual>>> for Vec<Type<Real>> {
 impl Eval<Type<Virtual>> for Hole<Real> {
     fn eval(&self, env: &Env) -> Type<Virtual> {
         match &*self.0.borrow() {
-            HoleInner::Empty(l) => Type::new(TypeKind::Hole(Hole::empty(*l))),
-            HoleInner::Row(l, r) => Type::new(TypeKind::Hole(Hole::row(*l, r.clone()))),
+            HoleInner::Empty(s, l) => Type::new(TypeKind::Hole(Hole::empty(s.clone(), *l))),
+            HoleInner::Row(s, l, r) => {
+                Type::new(TypeKind::Hole(Hole::row(s.clone(), *l, r.clone())))
+            }
             HoleInner::Filled(f) => f.clone().eval(env),
         }
     }
@@ -79,8 +81,10 @@ pub trait Quote<T> {
 impl Quote<Type<Real>> for Hole<Virtual> {
     fn quote(&self, lvl: Level) -> Type<Real> {
         match &*self.0.borrow() {
-            HoleInner::Empty(l) => Type::new(TypeKind::Hole(Hole::empty(*l))),
-            HoleInner::Row(l, r) => Type::new(TypeKind::Hole(Hole::row(*l, r.clone()))),
+            HoleInner::Empty(s, l) => Type::new(TypeKind::Hole(Hole::empty(s.clone(), *l))),
+            HoleInner::Row(s, l, r) => {
+                Type::new(TypeKind::Hole(Hole::row(s.clone(), *l, r.clone())))
+            }
             HoleInner::Filled(f) => f.clone().quote(lvl),
         }
     }

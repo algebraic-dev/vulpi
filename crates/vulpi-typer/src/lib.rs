@@ -2,4 +2,5 @@
 //! higher rank, higher kinded, algebraic type system. It is also responsible for type inference
 //! and type checking of the ambient effects system.
 
+pub mod context;
 pub mod r#type;

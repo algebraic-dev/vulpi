@@ -105,8 +105,8 @@ impl<S: State> AsRef<TypeKind<S>> for Type<S> {
 /// The inside of a hole. It contains a Level in the Empty in order to avoid infinite loops and
 /// the hole to go out of scope.
 pub enum HoleInner<S: State> {
-    Empty(Level),
-    Row(Level, HashSet<Symbol>),
+    Empty(Symbol, Level),
+    Row(Symbol, Level, HashSet<Symbol>),
     Filled(Type<S>),
 }
 
@@ -118,12 +118,12 @@ impl<S: State> Hole<S> {
         Self(Rc::new(RefCell::new(hole_inner)))
     }
 
-    pub fn row(level: Level, labels: HashSet<Symbol>) -> Self {
-        Self(Rc::new(RefCell::new(HoleInner::Row(level, labels))))
+    pub fn row(name: Symbol, level: Level, labels: HashSet<Symbol>) -> Self {
+        Self(Rc::new(RefCell::new(HoleInner::Row(name, level, labels))))
     }
 
-    pub fn empty(level: Level) -> Self {
-        Self(Rc::new(RefCell::new(HoleInner::Empty(level))))
+    pub fn empty(name: Symbol, level: Level) -> Self {
+        Self(Rc::new(RefCell::new(HoleInner::Empty(name, level))))
     }
 
     pub fn fill(&self, ty: Type<S>) {
@@ -132,7 +132,10 @@ impl<S: State> Hole<S> {
 }
 
 pub mod r#virtual {
+    use std::cell::RefCell;
+
     use vulpi_intern::Symbol;
+    use vulpi_location::Span;
     use vulpi_syntax::r#abstract::Qualified;
 
     use super::{eval::Eval, real::Real, Hole, Level, State, Type, TypeKind};
@@ -148,9 +151,15 @@ pub mod r#virtual {
         pub names: im_rc::Vector<Option<Symbol>>,
         pub types: im_rc::Vector<Type<Virtual>>,
         pub level: Level,
+        pub span: RefCell<Span>,
     }
 
     impl Env {
+        /// Sets the location of the environment. It is used for error reporting.
+        pub fn on(&self, span: Span) {
+            *self.span.borrow_mut() = span;
+        }
+
         /// Adds a type to the environment.
         pub fn add(&self, name: Option<Symbol>, ty: Type<Virtual>) -> Self {
             let mut clone = self.clone();
@@ -158,6 +167,18 @@ pub mod r#virtual {
             clone.types.push_front(ty);
             clone.level = clone.level.inc();
             clone
+        }
+
+        pub fn hole(&self, label: Symbol) -> Type<Virtual> {
+            Type::new(TypeKind::Hole(Hole::empty(label, self.level)))
+        }
+
+        pub fn lacks(&self, symbol: Symbol) -> Type<Virtual> {
+            Type::new(TypeKind::Hole(Hole::row(
+                symbol,
+                self.level,
+                im_rc::HashSet::new(),
+            )))
         }
     }
 
@@ -263,6 +284,7 @@ pub mod real {
         type Bound = Index;
     }
 
+    /// Environment of names that is useful for pretty printing.
     #[derive(Clone)]
     struct NameEnv(im_rc::Vector<Option<Symbol>>);
 
@@ -318,8 +340,8 @@ pub mod real {
     impl Formattable for Hole<Real> {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match &*self.0.borrow() {
-                HoleInner::Empty(e) => write!(f, "^{}", e.0),
-                HoleInner::Row(e, _) => write!(f, "~{}", e.0),
+                HoleInner::Empty(s, _) => write!(f, "^{}", s.get()),
+                HoleInner::Row(s, _, _) => write!(f, "~{}", s.get()),
                 HoleInner::Filled(forall) => forall.format(env, f),
             }
         }
