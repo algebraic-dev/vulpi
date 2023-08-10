@@ -52,10 +52,20 @@ impl Context {
             }
         }
 
-        let result = go(self, env.clone(), left, right);
+        let result = go(self, env.clone(), left.clone(), right.clone());
 
         if let Err(kind) = result {
-            self.report(&env, kind);
+            match kind {
+                TypeErrorKind::TypeMismatch(_, _, _) => self.report(
+                    &env,
+                    TypeErrorKind::TypeMismatch(
+                        env.clone(),
+                        left.quote(env.level),
+                        right.quote(env.level),
+                    ),
+                ),
+                _ => self.report(&env, kind),
+            }
         }
     }
 
