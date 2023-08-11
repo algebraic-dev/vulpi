@@ -1020,7 +1020,10 @@ impl Resolve for LetDecl {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         ctx.scope::<Variable, _>(|ctx| abs::LetDecl {
             visibility: self.visibility.resolve(ctx),
-            name: self.name.symbol(),
+            name: Qualified {
+                path: ctx.current(),
+                name: self.name.symbol(),
+            },
             binders: self.binders.resolve(ctx),
             ret: self.ret.map(|x| (x.1.resolve(ctx), x.2.resolve(ctx))),
             body: self.body.resolve(ctx),

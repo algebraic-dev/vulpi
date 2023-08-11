@@ -398,7 +398,7 @@ pub struct Binder {
 #[derive(Show)]
 pub struct LetDecl {
     pub visibility: Visibility,
-    pub name: Symbol,
+    pub name: Qualified,
     pub binders: Vec<Binder>,
     pub ret: Option<(Option<Effects>, Type)>,
     pub body: LetMode,

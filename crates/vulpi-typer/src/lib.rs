@@ -2,17 +2,23 @@
 //! higher rank, higher kinded, algebraic type system. It is also responsible for type inference
 //! and type checking of the ambient effects system.
 
+use std::collections::HashMap;
+
 pub use context::Context;
 use r#type::real::Arrow;
 use r#type::TypeKind;
 pub use r#type::{r#virtual::Env, Type};
 pub use r#type::{r#virtual::Virtual, real::Real, Kind};
+use vulpi_intern::Symbol;
+use vulpi_syntax::elaborated::Decl;
+use vulpi_syntax::r#abstract::LetDecl;
 
 use crate::r#type::eval::{Eval, Quote};
 use crate::r#type::real::Forall;
 use crate::r#type::Index;
 use infer::Infer;
-use module::{Def, TypeData};
+use module::{Def, LetDef, TypeData};
+
 use vulpi_syntax::{
     elaborated,
     r#abstract::{EffectDecl, ExternalDecl, Module, ModuleDecl, TypeDecl, TypeDef},
@@ -168,17 +174,26 @@ impl Declare for ExternalDecl {
     fn declare(&self, (ctx, mut env): (&mut Context, Env)) {
         let fvs = self.ty.data.free_variables();
 
+        let mut unbound = Vec::new();
+
         for fv in fvs {
-            env = env.add(Some(fv), ctx.hole(&env, Type::typ()));
+            let ty = ctx.hole(&env, Type::typ());
+            env = env.add(Some(fv.clone()), ty.clone());
+            unbound.push((fv, ty))
         }
 
         let (typ, k) = self.ty.infer((ctx, env.clone()));
         ctx.subsumes(env.clone(), k, Kind::typ());
 
-        ctx.modules
-            .get(&self.namespace)
-            .variables
-            .insert(self.name.clone(), typ.eval(&env));
+        ctx.modules.get(&self.namespace).variables.insert(
+            self.name.clone(),
+            LetDef {
+                typ: typ.eval(&env),
+                binders: Default::default(),
+                unbound,
+                unbound_effects: vec![],
+            },
+        );
     }
 }
 
@@ -193,7 +208,7 @@ impl Declare for EffectDecl {
             names.push(n);
         }
 
-        let kind = Type::<Virtual>::function(binders.clone(), Type::typ());
+        let kind = Type::<Virtual>::function(binders.clone(), Type::effect());
 
         let effects = self
             .effects
@@ -207,9 +222,14 @@ impl Declare for EffectDecl {
                 kind,
                 binders: names.into_iter().zip(binders.into_iter()).collect(),
                 module: self.namespace.clone(),
-                def: Def::Effect(effects),
+                def: Def::Effect(effects.clone()),
             },
         );
+
+        context
+            .elaborated
+            .decls
+            .insert(self.name.clone(), Decl::Effect(effects));
     }
 
     fn define(&self, (ctx, mut env): (&mut Context, Env)) {
@@ -323,8 +343,131 @@ impl Declare for EffectDecl {
     }
 }
 
+impl Declare for LetDecl {
+    fn declare(&self, (ctx, mut env): (&mut Context, Env)) {
+        let has_effect = self.ret.as_ref().map(|x| x.0.is_some()).unwrap_or_default();
+
+        if has_effect && self.binders.is_empty() {
+            ctx.report(&env, errors::TypeErrorKind::AtLeastOneArgument);
+            return;
+        }
+
+        let mut efvs = self
+            .ret
+            .as_ref()
+            .and_then(|x| {
+                x.0.as_ref()
+                    .and_then(|x| x.rest.as_ref().map(|x| x.data.free_effects()))
+            })
+            .unwrap_or_default();
+
+        let mut fvs = self
+            .ret
+            .as_ref()
+            .map(|x| x.1.data.free_variables())
+            .unwrap_or_default();
+
+        for arg in &self.binders {
+            fvs.extend(arg.ty.data.free_variables());
+            efvs.extend(arg.ty.data.free_effects());
+        }
+
+        let mut bound = Vec::new();
+        let mut effect_bounds = Vec::new();
+
+        for fv in fvs {
+            let ty = ctx.hole(&env, Type::typ());
+            env = env.add(Some(fv.clone()), ty.clone());
+            bound.push((fv, ty));
+        }
+
+        for fv in efvs {
+            let ty = ctx.lacks(&env, Default::default());
+            env = env.add(Some(fv.clone()), ty.clone());
+            effect_bounds.push((fv, ty));
+        }
+
+        let mut args = Vec::new();
+
+        let mut binders: HashMap<Symbol, Type<Virtual>> = Default::default();
+
+        for arg in &self.binders {
+            let (ty, kind) = arg.ty.infer((ctx, env.clone()));
+            env.on(arg.ty.span.clone());
+            ctx.subsumes(env.clone(), kind, Kind::typ());
+
+            let mut hash_map = Default::default();
+            let pat_ty = arg.pattern.infer((ctx, &mut hash_map, env.clone()));
+
+            binders.extend(hash_map);
+
+            ctx.subsumes(env.clone(), pat_ty, ty.eval(&env));
+
+            args.push(ty);
+        }
+
+        let (effs, ret) = if let Some((eff, ret)) = &self.ret {
+            let effs = eff.infer((ctx, env.clone()));
+
+            let (ty, kind) = ret.infer((ctx, env.clone()));
+            env.on(ret.span.clone());
+            ctx.subsumes(env.clone(), kind, Kind::typ());
+
+            (effs, ty)
+        } else {
+            (Type::new(TypeKind::Empty), ctx.hole(&env, Kind::typ()))
+        };
+
+        let ret = if has_effect {
+            let ty = args.pop().unwrap();
+
+            Type::new(TypeKind::Arrow(Arrow {
+                ty,
+                effs,
+                body: ret,
+            }))
+        } else {
+            ret
+        };
+
+        let mut typ = Type::<Real>::function(args.clone(), ret);
+
+        for (name, _) in effect_bounds.clone() {
+            typ = Type::forall(Forall {
+                name,
+                kind: Type::row(),
+                body: typ,
+            });
+        }
+
+        for (name, kind) in bound.clone() {
+            typ = Type::forall(Forall {
+                name,
+                kind: kind.quote(env.level),
+                body: typ,
+            });
+        }
+
+        ctx.modules.get(&self.name.path.clone()).variables.insert(
+            self.name.name.clone(),
+            LetDef {
+                typ: typ.eval(&env),
+                binders,
+                unbound: bound,
+                unbound_effects: effect_bounds,
+            },
+        );
+    }
+}
+
 impl Declare for ModuleDecl {
     fn declare(&self, (ctx, env): (&mut Context, Env)) {
+        if let Some(modules) = self.modules() {
+            for decl in modules {
+                decl.declare((ctx, env.clone()));
+            }
+        }
+
         if let Some(types) = self.types() {
             for decl in types {
                 decl.declare((ctx, env.clone()));
@@ -342,9 +485,21 @@ impl Declare for ModuleDecl {
                 decl.declare((ctx, env.clone()));
             }
         }
+
+        if let Some(lets) = self.lets() {
+            for decl in lets {
+                decl.declare((ctx, env.clone()));
+            }
+        }
     }
 
     fn define(&self, (ctx, env): (&mut Context, Env)) {
+        if let Some(modules) = self.modules() {
+            for decl in modules {
+                decl.declare((ctx, env.clone()));
+            }
+        }
+
         if let Some(types) = self.types() {
             for decl in types {
                 decl.define((ctx, env.clone()));
@@ -354,6 +509,18 @@ impl Declare for ModuleDecl {
         if let Some(effects) = self.effects() {
             for decl in effects {
                 decl.define((ctx, env.clone()));
+            }
+        }
+
+        if let Some(externals) = self.externals() {
+            for decl in externals {
+                decl.define((ctx, env.clone()));
+            }
+        }
+
+        if let Some(lets) = self.lets() {
+            for decl in lets {
+                decl.declare((ctx, env.clone()));
             }
         }
     }
@@ -373,6 +540,10 @@ impl Declare for Module {
             decl.declare((ctx, env.clone()));
         }
 
+        for decl in self.lets() {
+            decl.declare((ctx, env.clone()));
+        }
+
         for externals in self.externals() {
             externals.declare((ctx, env.clone()));
         }
@@ -388,6 +559,10 @@ impl Declare for Module {
         }
 
         for decl in self.types() {
+            decl.define((ctx, env.clone()));
+        }
+
+        for decl in self.lets() {
             decl.define((ctx, env.clone()));
         }
     }

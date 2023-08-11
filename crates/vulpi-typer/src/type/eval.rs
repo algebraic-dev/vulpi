@@ -114,7 +114,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
                 kind: f.kind.clone().quote(depth),
                 body: f
                     .body
-                    .apply(Some(f.name.clone()), Type::new(TypeKind::Bound(depth)))
+                    .apply_local(Some(f.name.clone()), Type::new(TypeKind::Bound(depth)))
                     .quote(depth.inc()),
             })),
             TypeKind::Hole(h) => h.quote(depth),

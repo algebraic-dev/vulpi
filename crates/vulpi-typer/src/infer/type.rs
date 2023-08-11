@@ -95,7 +95,7 @@ impl Infer for r#abstract::Type {
                 (forall, kind)
             }
             TypeKind::TypeVariable(name) => {
-                let Some((index, kind)) = env.find(name) else {
+                let Some((index, _, kind)) = env.find(name) else {
                     ctx.report(&env, TypeErrorKind::CannotFind(name.clone()));
                     return (Type::error(), Type::error())
                 };

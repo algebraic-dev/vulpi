@@ -4,7 +4,7 @@ use vulpi_syntax::r#abstract::Effects;
 
 use crate::{
     context::Context,
-    r#type::{eval::Eval, r#virtual::Env, real::Real, Type, TypeKind},
+    r#type::{r#virtual::Env, real::Real, Type, TypeKind},
 };
 
 use super::Infer;
@@ -24,10 +24,11 @@ impl Infer for Option<Effects> {
             };
 
             for effect in effects.effects.iter().rev() {
+                env.on(effect.span.clone());
+
                 let (ty, kind) = effect.infer((ctx, env.clone()));
-                let eval_ty = ty.eval(&env);
-                ctx.subsumes(env.clone(), kind, crate::r#type::Kind::typ());
-                ctx.subsumes(env.clone(), eval_ty, crate::r#type::Type::effect());
+
+                ctx.subsumes(env.clone(), kind, crate::r#type::Kind::effect());
 
                 let (head, _) = ty.application_spine();
 

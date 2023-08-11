@@ -41,7 +41,7 @@ impl Context {
                         ctx,
                         env.add(None, lvl_ty.clone()),
                         l.clone(),
-                        forall.body.apply(None, lvl_ty),
+                        forall.body.apply_local(None, lvl_ty),
                     )
                 }
                 (TypeKind::Forall(_), _) => {
@@ -73,7 +73,7 @@ impl Context {
         match right.deref().as_ref() {
             TypeKind::Forall(forall) => {
                 let lvl_ty = Type::new(TypeKind::Bound(env.level));
-                self.sub_hole_type(env, left, forall.body.apply(None, lvl_ty))
+                self.sub_hole_type(env, left, forall.body.apply_local(None, lvl_ty))
             }
             TypeKind::Arrow(pi) => {
                 let HoleInner::Empty(_, kind, _) = left.0.borrow().clone() else { unreachable!() };
@@ -83,7 +83,7 @@ impl Context {
 
                 left.fill(Type::new(TypeKind::Arrow(Pi {
                     ty: hole_a.clone(),
-                    effs: self.lacks(&env, Default::default()),
+                    effs: pi.effs.clone(),
                     body: hole_b.clone(),
                 })));
 
@@ -115,7 +115,7 @@ impl Context {
 
                 right.fill(Type::new(TypeKind::Arrow(Pi {
                     ty: hole_a.clone(),
-                    effs: self.lacks(&env, Default::default()),
+                    effs: pi.effs.clone(),
                     body: hole_b.clone(),
                 })));
 
@@ -175,7 +175,7 @@ impl Context {
             }
             TypeKind::Forall(forall) => {
                 let lvl_ty = Type::new(TypeKind::Bound(env.level));
-                self.occurs(env, scope, hole, forall.body.apply(None, lvl_ty))
+                self.occurs(env, scope, hole, forall.body.apply_local(None, lvl_ty))
             }
             TypeKind::Hole(h) if h.clone() == hole => Err(TypeErrorKind::InfiniteType),
             TypeKind::Bound(l) if l >= scope => Err(TypeErrorKind::EscapingScope),

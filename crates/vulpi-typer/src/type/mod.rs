@@ -215,7 +215,7 @@ pub mod r#virtual {
     pub struct Env {
         pub names: im_rc::Vector<Option<Symbol>>,
         pub types: im_rc::Vector<Type<Virtual>>,
-        pub kinds: im_rc::Vector<Kind<Virtual>>,
+        pub kinds: im_rc::Vector<Type<Virtual>>,
         pub level: Level,
         pub span: RefCell<Span>,
     }
@@ -226,20 +226,36 @@ pub mod r#virtual {
             *self.span.borrow_mut() = span;
         }
 
-        pub fn find(&self, name: &Symbol) -> Option<(usize, Type<Virtual>)> {
+        pub fn find(&self, name: &Symbol) -> Option<(usize, Type<Virtual>, Type<Virtual>)> {
             self.names
                 .iter()
                 .zip(self.types.iter())
+                .zip(self.kinds.iter())
                 .enumerate()
-                .find(|(_, (n, _))| n.as_ref() == Some(name))
-                .map(|(i, (_, ty))| (i, ty.clone()))
+                .find_map(|(i, ((n, t), k))| {
+                    if n.as_ref() == Some(name) {
+                        Some((i, t.clone(), k.clone()))
+                    } else {
+                        None
+                    }
+                })
         }
 
         /// Adds a type to the environment.
-        pub fn add(&self, name: Option<Symbol>, ty: Type<Virtual>) -> Self {
+        pub fn add(&self, name: Option<Symbol>, kind: Type<Virtual>) -> Self {
+            let mut clone = self.clone();
+            clone.names.push_front(name);
+            clone.types.push_front(Type::bound(clone.level));
+            clone.kinds.push_front(kind);
+            clone.level = clone.level.inc();
+            clone
+        }
+
+        pub fn define(&self, name: Option<Symbol>, ty: Type<Virtual>, kind: Type<Virtual>) -> Self {
             let mut clone = self.clone();
             clone.names.push_front(name);
             clone.types.push_front(ty);
+            clone.kinds.push_front(kind);
             clone.level = clone.level.inc();
             clone
         }
@@ -261,7 +277,16 @@ pub mod r#virtual {
 
     impl Closure {
         /// "Applies" a closure adding a new type to the environment and evaluating the body.
-        pub fn apply(&self, name: Option<Symbol>, arg: Type<Virtual>) -> Type<Virtual> {
+        pub fn apply(
+            &self,
+            name: Option<Symbol>,
+            arg: Type<Virtual>,
+            kind: Type<Virtual>,
+        ) -> Type<Virtual> {
+            self.body.eval(&self.env.define(name, arg, kind))
+        }
+
+        pub fn apply_local(&self, name: Option<Symbol>, arg: Type<Virtual>) -> Type<Virtual> {
             self.body.eval(&self.env.add(name, arg))
         }
     }

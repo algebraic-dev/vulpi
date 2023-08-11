@@ -204,6 +204,7 @@ pub struct ExternalDecl {
 pub enum Decl {
     Let(LetDecl<Qualified>),
     Type(TypeDecl),
+    Effect(Vec<Qualified>),
     External(Qualified, ExternalDecl),
 }
 

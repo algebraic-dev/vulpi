@@ -111,8 +111,10 @@ impl Context {
                     env.hole(forall.kind.clone(), forall.name.clone())
                 };
 
+                let kind = forall.kind.clone();
+
                 // Applies the body using the hole argument.
-                forall.body.apply(Some(forall.name.clone()), arg)
+                forall.body.apply(Some(forall.name.clone()), arg, kind)
             }
             _ => ty.clone(),
         }

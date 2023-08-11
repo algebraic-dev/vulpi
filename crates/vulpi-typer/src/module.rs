@@ -25,10 +25,18 @@ pub struct TypeData {
     pub def: Def,
 }
 
+#[derive(Clone)]
+pub struct LetDef {
+    pub typ: Type<Virtual>,
+    pub binders: HashMap<Symbol, Type<Virtual>>,
+    pub unbound: Vec<(Symbol, Type<Virtual>)>,
+    pub unbound_effects: Vec<(Symbol, Type<Virtual>)>,
+}
+
 #[derive(Default, Clone)]
 pub struct Module {
     /// The types of the functions.
-    pub variables: im_rc::HashMap<Symbol, Type<Virtual>>,
+    pub variables: im_rc::HashMap<Symbol, LetDef>,
 
     /// The types of the functions.
     pub constructors: im_rc::HashMap<Symbol, (Type<Virtual>, usize)>,
