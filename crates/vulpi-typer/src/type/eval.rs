@@ -107,7 +107,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
             TypeKind::Arrow(pi) => Type::new(TypeKind::Arrow(real::Pi {
                 ty: pi.ty.clone().quote(depth),
                 effs: pi.effs.clone().quote(depth),
-                body: pi.body.clone().quote(depth.inc()),
+                body: pi.body.clone().quote(depth),
             })),
             TypeKind::Forall(f) => Type::new(TypeKind::Forall(real::Forall {
                 name: f.name.clone(),

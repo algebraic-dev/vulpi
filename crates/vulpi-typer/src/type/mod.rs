@@ -442,7 +442,7 @@ pub mod real {
                     write!(f, "(")?;
                     pi.ty.format(env, f)?;
                     write!(f, " -> ")?;
-                    pi.body.format(&env.add(None), f)?;
+                    pi.body.format(env, f)?;
                     write!(f, ")")
                 }
                 TypeKind::Forall(forall) => {
@@ -460,8 +460,12 @@ pub mod real {
                 TypeKind::Bound(n) => {
                     write!(
                         f,
-                        "{}",
-                        env.0[n.0].clone().unwrap_or(Symbol::intern("_")).get()
+                        "{}~{}",
+                        env.0[n.0]
+                            .clone()
+                            .unwrap_or(Symbol::intern(&format!("_{}", n.0)))
+                            .get(),
+                        n.0
                     )
                 }
                 TypeKind::Tuple(t) => {

@@ -36,10 +36,8 @@ impl Infer for r#abstract::Type {
 
                 let effs = pi.effects.infer((ctx, env.clone()));
 
-                (
-                    Type::new(r#type::TypeKind::Arrow(real::Pi { ty, effs, body })),
-                    Kind::typ(),
-                )
+                let typ = Type::new(r#type::TypeKind::Arrow(real::Pi { ty, effs, body }));
+                (typ, Kind::typ())
             }
             TypeKind::Tuple(t) => {
                 let mut types = Vec::new();
@@ -71,10 +69,8 @@ impl Infer for r#abstract::Type {
                         }
                         r#type::TypeKind::Error => return (Type::error(), Kind::error()),
                         _ => {
-                            ctx.report(
-                                &env,
-                                TypeErrorKind::NotAFunction(env.clone(), k.quote(env.level)),
-                            );
+                            let mes = TypeErrorKind::NotAFunction(env.clone(), k.quote(env.level));
+                            ctx.report(&env, mes);
                             return (Type::error(), Kind::error());
                         }
                     }
@@ -87,15 +83,7 @@ impl Infer for r#abstract::Type {
                 let mut names = Vec::new();
 
                 for binder in &forall.params {
-                    let (name, ty) = match binder {
-                        r#abstract::TypeBinder::Implicit(n) => {
-                            (n.clone(), ctx.hole(&env, Kind::typ()))
-                        }
-                        r#abstract::TypeBinder::Explicit(n, k) => {
-                            (n.clone(), k.infer(env.clone()).eval(&env))
-                        }
-                    };
-
+                    let (name, ty) = binder.infer((ctx, env.clone()));
                     env = env.add(Some(name.clone()), ty.clone());
                     names.push((name, ty));
                 }
@@ -103,11 +91,8 @@ impl Infer for r#abstract::Type {
                 let (ty, kind) = forall.body.infer((ctx, env.clone()));
 
                 let forall = names.into_iter().fold(ty, |body, (name, kind)| {
-                    Type::forall(real::Forall {
-                        name,
-                        kind: kind.quote(env.level),
-                        body,
-                    })
+                    let kind = kind.quote(env.level);
+                    Type::forall(real::Forall { name, kind, body })
                 });
 
                 (forall, kind)
@@ -126,6 +111,19 @@ impl Infer for r#abstract::Type {
             ),
             TypeKind::Unit => (Type::tuple(Vec::new()), Kind::typ()),
             TypeKind::Error => (Type::error(), Kind::error()),
+        }
+    }
+}
+
+impl Infer for r#abstract::TypeBinder {
+    type Return = (vulpi_intern::Symbol, Type<Virtual>);
+
+    type Context<'a> = (&'a mut Context, Env);
+
+    fn infer(&self, (ctx, env): Self::Context<'_>) -> Self::Return {
+        match self {
+            r#abstract::TypeBinder::Implicit(n) => (n.clone(), ctx.hole(&env, Kind::typ())),
+            r#abstract::TypeBinder::Explicit(n, k) => (n.clone(), k.infer(env.clone()).eval(&env)),
         }
     }
 }
