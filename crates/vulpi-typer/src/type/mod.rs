@@ -315,6 +315,16 @@ pub mod r#virtual {
                 _ => (None, spine),
             }
         }
+
+        pub(crate) fn function(right: Vec<Self>, ret: Self) -> Self {
+            right.into_iter().rev().fold(ret, |body, ty| {
+                Type::new(TypeKind::Arrow(Pi {
+                    ty,
+                    effs: Type::new(TypeKind::Empty),
+                    body,
+                }))
+            })
+        }
     }
 }
 

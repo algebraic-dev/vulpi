@@ -6,8 +6,8 @@ use crate::r#type::eval::Quote;
 pub use context::Context;
 use infer::Infer;
 use module::{Def, TypeData};
-use r#type::Kind;
 pub use r#type::{r#virtual::Env, Type};
+use r#type::{real::Real, Kind};
 use vulpi_syntax::r#abstract::*;
 
 use crate::r#type::eval::Eval;
@@ -39,7 +39,7 @@ impl Declare for TypeDecl {
         }
 
         let size = binders.len();
-        let kind = Type::function(binders, Type::typ());
+        let kind = Type::<Real>::function(binders, Type::typ());
 
         let type_def = &self.def;
         let def = get_definition_of_type(type_def);

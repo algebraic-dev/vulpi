@@ -19,6 +19,8 @@ pub enum TypeErrorKind {
     NotEffect,
     MissingLabel(Qualified),
     InvalidLabels(Vec<Qualified>),
+    EffectsNotAllowedInNormalPatterns,
+    PatternsNotAllowedHere,
 
     DuplicatedField,
     NotFoundField,
@@ -77,6 +79,12 @@ impl IntoDiagnostic for TypeError {
                     .collect::<Vec<_>>()
                     .join(", ")
             )),
+            TypeErrorKind::EffectsNotAllowedInNormalPatterns => {
+                Text::from("effects are not allowed in normal patterns".to_string())
+            }
+            TypeErrorKind::PatternsNotAllowedHere => {
+                Text::from("patterns are not allowed here".to_string())
+            }
         }
     }
 

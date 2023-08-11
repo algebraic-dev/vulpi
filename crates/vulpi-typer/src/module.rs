@@ -40,7 +40,7 @@ pub struct Module {
     pub fields: im_rc::HashMap<Symbol, Type<Virtual>>,
 
     /// The effects of some symbols.
-    pub effects: im_rc::HashMap<Symbol, Type<Virtual>>,
+    pub effects: im_rc::HashMap<Symbol, (Type<Virtual>, usize)>,
 }
 
 #[derive(Default)]
@@ -59,6 +59,16 @@ impl Modules {
     pub fn typ(&mut self, qualified: &Qualified) -> TypeData {
         let module = self.get(&qualified.path);
         module.types.get(&qualified.name).unwrap().clone()
+    }
+
+    pub fn constructor(&mut self, qualified: &Qualified) -> (Type<Virtual>, usize) {
+        let module = self.get(&qualified.path);
+        module.constructors.get(&qualified.name).unwrap().clone()
+    }
+
+    pub fn effect(&mut self, qualified: &Qualified) -> (Type<Virtual>, usize) {
+        let module = self.get(&qualified.path);
+        module.effects.get(&qualified.name).unwrap().clone()
     }
 
     pub fn get(&mut self, id: &Symbol) -> &mut Module {

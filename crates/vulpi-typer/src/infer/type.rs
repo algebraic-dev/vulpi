@@ -62,17 +62,11 @@ impl Infer for r#abstract::Type {
 
                     args.push(arg_ty);
 
-                    match k.deref().as_ref() {
-                        r#type::TypeKind::Arrow(arrow) => {
-                            ctx.subsumes(env.clone(), arg_kind, arrow.ty.clone());
-                            k = arrow.body.clone()
-                        }
-                        r#type::TypeKind::Error => return (Type::error(), Kind::error()),
-                        _ => {
-                            let mes = TypeErrorKind::NotAFunction(env.clone(), k.quote(env.level));
-                            ctx.report(&env, mes);
-                            return (Type::error(), Kind::error());
-                        }
+                    if let Some((left, right)) = destruct_kind(ctx, env.clone(), k.deref()) {
+                        ctx.subsumes(env.clone(), arg_kind, left);
+                        k = right;
+                    } else {
+                        return (Type::error(), Kind::error());
                     }
                 }
 
@@ -124,6 +118,22 @@ impl Infer for r#abstract::TypeBinder {
         match self {
             r#abstract::TypeBinder::Implicit(n) => (n.clone(), ctx.hole(&env, Kind::typ())),
             r#abstract::TypeBinder::Explicit(n, k) => (n.clone(), k.infer(env.clone()).eval(&env)),
+        }
+    }
+}
+
+fn destruct_kind(
+    ctx: &mut Context,
+    env: Env,
+    k: Type<Virtual>,
+) -> Option<(Type<Virtual>, Type<Virtual>)> {
+    match k.deref().as_ref() {
+        r#type::TypeKind::Arrow(arrow) => Some((arrow.ty.clone(), arrow.body.clone())),
+        r#type::TypeKind::Error => None,
+        _ => {
+            let mes = TypeErrorKind::NotAFunction(env.clone(), k.quote(env.level));
+            ctx.report(&env, mes);
+            None
         }
     }
 }

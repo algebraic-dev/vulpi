@@ -65,6 +65,22 @@ impl Context {
         env.lacks(self.new_name(), hash_set)
     }
 
+    pub fn as_function(
+        &mut self,
+        env: &Env,
+        typ: Type<Virtual>,
+    ) -> Option<(Type<Virtual>, Type<Virtual>, Type<Virtual>)> {
+        match typ.deref().as_ref() {
+            TypeKind::Arrow(pi) => Some((pi.ty.clone(), pi.effs.clone(), pi.body.clone())),
+            TypeKind::Error => Some((typ.clone(), Type::new(TypeKind::Empty), typ.clone())),
+            TypeKind::Forall(_) => {
+                let typ = self.instantiate(env, &typ);
+                self.as_function(env, typ)
+            }
+            _ => None,
+        }
+    }
+
     /// Instantiates a poly type to a monotype.
     pub fn instantiate(&mut self, env: &Env, ty: &Type<Virtual>) -> Type<Virtual> {
         match ty.deref().as_ref() {

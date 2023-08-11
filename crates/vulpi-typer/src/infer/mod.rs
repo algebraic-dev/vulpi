@@ -2,7 +2,9 @@
 //! inferring the type of an expression given a context.
 
 pub mod effect;
-mod kind;
+pub mod kind;
+pub mod literal;
+pub mod pat;
 pub mod r#type;
 
 /// The inference trait. It descovers the type of an expression based on the context.
