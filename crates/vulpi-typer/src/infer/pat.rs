@@ -13,7 +13,8 @@ use crate::{
 
 use super::Infer;
 
-pub struct EffectPat(pub Pattern);
+/// Helper structure made for inference of effect patterns.
+pub(crate) struct EffectPat(pub Pattern);
 
 impl Infer for Pattern {
     type Return = Type<Virtual>;
@@ -91,7 +92,7 @@ impl Infer for EffectPat {
 
         match &self.0.data {
             PatternKind::Wildcard => ctx.hole(&env, Type::typ()),
-            PatternKind::Variable(x) => todo!(),
+            PatternKind::Variable(_) => ctx.hole(&env, Type::effect()),
             PatternKind::Effect(eff) => {
                 let (mut typ, arity) = ctx.modules.effect(&eff.func);
 
