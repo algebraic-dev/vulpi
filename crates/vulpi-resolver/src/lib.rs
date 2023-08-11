@@ -499,7 +499,7 @@ impl Resolve for PatternKind {
             .resolve(ctx),
             PatternKind::Wildcard(_) => abs::PatternKind::Wildcard,
             PatternKind::Literal(n) => abs::PatternKind::Literal(Box::new(n.resolve(ctx))),
-            PatternKind::Annotation(n) => abs::PatternKind::Annotation(n.resolve(ctx)),
+            PatternKind::Annotation(n) => abs::PatternKind::Ascription(n.resolve(ctx)),
             PatternKind::Or(n) => n.resolve(ctx),
             PatternKind::Application(n) => n.resolve(ctx),
             PatternKind::EffectApp(n) => n.resolve(ctx),
@@ -514,7 +514,7 @@ impl Resolve for PatAscription {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::PatAscription {
             pat: self.left.resolve(ctx),
-            ty: self.right.resolve(ctx),
+            typ: self.right.resolve(ctx),
         }
     }
 }

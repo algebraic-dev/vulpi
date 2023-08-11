@@ -229,7 +229,7 @@ pub struct Block {
 #[derive(Show)]
 pub struct PatAscription {
     pub pat: Pattern,
-    pub ty: Type,
+    pub typ: Type,
 }
 
 #[derive(Show)]
@@ -256,7 +256,7 @@ pub enum PatternKind {
     Wildcard,
     Variable(Symbol),
     Literal(Literal),
-    Annotation(PatAscription),
+    Ascription(PatAscription),
     Or(PatOr),
     Application(PatApplication),
     Effect(PatEffect),
