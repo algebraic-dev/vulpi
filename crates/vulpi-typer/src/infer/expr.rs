@@ -10,11 +10,11 @@ use crate::{
 use super::Infer;
 
 impl Infer for Expr {
-    type Return = (Type<Virtual>, Effect<Virtual>);
+    type Return = Type<Virtual>;
 
     type Context<'a> = (&'a mut Context, Env);
 
-    fn infer(&self, (_, env): Self::Context<'_>) -> Self::Return {
+    fn infer(&self, (ctx, env): Self::Context<'_>) -> Self::Return {
         env.on(self.span.clone());
 
         match &self.data {
@@ -28,7 +28,7 @@ impl Infer for Expr {
             ExprKind::Let(_) => todo!(),
             ExprKind::When(_) => todo!(),
             ExprKind::Do(_) => todo!(),
-            ExprKind::Literal(_) => todo!(),
+            ExprKind::Literal(n) => n.infer((ctx, env)),
             ExprKind::Annotation(_) => todo!(),
             ExprKind::RecordInstance(_) => todo!(),
             ExprKind::RecordUpdate(_) => todo!(),

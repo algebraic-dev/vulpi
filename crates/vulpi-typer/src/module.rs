@@ -7,7 +7,10 @@ use std::collections::HashMap;
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 
-use crate::r#type::{r#virtual::Virtual, Type};
+use crate::{
+    r#type::{r#virtual::Virtual, Effect, Type},
+    Real,
+};
 
 #[derive(Clone)]
 pub enum Def {
@@ -30,6 +33,7 @@ pub struct LetDef {
     pub typ: Type<Virtual>,
     pub binders: HashMap<Symbol, Type<Virtual>>,
     pub unbound: Vec<(Symbol, Type<Virtual>)>,
+    pub ambient: Effect<Real>,
     pub unbound_effects: Vec<(Symbol, Type<Virtual>)>,
 }
 
@@ -77,6 +81,11 @@ impl Modules {
     pub fn effect(&mut self, qualified: &Qualified) -> (Type<Virtual>, usize) {
         let module = self.get(&qualified.path);
         module.effects.get(&qualified.name).unwrap().clone()
+    }
+
+    pub fn let_decl(&mut self, qualified: &Qualified) -> LetDef {
+        let module = self.get(&qualified.path);
+        module.variables.get(&qualified.name).unwrap().clone()
     }
 
     pub fn get(&mut self, id: &Symbol) -> &mut Module {

@@ -738,14 +738,18 @@ impl Resolve for PatternArm {
     type Output = abs::PatternArm;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        ctx.scope::<Variable, _>(|ctx| abs::PatternArm {
-            patterns: self
-                .patterns
-                .into_iter()
-                .map(|x| x.0.resolve(ctx))
-                .collect(),
-            expr: self.expr.resolve(ctx),
-            guard: self.guard.map(|x| x.1).resolve(ctx),
+        ctx.scope::<Variable, _>(|ctx| {
+            let patterns = ctx.scope_pattern(|ctx| {
+                self.patterns
+                    .into_iter()
+                    .map(|x| x.0.resolve(ctx))
+                    .collect()
+            });
+            abs::PatternArm {
+                patterns,
+                expr: self.expr.resolve(ctx),
+                guard: self.guard.map(|x| x.1).resolve(ctx),
+            }
         })
     }
 }
@@ -1024,7 +1028,7 @@ impl Resolve for LetDecl {
                 path: ctx.current(),
                 name: self.name.symbol(),
             },
-            binders: self.binders.resolve(ctx),
+            binders: ctx.scope_pattern(|ctx| self.binders.resolve(ctx)),
             ret: self.ret.map(|x| (x.1.resolve(ctx), x.2.resolve(ctx))),
             body: self.body.resolve(ctx),
         })

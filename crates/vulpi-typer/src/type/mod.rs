@@ -216,11 +216,15 @@ pub mod r#virtual {
         pub names: im_rc::Vector<Option<Symbol>>,
         pub types: im_rc::Vector<Type<Virtual>>,
         pub kinds: im_rc::Vector<Type<Virtual>>,
+        pub vars: im_rc::HashMap<Symbol, Type<Virtual>>,
         pub level: Level,
         pub span: RefCell<Span>,
     }
 
     impl Env {
+        pub fn add_var(&mut self, name: Symbol, ty: Type<Virtual>) {
+            self.vars.insert(name, ty);
+        }
         /// Sets the location of the environment. It is used for error reporting.
         pub fn on(&self, span: Span) {
             *self.span.borrow_mut() = span;

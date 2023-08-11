@@ -191,6 +191,7 @@ impl Declare for ExternalDecl {
                 typ: typ.eval(&env),
                 binders: Default::default(),
                 unbound,
+                ambient: Type::new(TypeKind::Empty),
                 unbound_effects: vec![],
             },
         );
@@ -420,10 +421,9 @@ impl Declare for LetDecl {
 
         let ret = if has_effect {
             let ty = args.pop().unwrap();
-
             Type::new(TypeKind::Arrow(Arrow {
                 ty,
-                effs,
+                effs: effs.clone(),
                 body: ret,
             }))
         } else {
@@ -454,9 +454,26 @@ impl Declare for LetDecl {
                 typ: typ.eval(&env),
                 binders,
                 unbound: bound,
+                ambient: effs,
                 unbound_effects: effect_bounds,
             },
         );
+    }
+
+    fn define(&self, (ctx, mut env): (&mut Context, Env)) {
+        let let_decl = ctx.modules.let_decl(&self.name);
+
+        for (fv, ty) in &let_decl.unbound {
+            env = env.add(Some(fv.clone()), ty.clone());
+        }
+
+        for (fv, ty) in &let_decl.unbound_effects {
+            env = env.add(Some(fv.clone()), ty.clone());
+        }
+
+        for (k, v) in let_decl.binders {
+            env.add_var(k, v);
+        }
     }
 }
 
