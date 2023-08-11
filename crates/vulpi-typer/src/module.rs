@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 
-use crate::r#type::{r#virtual::Virtual, real::Real, Type};
+use crate::r#type::{r#virtual::Virtual, Type};
 
 #[derive(Clone)]
 pub enum Def {
@@ -19,8 +19,8 @@ pub enum Def {
 
 #[derive(Clone)]
 pub struct TypeData {
-    pub kind: Type<Real>,
-    pub binders: usize,
+    pub kind: Type<Virtual>,
+    pub binders: Vec<(Symbol, Type<Virtual>)>,
     pub module: Symbol,
     pub def: Def,
 }
@@ -28,7 +28,7 @@ pub struct TypeData {
 #[derive(Default, Clone)]
 pub struct Module {
     /// The types of the functions.
-    pub variables: im_rc::HashMap<Symbol, Type<Real>>,
+    pub variables: im_rc::HashMap<Symbol, Type<Virtual>>,
 
     /// The types of the functions.
     pub constructors: im_rc::HashMap<Symbol, (Type<Virtual>, usize)>,

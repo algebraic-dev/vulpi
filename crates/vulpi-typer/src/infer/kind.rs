@@ -24,7 +24,7 @@ impl Infer for Kind {
             KindType::Arrow(l, r) => {
                 let l = l.infer(context.clone());
                 let r = r.infer(context);
-                Type::new(TypeKind::Arrow(real::Pi {
+                Type::new(TypeKind::Arrow(real::Arrow {
                     ty: l,
                     effs: Type::new(TypeKind::Empty),
                     body: r,

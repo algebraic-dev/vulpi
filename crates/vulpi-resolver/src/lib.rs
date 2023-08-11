@@ -449,7 +449,7 @@ impl Resolve for TypeKind {
             }
             TypeKind::TypeVariable(n) => abs::TypeKind::TypeVariable(n.symbol()),
             TypeKind::Parenthesis(n) => n.data.0.resolve(ctx).data,
-            TypeKind::Arrow(n) => abs::TypeKind::Pi(n.resolve(ctx)),
+            TypeKind::Arrow(n) => abs::TypeKind::Arrow(n.resolve(ctx)),
             TypeKind::Application(n) => abs::TypeKind::Application(n.resolve(ctx)),
             TypeKind::Forall(n) => abs::TypeKind::Forall(n.resolve(ctx)),
             TypeKind::Unit(_) => abs::TypeKind::Unit,
@@ -1154,15 +1154,20 @@ impl Resolve for TypeBinder {
     }
 }
 
-impl Resolve for EffectField {
+impl Resolve for (Qualified, EffectField) {
     type Output = abs::EffectField;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
+        let (name, effect) = self;
         abs::EffectField {
-            visibility: self.visibility.resolve(ctx),
-            name: ctx.qualify(self.name.symbol()),
-            args: self.args.resolve(ctx),
-            ty: self.ret.resolve(ctx),
+            visibility: effect.visibility.resolve(ctx),
+            name: ctx
+                .path
+                .with(name.name)
+                .qualify(effect.name.symbol())
+                .into(),
+            args: effect.args.resolve(ctx),
+            ty: effect.ret.resolve(ctx),
         }
     }
 }
@@ -1172,16 +1177,21 @@ impl Resolve for EffectDecl {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         let path = ctx.current();
-        ctx.scope_namespace(self.name.symbol(), |ctx| abs::EffectDecl {
+        let name = Qualified {
+            path,
+            name: self.name.symbol(),
+        };
+        abs::EffectDecl {
             namespace: ctx.current(),
-            qualified: Qualified {
-                path,
-                name: self.name.symbol(),
-            },
+            name: name.clone(),
             visibility: self.visibility.resolve(ctx),
             binders: self.binders.resolve(ctx),
-            fields: self.fields.into_iter().map(|x| x.0.resolve(ctx)).collect(),
-        })
+            effects: self
+                .fields
+                .into_iter()
+                .map(|x| (name.clone(), x.0).resolve(ctx))
+                .collect(),
+        }
     }
 }
 

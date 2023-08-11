@@ -52,9 +52,9 @@ fn main() {
     let env = vulpi_typer::Env::default();
     let mut ctx = vulpi_typer::Context::new(reporter.clone());
 
-    program.declare((&mut ctx, env));
+    program.declare((&mut ctx, env.clone()));
 
-    // program.define(env);
+    program.define((&mut ctx, env));
 
     let report = reporter.all_diagnostics();
 

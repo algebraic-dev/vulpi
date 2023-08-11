@@ -3,12 +3,12 @@
 
 use crate::{
     module::Modules,
-    r#type::{eval::Eval, Index, State},
+    r#type::{eval::Eval, r#virtual::Pi, Index, State},
 };
 use im_rc::HashSet;
 use vulpi_intern::Symbol;
 use vulpi_report::{Diagnostic, Report};
-use vulpi_syntax::r#abstract::Qualified;
+use vulpi_syntax::{elaborated, r#abstract::Qualified};
 
 use crate::{
     errors::{TypeError, TypeErrorKind},
@@ -27,6 +27,7 @@ pub struct Context {
     pub counter: usize,
     pub reporter: Report,
     pub modules: Modules,
+    pub elaborated: elaborated::Program,
 }
 
 impl Context {
@@ -35,6 +36,7 @@ impl Context {
             counter: 0,
             reporter,
             modules: Default::default(),
+            elaborated: Default::default(),
         }
     }
 
@@ -76,6 +78,23 @@ impl Context {
             TypeKind::Forall(_) => {
                 let typ = self.instantiate(env, &typ);
                 self.as_function(env, typ)
+            }
+            TypeKind::Hole(empty) => {
+                let hole_inner = empty.0.borrow().clone();
+                if let HoleInner::Empty(_, kind, _) = hole_inner {
+                    let hole_a = self.hole(env, kind.clone());
+                    let hole_b = self.hole(env, kind);
+
+                    empty.fill(Type::new(TypeKind::Arrow(Pi {
+                        ty: hole_a.clone(),
+                        effs: Type::new(TypeKind::Empty),
+                        body: hole_b.clone(),
+                    })));
+
+                    Some((hole_a, Type::new(TypeKind::Empty), hole_b))
+                } else {
+                    unreachable!()
+                }
             }
             _ => None,
         }

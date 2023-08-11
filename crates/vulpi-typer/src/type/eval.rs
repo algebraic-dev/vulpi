@@ -104,7 +104,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
             TypeKind::Type => Type::new(TypeKind::Type),
             TypeKind::Row => Type::new(TypeKind::Row),
             TypeKind::Effect => Type::new(TypeKind::Effect),
-            TypeKind::Arrow(pi) => Type::new(TypeKind::Arrow(real::Pi {
+            TypeKind::Arrow(pi) => Type::new(TypeKind::Arrow(real::Arrow {
                 ty: pi.ty.clone().quote(depth),
                 effs: pi.effs.clone().quote(depth),
                 body: pi.body.clone().quote(depth),

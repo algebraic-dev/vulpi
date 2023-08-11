@@ -266,15 +266,21 @@ impl Context {
                         self.unify_row(
                             env,
                             h.clone(),
-                            Type::extend(n_lab, gamma.clone(), beta.clone()),
+                            Type::<Virtual>::extend(n_lab, gamma.clone(), beta.clone()),
                         )?;
 
-                        Ok((gamma, Type::extend(label.clone(), field.clone(), beta)))
+                        Ok((
+                            gamma,
+                            Type::<Virtual>::extend(label.clone(), field.clone(), beta),
+                        ))
                     }
                     _ => {
                         let (field_ty, rest) = self.rewrite_row(env.clone(), res.clone(), n_lab)?;
 
-                        Ok((field_ty, Type::extend(label.clone(), field.clone(), rest)))
+                        Ok((
+                            field_ty,
+                            Type::<Virtual>::extend(label.clone(), field.clone(), rest),
+                        ))
                     }
                 }
             }

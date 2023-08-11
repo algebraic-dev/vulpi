@@ -115,6 +115,10 @@ impl<S: State> Type<S> {
         Type::new(TypeKind::Type)
     }
 
+    pub(crate) fn row() -> Type<S> {
+        Type::new(TypeKind::Row)
+    }
+
     pub(crate) fn effect() -> Type<S> {
         Type::new(TypeKind::Effect)
     }
@@ -294,6 +298,12 @@ pub mod r#virtual {
             }
         }
 
+        pub fn application(left: Self, right: Vec<Self>) -> Self {
+            right
+                .into_iter()
+                .fold(left, |acc, x| Type::new(TypeKind::Application(acc, x)))
+        }
+
         pub fn extend(label: Qualified, ty: Type<Virtual>, typ: Type<Virtual>) -> Type<Virtual> {
             Type::new(TypeKind::Extend(label, ty, typ))
         }
@@ -313,6 +323,16 @@ pub mod r#virtual {
                 _ => (None, spine),
             }
         }
+
+        pub(crate) fn function(right: Vec<Self>, ret: Self) -> Self {
+            right.into_iter().rev().fold(ret, |body, ty| {
+                Type::new(TypeKind::Arrow(Pi {
+                    ty,
+                    effs: Type::new(TypeKind::Empty),
+                    body,
+                }))
+            })
+        }
     }
 }
 
@@ -330,7 +350,7 @@ pub mod real {
     pub struct Real;
 
     /// A pi type without binder. It's used for a bunch of things but not right now :>
-    pub struct Pi {
+    pub struct Arrow {
         pub ty: Type<Real>,
         pub effs: Type<Real>,
         pub body: Type<Real>,
@@ -344,7 +364,7 @@ pub mod real {
     }
 
     impl State for Real {
-        type Pi = Pi;
+        type Pi = Arrow;
         type Forall = Forall;
         type Type = Type<Real>;
         type Bound = Index;
@@ -357,14 +377,6 @@ pub mod real {
     impl From<Env> for NameEnv {
         fn from(env: Env) -> Self {
             Self(env.names)
-        }
-    }
-
-    impl NameEnv {
-        fn add(&self, name: Option<Symbol>) -> Self {
-            let mut clone = self.clone();
-            clone.0.push_front(name);
-            clone
         }
     }
 
@@ -381,6 +393,22 @@ pub mod real {
             spine.reverse();
 
             (current, spine)
+        }
+
+        pub(crate) fn forall_spine(&self) -> (Vec<(Symbol, Self)>, Self) {
+            let mut spine = Vec::new();
+            let mut current = self.clone();
+
+            while let TypeKind::Forall(Forall { name, kind, body }) = current.as_ref() {
+                spine.push((name.clone(), kind.clone()));
+                current = body.clone();
+            }
+
+            (spine, current)
+        }
+
+        pub fn extend(label: Qualified, ty: Type<Real>, typ: Type<Real>) -> Type<Real> {
+            Type::new(TypeKind::Extend(label, ty, typ))
         }
 
         pub(crate) fn row_spine(&self) -> (Option<Self>, Vec<(Qualified, Self)>) {
@@ -406,7 +434,7 @@ pub mod real {
 
         pub(crate) fn function(right: Vec<Self>, ret: Self) -> Self {
             right.into_iter().rev().fold(ret, |body, ty| {
-                Type::new(TypeKind::Arrow(Pi {
+                Type::new(TypeKind::Arrow(Arrow {
                     ty,
                     effs: Type::new(TypeKind::Empty),
                     body,
@@ -439,17 +467,37 @@ pub mod real {
                     write!(f, "(")?;
                     pi.ty.format(env, f)?;
                     write!(f, " -> ")?;
+
+                    match pi.effs.as_ref() {
+                        TypeKind::Empty => (),
+                        _ => {
+                            pi.effs.format(env, f)?;
+                            write!(f, " ")?;
+                        }
+                    }
+
                     pi.body.format(env, f)?;
                     write!(f, ")")
                 }
-                TypeKind::Forall(forall) => {
-                    write!(f, "forall ")?;
-                    write!(f, "({}", forall.name.get())?;
-                    write!(f, " : ")?;
-                    forall.kind.format(env, f)?;
-                    write!(f, ") . ")?;
-                    forall.body.format(&env.add(Some(forall.name.clone())), f)?;
-                    write!(f, "")
+                TypeKind::Forall(_) => {
+                    write!(f, "(forall ")?;
+
+                    let (binder, rest) = self.forall_spine();
+
+                    for (i, (name, kind)) in binder.iter().enumerate() {
+                        write!(f, "({}: ", name.get())?;
+                        kind.format(env, f)?;
+                        write!(f, ")")?;
+                        if i != binder.len() - 1 {
+                            write!(f, " ")?;
+                        }
+                    }
+
+                    write!(f, ". ")?;
+
+                    rest.format(env, f)?;
+
+                    write!(f, ")")
                 }
 
                 TypeKind::Hole(hole) => hole.format(env, f),
@@ -457,12 +505,11 @@ pub mod real {
                 TypeKind::Bound(n) => {
                     write!(
                         f,
-                        "{}~{}",
+                        "{}",
                         env.0[n.0]
                             .clone()
                             .unwrap_or(Symbol::intern(&format!("_{}", n.0)))
                             .get(),
-                        n.0
                     )
                 }
                 TypeKind::Tuple(t) => {

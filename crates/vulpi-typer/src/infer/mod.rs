@@ -2,6 +2,7 @@
 //! inferring the type of an expression given a context.
 
 pub mod effect;
+pub mod expr;
 pub mod kind;
 pub mod literal;
 pub mod pat;

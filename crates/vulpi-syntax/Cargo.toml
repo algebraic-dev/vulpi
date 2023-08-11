@@ -12,3 +12,5 @@ vulpi-intern = { path = "../vulpi-intern" }
 
 vulpi-show = { path = "../vulpi-show" }
 vulpi-macros = { path = "../vulpi-macros" }
+
+im-rc = "15.1.0"

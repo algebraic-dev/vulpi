@@ -25,7 +25,7 @@ impl Infer for r#abstract::Type {
         env.on(self.span.clone());
 
         match &self.data {
-            TypeKind::Pi(pi) => {
+            TypeKind::Arrow(pi) => {
                 let (ty, kind) = pi.left.infer((ctx, env.clone()));
                 env.on(pi.left.span.clone());
                 ctx.subsumes(env.clone(), kind, Kind::typ());
@@ -36,7 +36,7 @@ impl Infer for r#abstract::Type {
 
                 let effs = pi.effects.infer((ctx, env.clone()));
 
-                let typ = Type::new(r#type::TypeKind::Arrow(real::Pi { ty, effs, body }));
+                let typ = Type::new(r#type::TypeKind::Arrow(real::Arrow { ty, effs, body }));
                 (typ, Kind::typ())
             }
             TypeKind::Tuple(t) => {
@@ -74,7 +74,7 @@ impl Infer for r#abstract::Type {
                     }
                 }
 
-                (Type::application(ty, args), k)
+                (Type::<Real>::application(ty, args), k)
             }
             TypeKind::Forall(forall) => {
                 let mut env = env.clone();
@@ -102,10 +102,7 @@ impl Infer for r#abstract::Type {
 
                 (Type::bound(Index(index)), kind)
             }
-            TypeKind::Type(name) => (
-                Type::variable(name.clone()),
-                ctx.modules.typ(name).kind.eval(&env),
-            ),
+            TypeKind::Type(name) => (Type::variable(name.clone()), ctx.modules.typ(name).kind),
             TypeKind::Unit => (Type::tuple(Vec::new()), Kind::typ()),
             TypeKind::Error => (Type::error(), Kind::error()),
         }

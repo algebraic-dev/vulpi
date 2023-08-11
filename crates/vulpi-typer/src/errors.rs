@@ -11,6 +11,7 @@ pub enum TypeErrorKind {
     KindMismatch(Env, Type<Real>, Type<Real>),
     InfiniteType,
     CannotFind(Symbol),
+    AtLeastOneArgument,
     EscapingScope,
     NotAFunctionKind,
     WrongArity(usize, usize),
@@ -84,6 +85,9 @@ impl IntoDiagnostic for TypeError {
             }
             TypeErrorKind::PatternsNotAllowedHere => {
                 Text::from("patterns are not allowed here".to_string())
+            }
+            TypeErrorKind::AtLeastOneArgument => {
+                Text::from("at least one argument is required".to_string())
             }
         }
     }

@@ -66,7 +66,7 @@ pub struct TypeForall {
 
 #[derive(Show)]
 pub enum TypeKind {
-    Pi(PiType),
+    Arrow(PiType),
     Tuple(Vec<Type>),
     Application(TypeApplication),
     Forall(TypeForall),
@@ -82,7 +82,7 @@ pub type Type = Box<Spanned<TypeKind>>;
 impl TypeKind {
     pub fn free_variables(&self) -> HashSet<Symbol> {
         match self {
-            TypeKind::Pi(pi) => {
+            TypeKind::Arrow(pi) => {
                 let mut set = pi.left.data.free_variables();
                 set.extend(pi.right.data.free_variables());
 
@@ -137,7 +137,7 @@ impl TypeKind {
 
     pub fn free_effects(&self) -> HashSet<Symbol> {
         match self {
-            TypeKind::Pi(pi) => {
+            TypeKind::Arrow(pi) => {
                 let mut set = pi.left.data.free_effects();
                 set.extend(pi.right.data.free_effects());
 
@@ -505,9 +505,9 @@ pub struct EffectField {
 pub struct EffectDecl {
     pub namespace: Symbol,
     pub visibility: Visibility,
-    pub qualified: Qualified,
+    pub name: Qualified,
     pub binders: Vec<TypeBinder>,
-    pub fields: Vec<EffectField>,
+    pub effects: Vec<EffectField>,
 }
 
 #[derive(Show)]
