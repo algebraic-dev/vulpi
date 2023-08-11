@@ -36,6 +36,7 @@ pub type Kind = Box<Spanned<KindType>>;
 #[derive(Show)]
 pub struct Effects {
     pub effects: Vec<Type>,
+    pub rest: Option<Type>,
 }
 
 #[derive(Show)]
@@ -128,6 +129,59 @@ impl TypeKind {
             TypeKind::TypeVariable(v) => {
                 let mut set = HashSet::new();
                 set.insert(v.clone());
+                set
+            }
+            _ => HashSet::new(),
+        }
+    }
+
+    pub fn free_effects(&self) -> HashSet<Symbol> {
+        match self {
+            TypeKind::Pi(pi) => {
+                let mut set = pi.left.data.free_effects();
+                set.extend(pi.right.data.free_effects());
+
+                if let Some(effs) = &pi.effects {
+                    for eff in &effs.effects {
+                        set.extend(eff.data.free_effects());
+                    }
+                    if let Some(rest) = &effs.rest {
+                        set.extend(rest.data.free_variables());
+                    }
+                }
+
+                set
+            }
+            TypeKind::Tuple(t) => {
+                let mut set = HashSet::new();
+
+                for ty in t {
+                    set.extend(ty.data.free_effects());
+                }
+
+                set
+            }
+            TypeKind::Application(app) => {
+                let mut set = app.func.data.free_effects();
+
+                for arg in &app.args {
+                    set.extend(arg.data.free_effects());
+                }
+
+                set
+            }
+            TypeKind::Forall(f) => {
+                let mut set = HashSet::new();
+
+                set.extend(f.body.data.free_effects());
+
+                for binder in &f.params {
+                    match binder {
+                        TypeBinder::Implicit(p) => set.remove(p),
+                        TypeBinder::Explicit(p, _) => set.remove(p),
+                    };
+                }
+
                 set
             }
             _ => HashSet::new(),
@@ -458,9 +512,9 @@ pub struct EffectDecl {
 
 #[derive(Show)]
 pub struct ExternalDecl {
+    pub name: Symbol,
     pub namespace: Symbol,
     pub visibility: Visibility,
-    pub name: Symbol,
     pub ty: Type,
     pub ret: Symbol,
 }

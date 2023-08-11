@@ -11,8 +11,10 @@ use im_rc::HashSet;
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 
+pub use r#virtual::Env;
+
 /// The level of the type. It is used for type checking and type inference.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Level(pub usize);
 
 /// The inverse of a the type. It is used for type checking and type inference.
@@ -118,10 +120,6 @@ impl<S: State> Type<S> {
         Type::new(TypeKind::Effect)
     }
 
-    pub(crate) fn row() -> Type<S> {
-        Type::new(TypeKind::Row)
-    }
-
     pub(crate) fn variable(name: Qualified) -> Type<S> {
         Type::new(TypeKind::Variable(name))
     }
@@ -210,7 +208,7 @@ pub mod r#virtual {
     pub struct Virtual;
 
     /// The typing environment is used for type checking and type inference.
-    #[derive(Clone)]
+    #[derive(Clone, Default)]
     pub struct Env {
         pub names: im_rc::Vector<Option<Symbol>>,
         pub types: im_rc::Vector<Type<Virtual>>,
@@ -290,7 +288,7 @@ pub mod r#virtual {
     impl Type<Virtual> {
         pub fn deref(&self) -> Type<Virtual> {
             match self.as_ref() {
-                TypeKind::Hole(h) => match &*h.0.borrow() {
+                TypeKind::Hole(h) => match h.0.borrow().clone() {
                     HoleInner::Filled(ty) => ty.deref(),
                     _ => self.clone(),
                 },
@@ -316,18 +314,6 @@ pub mod r#virtual {
                 TypeKind::Hole(e) => (Some(e.clone()), spine),
                 _ => (None, spine),
             }
-        }
-
-        pub(crate) fn arrow(
-            ty: Type<Virtual>,
-            effs: Type<Virtual>,
-            body: Type<Virtual>,
-        ) -> Type<Virtual> {
-            Type::new(TypeKind::Arrow(Pi { ty, effs, body }))
-        }
-
-        pub(crate) fn hole(hole: Hole<Virtual>) -> Type<Virtual> {
-            Type::new(TypeKind::Hole(hole))
         }
     }
 }
@@ -414,6 +400,22 @@ pub mod real {
                 _ => (Some(current), spine),
             }
         }
+
+        pub(crate) fn application(left: Self, right: Vec<Self>) -> Self {
+            right
+                .into_iter()
+                .fold(left, |acc, x| Type::new(TypeKind::Application(acc, x)))
+        }
+
+        pub(crate) fn function(right: Vec<Self>, ret: Self) -> Self {
+            right.into_iter().rev().fold(ret, |body, ty| {
+                Type::new(TypeKind::Arrow(Pi {
+                    ty,
+                    effs: Type::new(TypeKind::Empty),
+                    body,
+                }))
+            })
+        }
     }
 
     trait Formattable {
@@ -422,7 +424,7 @@ pub mod real {
 
     impl Formattable for Hole<Real> {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match &*self.0.borrow() {
+            match self.0.borrow().clone() {
                 HoleInner::Empty(s, _, _) => write!(f, "^{}", s.get()),
                 HoleInner::Row(s, _, _) => write!(f, "~{}", s.get()),
                 HoleInner::Filled(forall) => forall.format(env, f),

@@ -195,7 +195,8 @@ impl Context {
     }
 
     fn unify_hole(&mut self, env: Env, hole: Hole<Virtual>, right: Type<Virtual>) -> Result {
-        match hole.0.borrow().clone() {
+        let borrow = hole.0.borrow().clone();
+        match borrow {
             HoleInner::Empty(_, _, lvl) => match right.deref().as_ref() {
                 TypeKind::Hole(hole1) if hole == hole1.clone() => Ok(()),
                 _ => {
@@ -216,7 +217,7 @@ impl Context {
 
                     Ok(())
                 }
-                _ => self.unify_row(env, hole.clone(), right),
+                _ => self.unify_row(env, hole, right),
             },
             HoleInner::Filled(f) => self.unify(env, f, right),
         }

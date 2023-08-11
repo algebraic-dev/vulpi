@@ -376,13 +376,28 @@ impl Resolve for Effects {
     type Output = abs::Effects;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::Effects {
-            effects: self
-                .effects
-                .into_iter()
-                .map(|x| Box::new(x.0.resolve(ctx)))
-                .collect(),
+        let mut rest = None;
+        let mut effects = Vec::new();
+
+        let len = self.effects.len();
+        for (i, (effect, _)) in self.effects.into_iter().enumerate() {
+            let is_last = i == len - 1;
+            match &effect.data {
+                Effect::Application(_, _) => effects.push(Box::new(effect.resolve(ctx))),
+                Effect::Variable(l) => {
+                    if is_last {
+                        rest = Some(Box::new(effect.resolve(ctx)));
+                    } else {
+                        ctx.report(ResolverError {
+                            span: l.0.value.span.clone(),
+                            kind: ResolverErrorKind::CannotHavePolymorphiEffectInTheMiddle,
+                        })
+                    }
+                }
+            }
         }
+
+        abs::Effects { effects, rest }
     }
 }
 

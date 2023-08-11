@@ -13,6 +13,7 @@ pub enum ResolverErrorKind {
     ExpectedFunction,
     VariableNotBoundOnBothSides(Symbol),
     DuplicatePattern(Symbol),
+    CannotHavePolymorphiEffectInTheMiddle,
     PrivateDefinition,
 }
 
@@ -45,6 +46,9 @@ impl IntoDiagnostic for ResolverError {
                 format!("duplicate pattern: {}", name.get()).into()
             }
             ResolverErrorKind::PrivateDefinition => "private definition".into(),
+            ResolverErrorKind::CannotHavePolymorphiEffectInTheMiddle => {
+                "cannot have polymorphic effect in the middle".into()
+            }
         }
     }
 

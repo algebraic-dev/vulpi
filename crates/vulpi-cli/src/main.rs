@@ -16,10 +16,10 @@ use vulpi_resolver::namespace::Namespaces;
 use vulpi_resolver::scopes::Symbol;
 use vulpi_resolver::Resolve;
 
+use vulpi_typer::Declare as Decl;
+
 use vulpi_vfs::real::RealFileSystem;
 use vulpi_vfs::FileSystem;
-
-use vulpi_typer::Declare as Decl;
 
 fn main() {
     let file_name = std::env::args().nth(1).unwrap();
@@ -48,18 +48,21 @@ fn main() {
     program.declare(&mut resolver);
     program.resolve_imports(&mut resolver);
     let program = program.resolve(&mut resolver);
-    use vulpi_show::Show;
 
-    let env = vulpi_typer::env::Env::new(reporter.clone());
-    program.declare(env.clone());
-    program.define(env);
+    let env = vulpi_typer::Env::default();
+    let mut ctx = vulpi_typer::Context::new(reporter.clone());
+
+    program.declare((&mut ctx, env));
+
+    // program.define(env);
 
     let report = reporter.all_diagnostics();
 
     if !reporter.has_errors() {
         println!("Ok!")
     } else {
-        eprintln!("");
+        eprintln!();
+
         let mut writer = Reader::default();
         let ctx = Classic::new(&vfs, cwd);
 

@@ -5,19 +5,19 @@ use std::collections::HashMap;
 
 use vulpi_lexer::Lexer;
 use vulpi_parser::Parser;
-use vulpi_report::{
-    hash::HashReporter,
-    renderer::{classic::Classic, Reader, Renderer},
-    Report,
-};
+
+use vulpi_report::hash::HashReporter;
+use vulpi_report::renderer::{classic::Classic, Reader, Renderer};
+use vulpi_report::Report;
+
+use vulpi_resolver::module_tree::Tree;
 use vulpi_resolver::namespace::Namespaces;
 use vulpi_resolver::Resolve;
 use vulpi_resolver::{declare::Declare, namespace::Namespace};
 use vulpi_resolver::{declare::ImportResolve, scopes::Symbol};
-use vulpi_resolver::{module_tree::Tree, namespace::ModuleId};
+
 use vulpi_show::Show;
 use vulpi_tests::test;
-use vulpi_typer::Declare as Decl;
 
 use vulpi_vfs::{real::RealFileSystem, FileSystem};
 

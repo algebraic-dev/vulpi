@@ -30,6 +30,14 @@ pub struct Context {
 }
 
 impl Context {
+    pub fn new(reporter: Report) -> Self {
+        Self {
+            counter: 0,
+            reporter,
+            modules: Default::default(),
+        }
+    }
+
     pub fn report(&mut self, env: &Env, kind: TypeErrorKind) {
         self.reporter.report(Diagnostic::new(TypeError {
             span: env.span.borrow().clone(),
