@@ -3,7 +3,7 @@
 
 use crate::{
     module::Modules,
-    r#type::{eval::Eval, Index},
+    r#type::{eval::Eval, Index, State},
 };
 use im_rc::HashSet;
 use vulpi_intern::Symbol;
@@ -56,7 +56,7 @@ impl Context {
     }
 
     /// Creates a new hole that is a type that is not yet known
-    pub fn hole(&mut self, env: &Env, kind: Type<Virtual>) -> Type<Virtual> {
+    pub fn hole<S: State>(&mut self, env: &Env, kind: Type<S>) -> Type<S> {
         env.hole(kind, self.new_name())
     }
 

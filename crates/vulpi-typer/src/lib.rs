@@ -30,12 +30,8 @@ impl Declare for TypeDecl {
 
         let vec = &self.binders;
         for binder in vec {
-            match binder {
-                TypeBinder::Implicit(_) => {
-                    binders.push(context.hole(&env, Type::typ()).quote(env.level))
-                }
-                TypeBinder::Explicit(_, m) => binders.push(m.infer(env.clone())),
-            }
+            let (_, binder) = binder.infer((context, env.clone()));
+            binders.push(binder);
         }
 
         let size = binders.len();

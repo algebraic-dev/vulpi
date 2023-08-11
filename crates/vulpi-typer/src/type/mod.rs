@@ -42,7 +42,6 @@ impl Level {
 pub trait State {
     type Pi;
     type Forall;
-    type Hole;
     type Type;
     type Bound;
 }
@@ -65,7 +64,7 @@ pub enum TypeKind<S: State> {
     Forall(S::Forall),
 
     /// The type of holes.
-    Hole(S::Hole),
+    Hole(Hole<S>),
 
     /// Type for types that are defined by the user.
     Variable(Qualified),
@@ -241,11 +240,11 @@ pub mod r#virtual {
             clone
         }
 
-        pub fn hole(&self, kind: Kind<Virtual>, label: Symbol) -> Type<Virtual> {
+        pub fn hole<S: State>(&self, kind: Kind<S>, label: Symbol) -> Type<S> {
             Type::new(TypeKind::Hole(Hole::empty(label, kind, self.level)))
         }
 
-        pub fn lacks(&self, symbol: Symbol, hash_set: HashSet<Qualified>) -> Type<Virtual> {
+        pub fn lacks<S: State>(&self, symbol: Symbol, hash_set: HashSet<Qualified>) -> Type<S> {
             Type::new(TypeKind::Hole(Hole::row(symbol, self.level, hash_set)))
         }
     }
@@ -280,7 +279,6 @@ pub mod r#virtual {
     impl State for Virtual {
         type Pi = Pi;
         type Forall = Forall;
-        type Hole = Hole<Virtual>;
         type Type = Type<Virtual>;
         type Bound = Level;
     }
@@ -348,7 +346,6 @@ pub mod real {
     impl State for Real {
         type Pi = Pi;
         type Forall = Forall;
-        type Hole = Hole<Real>;
         type Type = Type<Real>;
         type Bound = Index;
     }

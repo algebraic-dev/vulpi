@@ -62,10 +62,14 @@ impl Infer for r#abstract::Type {
 
                     args.push(arg_ty);
 
-                    if let Some((left, right)) = destruct_kind(ctx, env.clone(), k.deref()) {
+                    if let Some((left, _, right)) = ctx.as_function(&env, k.deref()) {
                         ctx.subsumes(env.clone(), arg_kind, left);
                         k = right;
                     } else {
+                        ctx.report(
+                            &env,
+                            TypeErrorKind::NotAFunction(env.clone(), k.quote(env.level)),
+                        );
                         return (Type::error(), Kind::error());
                     }
                 }
@@ -78,14 +82,13 @@ impl Infer for r#abstract::Type {
 
                 for binder in &forall.params {
                     let (name, ty) = binder.infer((ctx, env.clone()));
-                    env = env.add(Some(name.clone()), ty.clone());
+                    env = env.add(Some(name.clone()), ty.eval(&env));
                     names.push((name, ty));
                 }
 
-                let (ty, kind) = forall.body.infer((ctx, env.clone()));
+                let (ty, kind) = forall.body.infer((ctx, env));
 
                 let forall = names.into_iter().fold(ty, |body, (name, kind)| {
-                    let kind = kind.quote(env.level);
                     Type::forall(real::Forall { name, kind, body })
                 });
 
@@ -110,30 +113,14 @@ impl Infer for r#abstract::Type {
 }
 
 impl Infer for r#abstract::TypeBinder {
-    type Return = (vulpi_intern::Symbol, Type<Virtual>);
+    type Return = (vulpi_intern::Symbol, Type<Real>);
 
     type Context<'a> = (&'a mut Context, Env);
 
     fn infer(&self, (ctx, env): Self::Context<'_>) -> Self::Return {
         match self {
             r#abstract::TypeBinder::Implicit(n) => (n.clone(), ctx.hole(&env, Kind::typ())),
-            r#abstract::TypeBinder::Explicit(n, k) => (n.clone(), k.infer(env.clone()).eval(&env)),
-        }
-    }
-}
-
-fn destruct_kind(
-    ctx: &mut Context,
-    env: Env,
-    k: Type<Virtual>,
-) -> Option<(Type<Virtual>, Type<Virtual>)> {
-    match k.deref().as_ref() {
-        r#type::TypeKind::Arrow(arrow) => Some((arrow.ty.clone(), arrow.body.clone())),
-        r#type::TypeKind::Error => None,
-        _ => {
-            let mes = TypeErrorKind::NotAFunction(env.clone(), k.quote(env.level));
-            ctx.report(&env, mes);
-            None
+            r#abstract::TypeBinder::Explicit(n, k) => (n.clone(), k.infer(env.clone())),
         }
     }
 }
