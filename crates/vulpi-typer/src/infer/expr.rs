@@ -7,6 +7,11 @@ use crate::r#type::TypeKind;
 
 use crate::Kind;
 
+use crate::check::Check;
+use im_rc::HashMap;
+use im_rc::HashSet;
+use vulpi_intern::Symbol;
+use vulpi_syntax::r#abstract::Qualified;
 use vulpi_syntax::{
     r#abstract::Statement,
     r#abstract::{Expr, ExprKind, StatementKind},
@@ -167,13 +172,113 @@ impl Infer for Expr {
 
                 ctx.instantiate_with_args(&eval_ty, spine)
             }
-            ExprKind::RecordInstance(_) => {
-                ctx.report(&env, TypeErrorKind::NotImplemented);
-                Type::error()
+            ExprKind::RecordInstance(instance) => {
+                let typ = ctx.modules.typ(&instance.name);
+
+                let crate::module::Def::Record(rec) = typ.def else {
+                    ctx.report(&env, TypeErrorKind::NotARecord);
+                    return Type::error();
+                };
+
+                let iter = rec.into_iter().map(|x| (x.name.clone(), x));
+
+                let available: HashMap<Symbol, Qualified> = HashMap::from_iter(iter);
+                let mut used = HashSet::<Symbol>::default();
+
+                let binders = typ
+                    .binders
+                    .iter()
+                    .map(|x| ctx.hole::<Virtual>(&env, x.1.clone()))
+                    .collect::<Vec<_>>();
+
+                let ret_type = Type::<Virtual>::application(
+                    Type::variable(instance.name.clone()),
+                    binders.clone(),
+                );
+
+                for (span, name, expr) in &instance.fields {
+                    env.on(span.clone());
+
+                    let Some(qualified) = available.get(name) else {
+                        ctx.report(&env, TypeErrorKind::NotFoundField);
+                        continue
+                    };
+
+                    if used.contains(name) {
+                        ctx.report(&env, TypeErrorKind::DuplicatedField);
+                        continue;
+                    }
+
+                    let field = ctx.modules.field(qualified).eval(&env);
+                    let inst_field = ctx.instantiate_with_args(&field, binders.clone());
+
+                    expr.check(inst_field.clone(), (ctx, ambient, env.clone()));
+
+                    used.insert(name.clone());
+                }
+
+                let diff = available
+                    .keys()
+                    .cloned()
+                    .collect::<HashSet<_>>()
+                    .difference(used);
+
+                for key in diff {
+                    ctx.report(&env, TypeErrorKind::MissingField(key));
+                }
+
+                ret_type
             }
-            ExprKind::RecordUpdate(_) => {
-                ctx.report(&env, TypeErrorKind::NotImplemented);
-                Type::error()
+            ExprKind::RecordUpdate(update) => {
+                let typ = update.expr.infer((ctx, ambient, env.clone()));
+
+                let (head, binders) = typ.application_spine();
+
+                let TypeKind::Variable(name) = head.as_ref() else {
+                    ctx.report(&env, TypeErrorKind::NotARecord);
+                    return Type::error();
+                };
+
+                let Some(typ) = ctx.modules.get(&name.path).types.get(&name.name).cloned() else {
+                    ctx.report(&env, TypeErrorKind::NotARecord);
+                    return Type::error();
+                };
+
+                let crate::module::Def::Record(rec) = &typ.def else {
+                    ctx.report(&env, TypeErrorKind::NotARecord);
+                    return Type::error();
+                };
+
+                let iter = rec.iter().map(|x| (x.name.clone(), x.clone()));
+
+                let available: HashMap<Symbol, Qualified> = HashMap::from_iter(iter);
+                let mut used = HashSet::<Symbol>::default();
+
+                let ret_type =
+                    Type::<Virtual>::application(Type::variable(name.clone()), binders.clone());
+
+                for (span, name, expr) in &update.fields {
+                    env.on(span.clone());
+
+                    let Some(qualified) = available.get(name) else {
+                        ctx.report(&env, TypeErrorKind::NotFoundField);
+                        continue
+                    };
+
+                    if used.contains(name) {
+                        ctx.report(&env, TypeErrorKind::DuplicatedField);
+                        continue;
+                    }
+
+                    let field = ctx.modules.field(qualified).eval(&env);
+                    let inst_field = ctx.instantiate_with_args(&field, binders.clone());
+
+                    expr.check(inst_field.clone(), (ctx, ambient, env.clone()));
+
+                    used.insert(name.clone());
+                }
+
+                ret_type
             }
             ExprKind::Handler(_) => {
                 ctx.report(&env, TypeErrorKind::NotImplemented);

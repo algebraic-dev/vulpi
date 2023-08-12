@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use vulpi_intern::Symbol;
-use vulpi_location::Spanned;
+use vulpi_location::{Span, Spanned};
 use vulpi_macros::Show;
 
 use vulpi_show::{Show, TreeDisplay};
@@ -320,13 +320,13 @@ pub struct LetExpr {
 #[derive(Show)]
 pub struct RecordInstance {
     pub name: Qualified,
-    pub fields: Vec<(Symbol, Expr)>,
+    pub fields: Vec<(Span, Symbol, Expr)>,
 }
 
 #[derive(Show)]
 pub struct RecordUpdate {
     pub expr: Expr,
-    pub fields: Vec<(Symbol, Expr)>,
+    pub fields: Vec<(Span, Symbol, Expr)>,
 }
 
 #[derive(Show)]

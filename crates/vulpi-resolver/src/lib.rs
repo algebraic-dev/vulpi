@@ -826,7 +826,15 @@ impl Resolve for RecordInstance {
 
         abs::ExprKind::RecordInstance(abs::RecordInstance {
             name,
-            fields: self.fields.into_iter().map(|x| x.0.resolve(ctx)).collect(),
+            fields: self
+                .fields
+                .into_iter()
+                .map(|x| {
+                    let span = x.0.name.0.value.span.clone();
+                    let (y, z) = x.0.resolve(ctx);
+                    (span, y, z)
+                })
+                .collect(),
         })
     }
 }
@@ -837,7 +845,15 @@ impl Resolve for RecordUpdate {
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::RecordUpdate {
             expr: self.expr.resolve(ctx),
-            fields: self.fields.into_iter().map(|x| x.0.resolve(ctx)).collect(),
+            fields: self
+                .fields
+                .into_iter()
+                .map(|x| {
+                    let span = x.0.name.0.value.span.clone();
+                    let (y, z) = x.0.resolve(ctx);
+                    (span, y, z)
+                })
+                .collect(),
         }
     }
 }
