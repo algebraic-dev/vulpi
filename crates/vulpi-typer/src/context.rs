@@ -60,7 +60,7 @@ impl Context {
     }
 
     /// Creates a new hole that is a type that is not yet known
-    pub fn hole<S: State>(&mut self, env: &Env, kind: Type<S>) -> Type<S> {
+    pub fn hole<S: State>(&mut self, env: &Env, kind: Type<Virtual>) -> Type<S> {
         env.hole(kind, self.new_name())
     }
 
@@ -145,23 +145,37 @@ impl Context {
     }
 
     fn accumulate_variables(
+        env: Env,
         level: Level,
         ty: Type<Real>,
-        new_vars: &mut HashMap<Hole<Real>, (Symbol, Index, Type<Real>)>,
+        new_vars: &mut HashMap<Hole<Virtual>, (Symbol, Index, Type<Real>)>,
         turn: bool,
     ) -> Type<Real> {
         match ty.as_ref() {
             TypeKind::Arrow(p) => {
-                let ty = Context::accumulate_variables(level, p.ty.clone(), new_vars, turn);
-                let effs = Context::accumulate_variables(level, p.effs.clone(), new_vars, turn);
-                let body = Context::accumulate_variables(level, p.body.clone(), new_vars, turn);
+                let ty =
+                    Context::accumulate_variables(env.clone(), level, p.ty.clone(), new_vars, turn);
+                let effs = Context::accumulate_variables(
+                    env.clone(),
+                    level,
+                    p.effs.clone(),
+                    new_vars,
+                    turn,
+                );
+                let body =
+                    Context::accumulate_variables(env, level, p.body.clone(), new_vars, turn);
                 Type::new(TypeKind::Arrow(real::Arrow { ty, effs, body }))
             }
             TypeKind::Forall(forall) => {
-                let kind =
-                    Context::accumulate_variables(level, forall.kind.clone(), new_vars, turn);
+                let kind = Context::accumulate_variables(
+                    env.clone(),
+                    level,
+                    forall.kind.clone(),
+                    new_vars,
+                    turn,
+                );
                 let body =
-                    Context::accumulate_variables(level, forall.body.clone(), new_vars, turn);
+                    Context::accumulate_variables(env, level, forall.body.clone(), new_vars, turn);
                 Type::new(TypeKind::Forall(real::Forall {
                     name: forall.name.clone(),
                     kind,
@@ -178,35 +192,39 @@ impl Context {
                 let borrow = hole.0.borrow().clone();
                 match borrow {
                     HoleInner::Empty(n, k, _) => {
-                        new_vars.insert(hole.clone(), (n, l, k));
+                        new_vars.insert(hole.clone(), (n, l, k.quote(env.level)));
                         ty.clone()
                     }
                     HoleInner::Row(n, _, _) => {
                         new_vars.insert(hole.clone(), (n, l, Type::new(TypeKind::Row)));
                         ty.clone()
                     }
+                    HoleInner::Filled(e) => {
+                        let e = e.quote(env.level);
 
-                    HoleInner::Filled(filled) => {
-                        Context::accumulate_variables(level, filled, new_vars, turn)
+                        Context::accumulate_variables(env, level, e, new_vars, turn)
                     }
                 }
             }
             TypeKind::Tuple(t) => {
                 let t = t
                     .iter()
-                    .map(|t| Context::accumulate_variables(level, t.clone(), new_vars, turn))
+                    .map(|t| {
+                        Context::accumulate_variables(env.clone(), level, t.clone(), new_vars, turn)
+                    })
                     .collect();
                 Type::new(TypeKind::Tuple(t))
             }
             TypeKind::Application(f, a) => {
-                let f = Context::accumulate_variables(level, f.clone(), new_vars, turn);
-                let a = Context::accumulate_variables(level, a.clone(), new_vars, turn);
+                let f =
+                    Context::accumulate_variables(env.clone(), level, f.clone(), new_vars, turn);
+                let a = Context::accumulate_variables(env, level, a.clone(), new_vars, turn);
                 Type::new(TypeKind::Application(f, a))
             }
             TypeKind::Extend(l, t, u) => Type::new(TypeKind::Extend(
                 l.clone(),
-                Context::accumulate_variables(level, t.clone(), new_vars, turn),
-                Context::accumulate_variables(level, u.clone(), new_vars, turn),
+                Context::accumulate_variables(env.clone(), level, t.clone(), new_vars, turn),
+                Context::accumulate_variables(env, level, u.clone(), new_vars, turn),
             )),
             TypeKind::Bound(n) if turn => {
                 let new = (*n).shift(Level(level.0 + new_vars.len()));
@@ -221,41 +239,15 @@ impl Context {
 
         let real = ty.clone().quote(env.level);
 
-        let real = Context::accumulate_variables(Level(0), real, &mut vars, false);
+        let real = Context::accumulate_variables(env.clone(), Level(0), real, &mut vars, false);
 
         let vars = vars.into_iter().collect::<Vec<_>>();
 
-        for (hole, (n, l, k)) in vars.iter() {
+        for (hole, (n, _, k)) in vars.iter() {
+            let level = Level(env.level.0);
             *env = env.add(Some(n.clone()), k.clone().eval(env));
-            hole.0.replace(HoleInner::Filled(Type::bound(*l)));
+            hole.0.replace(HoleInner::Filled(Type::bound(level)));
         }
-
-        real.eval(env)
-    }
-
-    /// Generalizes a monotype to a poly type.
-    pub fn generalize(&mut self, env: &Env, ty: &Type<Virtual>) -> Type<Virtual> {
-        let mut vars = Default::default();
-
-        let real = ty.clone().quote(env.level);
-
-        Context::accumulate_variables(Level(0), real.clone(), &mut vars, false);
-
-        let vars = vars.into_iter().collect::<Vec<_>>();
-
-        let real = Context::accumulate_variables(Level(0), real, &mut Default::default(), true);
-
-        for (hole, (_, l, _)) in vars.iter() {
-            hole.0.replace(HoleInner::Filled(Type::bound(*l)));
-        }
-
-        let real = vars.iter().fold(real, |rest, (_, (name, _, kind))| {
-            Type::forall(real::Forall {
-                name: name.clone(),
-                kind: kind.clone(),
-                body: rest,
-            })
-        });
 
         real.eval(env)
     }

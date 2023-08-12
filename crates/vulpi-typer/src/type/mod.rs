@@ -13,6 +13,8 @@ use vulpi_syntax::r#abstract::Qualified;
 
 pub use r#virtual::Env;
 
+use crate::Virtual;
+
 /// The level of the type. It is used for type checking and type inference.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Level(pub usize);
@@ -76,7 +78,7 @@ pub enum TypeKind<S: State> {
     Forall(S::Forall),
 
     /// The type of holes.
-    Hole(Hole<S>),
+    Hole(Hole<Virtual>),
 
     /// Type for types that are defined by the user.
     Variable(Qualified),
@@ -284,7 +286,7 @@ pub mod r#virtual {
             clone
         }
 
-        pub fn hole<S: State>(&self, kind: Kind<S>, label: Symbol) -> Type<S> {
+        pub fn hole<S: State>(&self, kind: Kind<Virtual>, label: Symbol) -> Type<S> {
             Type::new(TypeKind::Hole(Hole::empty(label, kind, self.level)))
         }
 
@@ -405,7 +407,11 @@ pub mod real {
     use vulpi_intern::Symbol;
     use vulpi_syntax::r#abstract::Qualified;
 
-    use super::{r#virtual::Env, Hole, HoleInner, Index, State, Type, TypeKind};
+    use crate::Virtual;
+
+    use super::{
+        eval::Quote, r#virtual::Env, Hole, HoleInner, Index, Level, State, Type, TypeKind,
+    };
 
     /// The real state is used as label for the [State] trait as a way to express that the type
     /// contains closures and can be executed.
@@ -510,12 +516,12 @@ pub mod real {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
     }
 
-    impl Formattable for Hole<Real> {
+    impl Formattable for Hole<Virtual> {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self.0.borrow().clone() {
                 HoleInner::Empty(s, _, l) => write!(f, "^{}~{}", s.get(), l.0),
                 HoleInner::Row(s, _, _) => write!(f, "~{}", s.get()),
-                HoleInner::Filled(forall) => forall.format(env, f),
+                HoleInner::Filled(forall) => forall.quote(Level(env.0.len())).format(env, f),
             }
         }
     }

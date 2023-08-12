@@ -34,7 +34,7 @@ impl Eval<Type<Virtual>> for Type<Real> {
             TypeKind::Row => Type::new(TypeKind::Row),
             TypeKind::Type => Type::new(TypeKind::Type),
             TypeKind::Effect => Type::new(TypeKind::Effect),
-            TypeKind::Hole(r) => r.eval(env),
+            TypeKind::Hole(r) => Type::new(TypeKind::Hole(r.clone())),
             TypeKind::Variable(v) => Type::new(TypeKind::Variable(v.clone())),
             TypeKind::Bound(v) => env.types[v.0].clone(),
             TypeKind::Tuple(v) => Type::new(TypeKind::Tuple(v.clone().eval(env))),
@@ -81,12 +81,8 @@ pub trait Quote<T> {
 impl Quote<Type<Real>> for Hole<Virtual> {
     fn quote(&self, depth: Level) -> Type<Real> {
         match &*self.0.borrow() {
-            HoleInner::Empty(s, k, l) => {
-                Type::new(TypeKind::Hole(Hole::empty(s.clone(), k.quote(depth), *l)))
-            }
-            HoleInner::Row(s, l, r) => {
-                Type::new(TypeKind::Hole(Hole::row(s.clone(), *l, r.clone())))
-            }
+            HoleInner::Empty(_, _, _) => Type::new(TypeKind::Hole(self.clone())),
+            HoleInner::Row(_, _, _) => Type::new(TypeKind::Hole(self.clone())),
             HoleInner::Filled(f) => f.clone().quote(depth),
         }
     }

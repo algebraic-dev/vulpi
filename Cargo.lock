@@ -208,6 +208,7 @@ version = "0.1.0"
 name = "vulpi-syntax"
 version = "0.1.0"
 dependencies = [
+ "im-rc",
  "vulpi-intern",
  "vulpi-location",
  "vulpi-macros",

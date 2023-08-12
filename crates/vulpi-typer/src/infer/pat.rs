@@ -184,7 +184,7 @@ impl<'b> Infer for EffectPat<'b> {
                     let arg_ty = arg.infer((ctx, map, env.clone()));
                     types.push(arg_ty.clone());
 
-                    let Some((param_ty, effect, rest)) = ctx.as_function(&env, typ) else { unreachable!() };
+                    let Some((param_ty, effect, rest)) = ctx.as_function(env, typ) else { unreachable!() };
                     ret_eff = effect;
 
                     typ = rest;
@@ -193,7 +193,6 @@ impl<'b> Infer for EffectPat<'b> {
 
                 if let Some(cont) = &eff.cont {
                     let cont_ty = Type::<Virtual>::function(vec![typ], self.0.clone());
-                    //let cont_ty = ctx.skolemize(env, &cont_ty);
                     map.insert(cont.clone(), cont_ty);
                 }
 
@@ -201,7 +200,7 @@ impl<'b> Infer for EffectPat<'b> {
             }
             PatternKind::Error => Type::error(),
             _ => {
-                ctx.report(&env, TypeErrorKind::EffectsNotAllowedInNormalPatterns);
+                ctx.report(env, TypeErrorKind::EffectsNotAllowedInNormalPatterns);
                 Type::error()
             }
         }

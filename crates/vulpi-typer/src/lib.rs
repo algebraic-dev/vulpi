@@ -248,6 +248,7 @@ impl Declare for EffectDecl {
         let mut eff_types = Vec::new();
 
         for eff in &self.effects {
+            let mut env = env.clone();
             names.push(eff.name.clone());
 
             let mut fvs = eff.ty.data.free_variables();
@@ -339,6 +340,8 @@ impl Declare for EffectDecl {
                     body: cons_typ,
                 });
             }
+
+            println!("{}", cons_typ.clone().show(&env));
 
             ctx.modules
                 .get(&name.path)
