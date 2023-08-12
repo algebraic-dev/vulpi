@@ -1,9 +1,11 @@
 //! This file declares a mutable environment that is useful to keep track of information that does
 //! not need to be immutable like the Env.
 
+use std::collections::HashMap;
+
 use crate::{
     module::Modules,
-    r#type::{eval::Eval, r#virtual::Pi, Index, State},
+    r#type::{eval::Eval, r#virtual::Pi, Hole, Index, State},
 };
 use im_rc::HashSet;
 use vulpi_intern::Symbol;
@@ -120,63 +122,134 @@ impl Context {
         }
     }
 
-    /// Generalizes a monotype to a poly type.
-    pub fn generalize(&mut self, env: &Env, ty: &Type<Virtual>) -> Type<Virtual> {
-        fn go(level: Level, ty: Type<Real>, new_vars: &mut Vec<(Symbol, Type<Real>)>) {
-            match ty.as_ref() {
-                TypeKind::Arrow(p) => {
-                    go(level, p.ty.clone(), new_vars);
-                    go(level, p.effs.clone(), new_vars);
-                    go(level.inc(), p.body.clone(), new_vars);
+    pub fn instantiate_with(&mut self, ty: &Type<Virtual>, arg: Type<Virtual>) -> Type<Virtual> {
+        match ty.deref().as_ref() {
+            TypeKind::Forall(forall) => {
+                let kind = forall.kind.clone();
+                forall.body.apply(Some(forall.name.clone()), arg, kind)
+            }
+            _ => ty.clone(),
+        }
+    }
+
+    pub fn instantiate_with_args(
+        &mut self,
+        ty: &Type<Virtual>,
+        args: Vec<Type<Virtual>>,
+    ) -> Type<Virtual> {
+        let mut ty = ty.clone();
+        for arg in args {
+            ty = self.instantiate_with(&ty, arg);
+        }
+        ty
+    }
+
+    fn accumulate_variables(
+        level: Level,
+        ty: Type<Real>,
+        new_vars: &mut HashMap<Hole<Real>, (Symbol, Index, Type<Real>)>,
+        turn: bool,
+    ) -> Type<Real> {
+        match ty.as_ref() {
+            TypeKind::Arrow(p) => {
+                let ty = Context::accumulate_variables(level, p.ty.clone(), new_vars, turn);
+                let effs = Context::accumulate_variables(level, p.effs.clone(), new_vars, turn);
+                let body = Context::accumulate_variables(level, p.body.clone(), new_vars, turn);
+                Type::new(TypeKind::Arrow(real::Arrow { ty, effs, body }))
+            }
+            TypeKind::Forall(forall) => {
+                let kind =
+                    Context::accumulate_variables(level, forall.kind.clone(), new_vars, turn);
+                let body =
+                    Context::accumulate_variables(level, forall.body.clone(), new_vars, turn);
+                Type::new(TypeKind::Forall(real::Forall {
+                    name: forall.name.clone(),
+                    kind,
+                    body,
+                }))
+            }
+            TypeKind::Hole(hole) => {
+                if new_vars.contains_key(hole) {
+                    return ty.clone();
                 }
-                TypeKind::Forall(forall) => {
-                    go(level, forall.kind.clone(), new_vars);
-                    go(level.inc(), forall.body.clone(), new_vars);
-                }
-                TypeKind::Hole(hole) => match hole.0.borrow().clone() {
+
+                let l = Index(level.0 + new_vars.len());
+
+                let borrow = hole.0.borrow().clone();
+                match borrow {
                     HoleInner::Empty(n, k, _) => {
-                        new_vars.push((n, k));
-                        let arg = Type::new(TypeKind::Bound(Index(new_vars.len() - 1 + level.0)));
-                        hole.0.replace(HoleInner::Filled(arg));
+                        new_vars.insert(hole.clone(), (n, l, k));
+                        ty.clone()
                     }
                     HoleInner::Row(n, _, _) => {
-                        new_vars.push((n, Type::new(TypeKind::Row)));
-                        let arg = Type::new(TypeKind::Bound(Index(new_vars.len() - 1 + level.0)));
-                        hole.0.replace(HoleInner::Filled(arg));
+                        new_vars.insert(hole.clone(), (n, l, Type::new(TypeKind::Row)));
+                        ty.clone()
                     }
 
-                    HoleInner::Filled(filled) => go(level, filled, new_vars),
-                },
-                TypeKind::Tuple(t) => {
-                    for ty in t.iter() {
-                        go(level, ty.clone(), new_vars);
+                    HoleInner::Filled(filled) => {
+                        Context::accumulate_variables(level, filled, new_vars, turn)
                     }
                 }
-                TypeKind::Application(f, a) => {
-                    go(level, f.clone(), new_vars);
-                    go(level, a.clone(), new_vars);
-                }
-                TypeKind::Extend(_, t, u) => {
-                    go(level, t.clone(), new_vars);
-                    go(level, u.clone(), new_vars);
-                }
-                TypeKind::Type => (),
-                TypeKind::Effect => (),
-                TypeKind::Empty => (),
-                TypeKind::Bound(_) => (),
-                TypeKind::Variable(_) => (),
-                TypeKind::Error => (),
-                TypeKind::Row => (),
             }
+            TypeKind::Tuple(t) => {
+                let t = t
+                    .iter()
+                    .map(|t| Context::accumulate_variables(level, t.clone(), new_vars, turn))
+                    .collect();
+                Type::new(TypeKind::Tuple(t))
+            }
+            TypeKind::Application(f, a) => {
+                let f = Context::accumulate_variables(level, f.clone(), new_vars, turn);
+                let a = Context::accumulate_variables(level, a.clone(), new_vars, turn);
+                Type::new(TypeKind::Application(f, a))
+            }
+            TypeKind::Extend(l, t, u) => Type::new(TypeKind::Extend(
+                l.clone(),
+                Context::accumulate_variables(level, t.clone(), new_vars, turn),
+                Context::accumulate_variables(level, u.clone(), new_vars, turn),
+            )),
+            TypeKind::Bound(n) if turn => {
+                let new = (*n).shift(Level(level.0 + new_vars.len()));
+                Type::new(TypeKind::Bound(new))
+            }
+            _ => ty,
         }
+    }
 
-        let mut vars = Vec::new();
+    pub fn skolemize(&mut self, env: &mut Env, ty: &Type<Virtual>) -> Type<Virtual> {
+        let mut vars = Default::default();
 
         let real = ty.clone().quote(env.level);
 
-        go(env.level, real.clone(), &mut vars);
+        let real = Context::accumulate_variables(Level(0), real, &mut vars, false);
 
-        let real = vars.iter().fold(real, |rest, (name, kind)| {
+        let vars = vars.into_iter().collect::<Vec<_>>();
+
+        for (hole, (n, l, k)) in vars.iter() {
+            *env = env.add(Some(n.clone()), k.clone().eval(env));
+            hole.0.replace(HoleInner::Filled(Type::bound(*l)));
+        }
+
+        real.eval(env)
+    }
+
+    /// Generalizes a monotype to a poly type.
+    pub fn generalize(&mut self, env: &Env, ty: &Type<Virtual>) -> Type<Virtual> {
+        let mut vars = Default::default();
+
+        let real = ty.clone().quote(env.level);
+
+        Context::accumulate_variables(Level(0), real.clone(), &mut vars, false);
+
+        let vars = vars.into_iter().collect::<Vec<_>>();
+
+        let real = Context::accumulate_variables(Level(0), real, &mut Default::default(), true);
+
+        for (hole, (_, l, _)) in vars.iter() {
+            hole.0.replace(HoleInner::Filled(Type::bound(*l)));
+        }
+
+        let real = vars.iter().fold(real, |rest, (_, (name, _, kind))| {
             Type::forall(real::Forall {
                 name: name.clone(),
                 kind: kind.clone(),

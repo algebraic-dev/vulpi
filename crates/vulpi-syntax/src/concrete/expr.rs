@@ -78,7 +78,7 @@ pub struct PatternArm {
 #[derive(Show)]
 pub struct WhenExpr {
     pub when: Token,
-    pub scrutinee: Box<Expr>,
+    pub scrutinee: Vec<(Box<Expr>, Option<Token>)>,
     pub is: Token,
     pub arms: Vec<PatternArm>,
 }

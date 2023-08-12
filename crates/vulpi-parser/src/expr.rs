@@ -298,7 +298,7 @@ impl<'a> Parser<'a> {
 
     pub fn when_expr(&mut self) -> Result<Box<Expr>> {
         let when = self.expect(TokenData::When)?;
-        let scrutinee = self.expr_atom()?;
+        let scrutinee = self.sep_by(TokenData::Comma, Self::expr)?;
         let is = self.expect(TokenData::Is)?;
 
         let cases = self.block(Self::pattern_arm)?.into_iter().collect();

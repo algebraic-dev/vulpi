@@ -154,6 +154,7 @@ impl Context {
             (TypeKind::Hole(m), _) => self.unify_hole(env, m.clone(), r),
             (_, TypeKind::Hole(m)) => self.unify_hole(env, m.clone(), l),
             (TypeKind::Bound(x), TypeKind::Bound(y)) if x == y => Ok(()),
+            (TypeKind::Variable(x), TypeKind::Variable(y)) if x == y => Ok(()),
             (TypeKind::Empty, TypeKind::Empty) => Ok(()),
             (TypeKind::Type, TypeKind::Type) => Ok(()),
             (TypeKind::Effect, TypeKind::Effect) => Ok(()),

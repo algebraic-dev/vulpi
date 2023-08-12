@@ -34,6 +34,7 @@ pub struct LetDef {
     pub binders: HashMap<Symbol, Type<Virtual>>,
     pub unbound: Vec<(Symbol, Type<Virtual>)>,
     pub ambient: Effect<Real>,
+    pub ret: Type<Virtual>,
     pub unbound_effects: Vec<(Symbol, Type<Virtual>)>,
 }
 
@@ -49,7 +50,7 @@ pub struct Module {
     pub types: im_rc::HashMap<Symbol, TypeData>,
 
     /// The fields of the records.
-    pub fields: im_rc::HashMap<Symbol, Type<Virtual>>,
+    pub fields: im_rc::HashMap<Symbol, Type<Real>>,
 
     /// The effects of some symbols.
     pub effects: im_rc::HashMap<Symbol, (Type<Virtual>, usize)>,
@@ -86,6 +87,11 @@ impl Modules {
     pub fn let_decl(&mut self, qualified: &Qualified) -> LetDef {
         let module = self.get(&qualified.path);
         module.variables.get(&qualified.name).unwrap().clone()
+    }
+
+    pub fn field(&mut self, qualified: &Qualified) -> Type<Real> {
+        let module = self.get(&qualified.path);
+        module.fields.get(&qualified.name).unwrap().clone()
     }
 
     pub fn get(&mut self, id: &Symbol) -> &mut Module {

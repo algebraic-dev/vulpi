@@ -711,7 +711,7 @@ impl Resolve for IfExpr {
             .unwrap_or(abs::PatternKind::Error);
 
         abs::ExprKind::When(abs::WhenExpr {
-            scrutinee: self.cond.resolve(ctx),
+            scrutinee: vec![self.cond.resolve(ctx)],
             arms: vec![
                 abs::PatternArm {
                     patterns: vec![Box::new(Spanned::new(
@@ -759,7 +759,11 @@ impl Resolve for WhenExpr {
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::WhenExpr {
-            scrutinee: self.scrutinee.resolve(ctx),
+            scrutinee: self
+                .scrutinee
+                .into_iter()
+                .map(|x| x.0.resolve(ctx))
+                .collect(),
             arms: self.arms.resolve(ctx),
         }
     }
@@ -988,32 +992,24 @@ impl Resolve for Binder {
 }
 
 impl Resolve for LetCase {
-    type Output = abs::LetCase;
+    type Output = abs::PatternArm;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::LetCase {
-            pattern: self.arm.resolve(ctx),
-        }
+        self.arm.resolve(ctx)
     }
 }
 
 impl Resolve for LetMode {
-    type Output = abs::LetMode;
+    type Output = Vec<abs::PatternArm>;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         match self {
-            LetMode::Body(_, expr) => abs::LetMode {
-                cases: vec![abs::LetCase {
-                    pattern: abs::PatternArm {
-                        patterns: vec![],
-                        expr: expr.resolve(ctx),
-                        guard: None,
-                    },
-                }],
-            },
-            LetMode::Cases(cases) => abs::LetMode {
-                cases: cases.resolve(ctx),
-            },
+            LetMode::Body(_, expr) => vec![abs::PatternArm {
+                patterns: vec![],
+                expr: expr.resolve(ctx),
+                guard: None,
+            }],
+            LetMode::Cases(cases) => cases.resolve(ctx),
         }
     }
 }
@@ -1035,53 +1031,67 @@ impl Resolve for LetDecl {
     }
 }
 
-impl Resolve for Constructor {
+impl Resolve for (Symbol, Constructor) {
     type Output = abs::Constructor;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
         abs::Constructor {
-            name: ctx.qualify(self.name.symbol()),
-            args: self.args.resolve(ctx),
-            typ: self.typ.map(|x| x.1.resolve(ctx)),
+            name: ctx.path.with(self.0).qualify(self.1.name.symbol()).into(),
+            args: self.1.args.resolve(ctx),
+            typ: self.1.typ.map(|x| x.1.resolve(ctx)),
         }
     }
 }
 
-impl Resolve for SumDecl {
+impl Resolve for (Symbol, SumDecl) {
     type Output = abs::SumDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
+        let (symbol, cons) = self;
         abs::SumDecl {
-            constructors: self.constructors.resolve(ctx),
+            constructors: cons
+                .constructors
+                .into_iter()
+                .map(|x| (symbol.clone(), x).resolve(ctx))
+                .collect(),
         }
     }
 }
 
-impl Resolve for Field {
+impl Resolve for (Symbol, Field) {
     type Output = (Qualified, abs::Type);
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        (ctx.qualify(self.name.symbol()), self.ty.resolve(ctx))
+        (
+            ctx.path.with(self.0).qualify(self.1.name.symbol()).into(),
+            self.1.ty.resolve(ctx),
+        )
     }
 }
 
-impl Resolve for RecordDecl {
+impl Resolve for (Symbol, RecordDecl) {
     type Output = abs::RecordDecl;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
+        let (symbol, rec) = self;
         abs::RecordDecl {
-            fields: self.fields.into_iter().map(|x| x.0.resolve(ctx)).collect(),
+            fields: rec
+                .fields
+                .into_iter()
+                .map(|x| (symbol.clone(), x.0).resolve(ctx))
+                .collect(),
         }
     }
 }
 
-impl Resolve for TypeDef {
+impl Resolve for (Symbol, TypeDef) {
     type Output = abs::TypeDef;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        match self {
-            TypeDef::Sum(sum) => abs::TypeDef::Sum(sum.resolve(ctx)),
-            TypeDef::Record(rec) => abs::TypeDef::Record(rec.resolve(ctx)),
+        let (symbol, def) = self;
+        match def {
+            TypeDef::Sum(sum) => abs::TypeDef::Sum((symbol, sum).resolve(ctx)),
+            TypeDef::Record(rec) => abs::TypeDef::Record((symbol, rec).resolve(ctx)),
             TypeDef::Synonym(sym) => abs::TypeDef::Synonym(sym.resolve(ctx)),
         }
     }
@@ -1101,7 +1111,7 @@ impl Resolve for TypeDecl {
             },
             binders: self.binders.resolve(ctx),
             def: if let Some(res) = self.def {
-                res.1.resolve(ctx)
+                (self.name.symbol(), res.1).resolve(ctx)
             } else {
                 abs::TypeDef::Abstract
             },

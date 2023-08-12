@@ -300,7 +300,7 @@ pub struct PatternArm {
 
 #[derive(Show)]
 pub struct WhenExpr {
-    pub scrutinee: Expr,
+    pub scrutinee: Vec<Expr>,
     pub arms: Vec<PatternArm>,
 }
 
@@ -380,16 +380,6 @@ pub enum Visibility {
 }
 
 #[derive(Show)]
-pub struct LetCase {
-    pub pattern: PatternArm,
-}
-
-#[derive(Show)]
-pub struct LetMode {
-    pub cases: Vec<LetCase>,
-}
-
-#[derive(Show)]
 pub struct Binder {
     pub pattern: Pattern,
     pub ty: Type,
@@ -401,7 +391,7 @@ pub struct LetDecl {
     pub name: Qualified,
     pub binders: Vec<Binder>,
     pub ret: Option<(Option<Effects>, Type)>,
-    pub body: LetMode,
+    pub body: Vec<PatternArm>,
 }
 
 #[derive(Show)]

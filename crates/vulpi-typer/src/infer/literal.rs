@@ -24,7 +24,7 @@ impl Infer for Literal {
     }
 }
 
-fn find_prelude_type(name: &str, ctx: &mut Context, env: Env) -> Type<Virtual> {
+pub fn find_prelude_type(name: &str, ctx: &mut Context, env: Env) -> Type<Virtual> {
     let path = Symbol::intern("Prelude");
     let name = Symbol::intern(name);
     if ctx.modules.get(&path).types.get(&name).is_some() {

@@ -13,6 +13,7 @@ use vulpi_intern::Symbol;
 use vulpi_syntax::elaborated::Decl;
 use vulpi_syntax::r#abstract::LetDecl;
 
+use crate::check::Check;
 use crate::r#type::eval::{Eval, Quote};
 use crate::r#type::real::Forall;
 use crate::r#type::Index;
@@ -24,6 +25,7 @@ use vulpi_syntax::{
     r#abstract::{EffectDecl, ExternalDecl, Module, ModuleDecl, TypeDecl, TypeDef},
 };
 
+pub mod check;
 pub mod context;
 pub mod errors;
 pub mod infer;
@@ -146,7 +148,7 @@ impl Declare for TypeDecl {
                     ctx.modules
                         .get(&name.path)
                         .fields
-                        .insert(name.name.clone(), typ.eval(&env));
+                        .insert(name.name.clone(), typ);
                 }
 
                 elaborated::TypeDecl::Record(names)
@@ -185,14 +187,16 @@ impl Declare for ExternalDecl {
         let (typ, k) = self.ty.infer((ctx, env.clone()));
         ctx.subsumes(env.clone(), k, Kind::typ());
 
+        let typ = typ.eval(&env);
         ctx.modules.get(&self.namespace).variables.insert(
             self.name.clone(),
             LetDef {
-                typ: typ.eval(&env),
+                typ: typ.clone(),
                 binders: Default::default(),
                 unbound,
                 ambient: Type::new(TypeKind::Empty),
                 unbound_effects: vec![],
+                ret: typ,
             },
         );
     }
@@ -419,18 +423,18 @@ impl Declare for LetDecl {
             (Type::new(TypeKind::Empty), ctx.hole(&env, Kind::typ()))
         };
 
-        let ret = if has_effect {
+        let ret_type = if has_effect {
             let ty = args.pop().unwrap();
             Type::new(TypeKind::Arrow(Arrow {
                 ty,
                 effs: effs.clone(),
-                body: ret,
+                body: ret.clone(),
             }))
         } else {
-            ret
+            ret.clone()
         };
 
-        let mut typ = Type::<Real>::function(args.clone(), ret);
+        let mut typ = Type::<Real>::function(args.clone(), ret_type);
 
         for (name, _) in effect_bounds.clone() {
             typ = Type::forall(Forall {
@@ -456,6 +460,7 @@ impl Declare for LetDecl {
                 unbound: bound,
                 ambient: effs,
                 unbound_effects: effect_bounds,
+                ret: ret.eval(&env),
             },
         );
     }
@@ -474,6 +479,11 @@ impl Declare for LetDecl {
         for (k, v) in let_decl.binders {
             env.add_var(k, v);
         }
+
+        self.body.check(
+            let_decl.ret,
+            (ctx, let_decl.ambient.eval(&env), env.clone()),
+        );
     }
 }
 

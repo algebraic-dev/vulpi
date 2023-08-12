@@ -5,7 +5,7 @@
 pub mod eval;
 pub mod unify;
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, hash::Hash, rc::Rc};
 
 use im_rc::HashSet;
 use vulpi_intern::Symbol;
@@ -21,6 +21,12 @@ pub struct Level(pub usize);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Index(pub usize);
 
+impl Index {
+    pub fn shift(self, level: Level) -> Self {
+        Self(self.0 + level.0)
+    }
+}
+
 impl Level {
     /// Increment the level
     pub fn inc(self) -> Self {
@@ -34,6 +40,12 @@ impl Level {
 
     /// Transforms a level into an index.
     pub fn to_index(base: Level, current: Level) -> Index {
+        if base.0 < current.0 {
+            panic!(
+                "The base level is {} and the current level is {}",
+                base.0, current.0
+            )
+        }
         Index(base.0 - current.0 - 1)
     }
 }
@@ -159,6 +171,13 @@ pub enum HoleInner<S: State> {
 #[derive(Clone)]
 pub struct Hole<S: State>(pub Rc<RefCell<HoleInner<S>>>);
 
+impl<S: State> Hash for Hole<S> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let s = (self.0.as_ptr()) as usize;
+        s.hash(state);
+    }
+}
+
 impl<S: State> PartialEq for Hole<S> {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
@@ -225,6 +244,7 @@ pub mod r#virtual {
         pub fn add_var(&mut self, name: Symbol, ty: Type<Virtual>) {
             self.vars.insert(name, ty);
         }
+
         /// Sets the location of the environment. It is used for error reporting.
         pub fn on(&self, span: Span) {
             *self.span.borrow_mut() = span;
@@ -317,6 +337,20 @@ pub mod r#virtual {
     }
 
     impl Type<Virtual> {
+        pub(crate) fn application_spine(&self) -> (Self, Vec<Self>) {
+            let mut spine = Vec::new();
+            let mut current = self.clone();
+
+            while let TypeKind::Application(left, right) = current.deref().as_ref() {
+                spine.push(right.clone());
+                current = left.clone();
+            }
+
+            spine.reverse();
+
+            (current, spine)
+        }
+
         pub fn deref(&self) -> Type<Virtual> {
             match self.as_ref() {
                 TypeKind::Hole(h) => match h.0.borrow().clone() {
@@ -479,7 +513,7 @@ pub mod real {
     impl Formattable for Hole<Real> {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self.0.borrow().clone() {
-                HoleInner::Empty(s, _, _) => write!(f, "^{}", s.get()),
+                HoleInner::Empty(s, _, l) => write!(f, "^{}~{}", s.get(), l.0),
                 HoleInner::Row(s, _, _) => write!(f, "~{}", s.get()),
                 HoleInner::Filled(forall) => forall.format(env, f),
             }
@@ -500,8 +534,9 @@ pub mod real {
                     match pi.effs.as_ref() {
                         TypeKind::Empty => (),
                         _ => {
+                            write!(f, "{{")?;
                             pi.effs.format(env, f)?;
-                            write!(f, " ")?;
+                            write!(f, "}} ")?;
                         }
                     }
 
@@ -509,22 +544,24 @@ pub mod real {
                     write!(f, ")")
                 }
                 TypeKind::Forall(_) => {
+                    let mut env = env.clone();
                     write!(f, "(forall ")?;
 
                     let (binder, rest) = self.forall_spine();
 
                     for (i, (name, kind)) in binder.iter().enumerate() {
                         write!(f, "({}: ", name.get())?;
-                        kind.format(env, f)?;
+                        kind.format(&env, f)?;
                         write!(f, ")")?;
                         if i != binder.len() - 1 {
                             write!(f, " ")?;
                         }
+                        env.0.push_front(Some(name.clone()))
                     }
 
                     write!(f, ". ")?;
 
-                    rest.format(env, f)?;
+                    rest.format(&env, f)?;
 
                     write!(f, ")")
                 }
@@ -534,11 +571,12 @@ pub mod real {
                 TypeKind::Bound(n) => {
                     write!(
                         f,
-                        "{}",
+                        "{}~{}",
                         env.0[n.0]
                             .clone()
                             .unwrap_or(Symbol::intern(&format!("_{}", n.0)))
                             .get(),
+                        n.0
                     )
                 }
                 TypeKind::Tuple(t) => {
@@ -565,8 +603,6 @@ pub mod real {
                 TypeKind::Extend(_, _, _) => {
                     let (last, args) = self.row_spine();
 
-                    write!(f, "{{")?;
-
                     for (i, (_, e)) in args.iter().enumerate() {
                         e.format(env, f)?;
                         if i != args.len() - 1 {
@@ -579,7 +615,7 @@ pub mod real {
                         last.format(env, f)?;
                     }
 
-                    write!(f, "}}")
+                    Ok(())
                 }
                 TypeKind::Error => write!(f, "<ERROR>"),
             }
