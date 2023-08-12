@@ -251,4 +251,15 @@ impl Context {
 
         real.eval(env)
     }
+
+    /// Opens a type by replacing a closed effect to a open one.
+    pub fn open(&mut self, env: &Env, ty: Type<Virtual>) -> Type<Virtual> {
+        match ty.as_ref() {
+            TypeKind::Extend(label, effect, rest) => {
+                Type::<Virtual>::extend(label.clone(), effect.clone(), self.open(env, rest.clone()))
+            }
+            TypeKind::Empty => self.lacks(env, Default::default()),
+            _ => ty.clone(),
+        }
+    }
 }

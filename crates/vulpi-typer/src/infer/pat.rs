@@ -7,11 +7,7 @@ use vulpi_syntax::{r#abstract::Pattern, r#abstract::PatternArm, r#abstract::Patt
 
 use crate::{
     errors::TypeErrorKind,
-    r#type::{
-        eval::{Eval, Quote},
-        r#virtual::Virtual,
-        Effect,
-    },
+    r#type::{eval::Eval, r#virtual::Virtual, Effect},
     Context, Env, Kind, Type,
 };
 
@@ -160,14 +156,14 @@ impl<'b> Infer for EffectPat<'b> {
         &'a mut Env,
     );
 
-    fn infer(&self, (ctx, map, mut env): Self::Context<'_>) -> Self::Return {
+    fn infer(&self, (ctx, map, env): Self::Context<'_>) -> Self::Return {
         env.on(self.1.span.clone());
 
         match &self.1.data {
-            PatternKind::Wildcard => ctx.lacks(&env, Default::default()),
+            PatternKind::Wildcard => ctx.lacks(env, Default::default()),
             PatternKind::Variable(n) => {
                 map.insert(n.clone(), self.0.clone());
-                ctx.lacks(&env, Default::default())
+                ctx.lacks(env, Default::default())
             }
             PatternKind::Effect(eff) => {
                 let (mut typ, arity) = ctx.modules.effect(&eff.func);

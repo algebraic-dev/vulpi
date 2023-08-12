@@ -341,8 +341,6 @@ impl Declare for EffectDecl {
                 });
             }
 
-            println!("{}", cons_typ.clone().show(&env));
-
             ctx.modules
                 .get(&name.path)
                 .effects

@@ -1,18 +1,10 @@
 //! Inference of expressions
 
-use crate::check::Check;
-use crate::infer::literal::find_prelude_type;
-use crate::infer::pat::EffectPat;
 use crate::r#type::eval::Eval;
 use crate::r#type::eval::Quote;
 use crate::r#type::r#virtual;
-use crate::r#type::Index;
 use crate::r#type::TypeKind;
-use crate::Real;
 
-use crate::r#type::r#virtual::Closure;
-use crate::r#type::real;
-use crate::r#type::real::Forall;
 use crate::Kind;
 
 use vulpi_syntax::{
@@ -45,8 +37,9 @@ impl Infer for Expr {
                     let arg_ty = arg.infer((ctx, ambient, env.clone()));
 
                     if let Some((left, effs, right)) = ctx.as_function(&env, ty.deref()) {
+                        let opened = ctx.open(&env, effs);
                         ctx.subsumes(env.clone(), left, arg_ty);
-                        ctx.subsumes(env.clone(), ambient.clone(), effs);
+                        ctx.subsumes(env.clone(), ambient.clone(), opened);
 
                         ty = right;
                     } else {
@@ -174,13 +167,21 @@ impl Infer for Expr {
 
                 ctx.instantiate_with_args(&eval_ty, spine)
             }
-            ExprKind::RecordInstance(_) => todo!(),
-            ExprKind::RecordUpdate(_) => todo!(),
-            ExprKind::Handler(_) => todo!(),
+            ExprKind::RecordInstance(_) => {
+                ctx.report(&env, TypeErrorKind::NotImplemented);
+                Type::error()
+            }
+            ExprKind::RecordUpdate(_) => {
+                ctx.report(&env, TypeErrorKind::NotImplemented);
+                Type::error()
+            }
+            ExprKind::Handler(_) => {
+                ctx.report(&env, TypeErrorKind::NotImplemented);
+                Type::error()
+            }
             ExprKind::Cases(_) => {
-                let hole = ctx.hole(&env, Kind::typ());
-                self.check(hole.clone(), (ctx, ambient, env));
-                hole.deref()
+                ctx.report(&env, TypeErrorKind::NotImplemented);
+                Type::error()
             }
         }
     }
