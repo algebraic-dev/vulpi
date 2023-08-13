@@ -1136,13 +1136,16 @@ impl Resolve for TypeDecl {
 }
 
 impl Resolve for ModuleInline {
-    type Output = Vec<abs::TopLevelDecl>;
+    type Output = abs::Module;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
+        let mut module = abs::Module::default();
+
         self.top_levels
             .into_iter()
-            .filter_map(|x| x.resolve(ctx))
-            .collect()
+            .for_each(|x| (&mut module, x).resolve(ctx));
+
+        module
     }
 }
 
@@ -1242,20 +1245,20 @@ impl Resolve for ExternalDecl {
     }
 }
 
-impl Resolve for TopLevel {
-    type Output = Option<abs::TopLevelDecl>;
+impl Resolve for (&'_ mut abs::Module, TopLevel) {
+    type Output = ();
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        match self {
-            TopLevel::Let(let_) => Some(abs::TopLevelDecl::Let(let_.resolve(ctx))),
-            TopLevel::Type(typ) => Some(abs::TopLevelDecl::Type(typ.resolve(ctx))),
-            TopLevel::Module(module) => Some(abs::TopLevelDecl::Module(module.resolve(ctx))),
-            TopLevel::Effect(effect) => Some(abs::TopLevelDecl::Effect(effect.resolve(ctx))),
-            TopLevel::External(external) => {
-                Some(abs::TopLevelDecl::External(external.resolve(ctx)))
-            }
-            TopLevel::Error(_) => None,
-            TopLevel::Use(_) => None,
+        let (module, top_level) = self;
+
+        match top_level {
+            TopLevel::Let(let_) => module.lets.push(*let_.resolve(ctx)),
+            TopLevel::Type(typ) => module.types.push(*typ.resolve(ctx)),
+            TopLevel::Module(modul) => module.modules.push(*modul.resolve(ctx)),
+            TopLevel::Effect(effect) => module.effects.push(*effect.resolve(ctx)),
+            TopLevel::External(external) => module.externals.push(*external.resolve(ctx)),
+            TopLevel::Error(_) => (),
+            TopLevel::Use(_) => (),
         }
     }
 }
@@ -1264,13 +1267,13 @@ impl Resolve for Program {
     type Output = abs::Module;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        abs::Module {
-            decls: self
-                .top_levels
-                .into_iter()
-                .filter_map(|x| x.resolve(ctx))
-                .collect(),
-        }
+        let mut module = abs::Module::default();
+
+        self.top_levels
+            .into_iter()
+            .for_each(|x| (&mut module, x).resolve(ctx));
+
+        module
     }
 }
 

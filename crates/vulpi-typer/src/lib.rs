@@ -38,6 +38,28 @@ pub trait Declare {
     fn define(&self, _context: (&mut Context, Env)) {}
 }
 
+impl<T: Declare> Declare for Vec<T> {
+    fn declare(&self, context: (&mut Context, Env)) {
+        for decl in self {
+            decl.declare((context.0, context.1.clone()));
+        }
+    }
+
+    fn define(&self, context: (&mut Context, Env)) {
+        for decl in self {
+            decl.define((context.0, context.1.clone()));
+        }
+    }
+}
+
+impl<T: Declare> Declare for Option<T> {
+    fn declare(&self, context: (&mut Context, Env)) {
+        if let Some(decl) = self {
+            decl.declare(context);
+        }
+    }
+}
+
 impl Declare for TypeDecl {
     fn declare(&self, (context, env): (&mut Context, Env)) {
         let vec = &self.binders;
@@ -490,108 +512,28 @@ impl Declare for LetDecl {
 
 impl Declare for ModuleDecl {
     fn declare(&self, (ctx, env): (&mut Context, Env)) {
-        if let Some(modules) = self.modules() {
-            for decl in modules {
-                decl.declare((ctx, env.clone()));
-            }
-        }
-
-        if let Some(types) = self.types() {
-            for decl in types {
-                decl.declare((ctx, env.clone()));
-            }
-        }
-
-        if let Some(effects) = self.effects() {
-            for decl in effects {
-                decl.declare((ctx, env.clone()));
-            }
-        }
-
-        if let Some(externals) = self.externals() {
-            for decl in externals {
-                decl.declare((ctx, env.clone()));
-            }
-        }
-
-        if let Some(lets) = self.lets() {
-            for decl in lets {
-                decl.declare((ctx, env.clone()));
-            }
-        }
+        self.decls.declare((ctx, env));
     }
 
     fn define(&self, (ctx, env): (&mut Context, Env)) {
-        if let Some(modules) = self.modules() {
-            for decl in modules {
-                decl.declare((ctx, env.clone()));
-            }
-        }
-
-        if let Some(types) = self.types() {
-            for decl in types {
-                decl.define((ctx, env.clone()));
-            }
-        }
-
-        if let Some(effects) = self.effects() {
-            for decl in effects {
-                decl.define((ctx, env.clone()));
-            }
-        }
-
-        if let Some(externals) = self.externals() {
-            for decl in externals {
-                decl.define((ctx, env.clone()));
-            }
-        }
-
-        if let Some(lets) = self.lets() {
-            for decl in lets {
-                decl.declare((ctx, env.clone()));
-            }
-        }
+        self.decls.define((ctx, env));
     }
 }
 
 impl Declare for Module {
     fn declare(&self, (ctx, env): (&mut Context, Env)) {
-        for module in self.modules() {
-            module.declare((ctx, env.clone()));
-        }
-
-        for decl in self.types() {
-            decl.declare((ctx, env.clone()));
-        }
-
-        for decl in self.effects() {
-            decl.declare((ctx, env.clone()));
-        }
-
-        for decl in self.lets() {
-            decl.declare((ctx, env.clone()));
-        }
-
-        for externals in self.externals() {
-            externals.declare((ctx, env.clone()));
-        }
+        self.modules.declare((ctx, env.clone()));
+        self.types.declare((ctx, env.clone()));
+        self.effects.declare((ctx, env.clone()));
+        self.lets.declare((ctx, env.clone()));
+        self.externals.declare((ctx, env));
     }
 
     fn define(&self, (ctx, env): (&mut Context, Env)) {
-        for module in self.modules() {
-            module.define((ctx, env.clone()));
-        }
-
-        for decl in self.effects() {
-            decl.define((ctx, env.clone()));
-        }
-
-        for decl in self.types() {
-            decl.define((ctx, env.clone()));
-        }
-
-        for decl in self.lets() {
-            decl.define((ctx, env.clone()));
-        }
+        self.modules.define((ctx, env.clone()));
+        self.types.define((ctx, env.clone()));
+        self.effects.define((ctx, env.clone()));
+        self.lets.define((ctx, env.clone()));
+        self.externals.define((ctx, env));
     }
 }

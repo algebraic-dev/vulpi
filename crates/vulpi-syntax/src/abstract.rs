@@ -433,54 +433,7 @@ pub struct ModuleDecl {
     pub namespace: Symbol,
     pub visibility: Visibility,
     pub name: Symbol,
-    pub decls: Option<Vec<TopLevelDecl>>,
-}
-
-impl ModuleDecl {
-    pub fn types(&self) -> Option<impl Iterator<Item = &TypeDecl>> {
-        self.decls.as_ref().map(|decls| {
-            decls.iter().filter_map(|decl| match *decl {
-                TopLevelDecl::Type(ref decl) => Some(&**decl),
-                _ => None,
-            })
-        })
-    }
-
-    pub fn effects(&self) -> Option<impl Iterator<Item = &EffectDecl>> {
-        self.decls.as_ref().map(|decls| {
-            decls.iter().filter_map(|decl| match *decl {
-                TopLevelDecl::Effect(ref decl) => Some(&**decl),
-                _ => None,
-            })
-        })
-    }
-
-    pub fn externals(&self) -> Option<impl Iterator<Item = &ExternalDecl>> {
-        self.decls.as_ref().map(|decls| {
-            decls.iter().filter_map(|decl| match *decl {
-                TopLevelDecl::External(ref decl) => Some(&**decl),
-                _ => None,
-            })
-        })
-    }
-
-    pub fn lets(&self) -> Option<impl Iterator<Item = &LetDecl>> {
-        self.decls.as_ref().map(|decls| {
-            decls.iter().filter_map(|decl| match *decl {
-                TopLevelDecl::Let(ref decl) => Some(&**decl),
-                _ => None,
-            })
-        })
-    }
-
-    pub fn modules(&self) -> Option<impl Iterator<Item = &ModuleDecl>> {
-        self.decls.as_ref().map(|decls| {
-            decls.iter().filter_map(|decl| match *decl {
-                TopLevelDecl::Module(ref decl) => Some(&**decl),
-                _ => None,
-            })
-        })
-    }
+    pub decls: Option<Module>,
 }
 
 #[derive(Show)]
@@ -509,53 +462,11 @@ pub struct ExternalDecl {
     pub ret: Symbol,
 }
 
-#[derive(Show)]
-pub enum TopLevelDecl {
-    Let(Box<LetDecl>),
-    Type(Box<TypeDecl>),
-    Module(Box<ModuleDecl>),
-    Effect(Box<EffectDecl>),
-    External(Box<ExternalDecl>),
-}
-
-#[derive(Show)]
+#[derive(Show, Default)]
 pub struct Module {
-    pub decls: Vec<TopLevelDecl>,
-}
-
-impl Module {
-    pub fn lets(&self) -> impl Iterator<Item = &LetDecl> {
-        self.decls.iter().filter_map(|decl| match *decl {
-            TopLevelDecl::Let(ref decl) => Some(&**decl),
-            _ => None,
-        })
-    }
-
-    pub fn externals(&self) -> impl Iterator<Item = &ExternalDecl> {
-        self.decls.iter().filter_map(|decl| match *decl {
-            TopLevelDecl::External(ref decl) => Some(&**decl),
-            _ => None,
-        })
-    }
-
-    pub fn modules(&self) -> impl Iterator<Item = &ModuleDecl> {
-        self.decls.iter().filter_map(|decl| match *decl {
-            TopLevelDecl::Module(ref decl) => Some(&**decl),
-            _ => None,
-        })
-    }
-
-    pub fn effects(&self) -> impl Iterator<Item = &EffectDecl> {
-        self.decls.iter().filter_map(|decl| match *decl {
-            TopLevelDecl::Effect(ref decl) => Some(&**decl),
-            _ => None,
-        })
-    }
-
-    pub fn types(&self) -> impl Iterator<Item = &TypeDecl> {
-        self.decls.iter().filter_map(|decl| match *decl {
-            TopLevelDecl::Type(ref decl) => Some(&**decl),
-            _ => None,
-        })
-    }
+    pub lets: Vec<LetDecl>,
+    pub types: Vec<TypeDecl>,
+    pub modules: Vec<ModuleDecl>,
+    pub effects: Vec<EffectDecl>,
+    pub externals: Vec<ExternalDecl>,
 }
