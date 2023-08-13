@@ -439,12 +439,13 @@ impl Declare for LetDecl {
             ctx.subsumes(env.clone(), kind, Kind::typ());
 
             let mut hash_map = Default::default();
-            let (pat_ty, elab_pat) = arg.pattern.infer((ctx, &mut hash_map, env.clone()));
+            let pat_ty = ty.eval(&env);
+            let elab_pat = arg
+                .pattern
+                .check(pat_ty.clone(), (ctx, &mut hash_map, env.clone()));
 
             elab_binders.push((elab_pat, pat_ty.clone()));
             binders.extend(hash_map);
-
-            ctx.subsumes(env.clone(), pat_ty, ty.eval(&env));
 
             args.push(ty);
         }
@@ -545,9 +546,6 @@ impl Declare for ModuleDecl {
     }
 
     fn define(&self, (ctx, env): (&mut Context, Env)) {
-        if let Some(res) = &self.decls {
-            println!("ata");
-        }
         self.decls.define((ctx, env));
     }
 }

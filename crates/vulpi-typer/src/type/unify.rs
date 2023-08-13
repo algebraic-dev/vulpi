@@ -22,7 +22,7 @@ impl Context {
             let l = left.deref();
             let r = right.deref();
 
-            match (left.as_ref(), r.as_ref()) {
+            match (l.as_ref(), r.as_ref()) {
                 (TypeKind::Hole(n), _) if n.is_empty() => {
                     ctx.sub_hole_type(env, n.clone(), r.clone())
                 }
@@ -73,7 +73,11 @@ impl Context {
         match right.deref().as_ref() {
             TypeKind::Forall(forall) => {
                 let lvl_ty = Type::new(TypeKind::Bound(env.level));
-                self.sub_hole_type(env, left, forall.body.apply_local(None, lvl_ty))
+                self.sub_hole_type(
+                    env.add(Some(forall.name.clone()), lvl_ty.clone()),
+                    left,
+                    forall.body.apply_local(None, lvl_ty),
+                )
             }
             TypeKind::Arrow(pi) => {
                 let HoleInner::Empty(_, kind, _) = left.0.borrow().clone() else { unreachable!() };
@@ -156,6 +160,22 @@ impl Context {
             (TypeKind::Bound(x), TypeKind::Bound(y)) if x == y => Ok(()),
             (TypeKind::Variable(x), TypeKind::Variable(y)) if x == y => Ok(()),
             (TypeKind::Empty, TypeKind::Empty) => Ok(()),
+            (TypeKind::Exists(ex), _) => {
+                let lvl_ty = Type::new(TypeKind::Bound(env.level));
+                self.unify(
+                    env.add(Some(ex.name.clone()), lvl_ty.clone()),
+                    ex.body.apply_local(None, lvl_ty),
+                    right,
+                )
+            }
+            (_, TypeKind::Exists(ex)) => {
+                let lvl_ty = Type::new(TypeKind::Bound(env.level));
+                self.unify(
+                    env.add(Some(ex.name.clone()), lvl_ty.clone()),
+                    left,
+                    ex.body.apply_local(None, lvl_ty),
+                )
+            }
             (TypeKind::Type, TypeKind::Type) => Ok(()),
             (TypeKind::Effect, TypeKind::Effect) => Ok(()),
             (TypeKind::Error, _) | (_, TypeKind::Error) => Ok(()),

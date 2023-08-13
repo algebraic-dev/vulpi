@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
-use vulpi_syntax::{elaborated, r#abstract::Pattern, r#abstract::PatternArm};
+use vulpi_syntax::{
+    elaborated, r#abstract::Pattern, r#abstract::PatternArm, r#abstract::PatternKind,
+};
 
 use crate::{
     errors::TypeErrorKind,
@@ -112,9 +114,15 @@ impl Check for Pattern {
 
     fn check(&self, ty: Type<Virtual>, (ctx, map, env): Self::Context<'_>) -> Self::Return {
         env.on(self.span.clone());
-        let (infered, pat) = self.infer((ctx, map, env.clone()));
-        ctx.subsumes(env, infered, ty);
-        pat
+        match &self.data {
+            PatternKind::Wildcard => Box::new(elaborated::PatternKind::Wildcard),
+            PatternKind::Variable(n) => {
+                map.insert(n.clone(), ty);
+
+                Box::new(elaborated::PatternKind::Variable(n.clone()))
+            }
+            _ => self.check(ty, (ctx, map, env)),
+        }
     }
 }
 

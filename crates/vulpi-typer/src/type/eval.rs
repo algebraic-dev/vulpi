@@ -31,6 +31,14 @@ impl Eval<Type<Virtual>> for Type<Real> {
                     body: f.body.clone(),
                 },
             })),
+            TypeKind::Exists(f) => Type::new(TypeKind::Exists(r#virtual::Forall {
+                name: f.name.clone(),
+                kind: f.kind.clone().eval(env),
+                body: r#virtual::Closure {
+                    env: env.clone(),
+                    body: f.body.clone(),
+                },
+            })),
             TypeKind::Row => Type::new(TypeKind::Row),
             TypeKind::Type => Type::new(TypeKind::Type),
             TypeKind::Effect => Type::new(TypeKind::Effect),
@@ -113,6 +121,15 @@ impl Quote<Type<Real>> for Type<Virtual> {
                     .apply_local(Some(f.name.clone()), Type::new(TypeKind::Bound(depth)))
                     .quote(depth.inc()),
             })),
+            TypeKind::Exists(f) => Type::new(TypeKind::Exists(real::Forall {
+                name: f.name.clone(),
+                kind: f.kind.clone().quote(depth),
+                body: f
+                    .body
+                    .apply_local(Some(f.name.clone()), Type::new(TypeKind::Bound(depth)))
+                    .quote(depth.inc()),
+            })),
+
             TypeKind::Hole(h) => h.quote(depth),
             TypeKind::Variable(v) => Type::new(TypeKind::Variable(v.clone())),
             TypeKind::Bound(i) => Type::new(TypeKind::Bound(Level::to_index(depth, *i))),

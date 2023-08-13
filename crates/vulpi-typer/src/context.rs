@@ -159,7 +159,7 @@ impl Context {
         env: Env,
         level: Level,
         ty: Type<Real>,
-        new_vars: &mut HashMap<Hole<Virtual>, (Symbol, Index, Type<Real>)>,
+        new_vars: &mut HashMap<Hole<Virtual>, (Symbol, Level, Type<Real>)>,
         turn: bool,
     ) -> Type<Real> {
         match ty.as_ref() {
@@ -198,7 +198,7 @@ impl Context {
                     return ty.clone();
                 }
 
-                let l = Index(level.0 + new_vars.len());
+                let l = Level(level.0 + new_vars.len());
 
                 let borrow = hole.0.borrow().clone();
                 match borrow {
@@ -245,7 +245,7 @@ impl Context {
         }
     }
 
-    pub fn skolemize(&mut self, env: &mut Env, ty: &Type<Virtual>) -> Type<Virtual> {
+    pub fn skolemize(&mut self, env: Env, ty: &Type<Virtual>) -> Type<Virtual> {
         let mut vars = Default::default();
 
         let real = ty.clone().quote(env.level);
@@ -254,13 +254,22 @@ impl Context {
 
         let vars = vars.into_iter().collect::<Vec<_>>();
 
-        for (hole, (n, _, k)) in vars.iter() {
-            let level = Level(env.level.0);
-            *env = env.add(Some(n.clone()), k.clone().eval(env));
-            hole.0.replace(HoleInner::Filled(Type::bound(level)));
+        let mut new_env = env.clone();
+        for (hole, (n, lvl, _)) in vars.iter() {
+            let bound = Type::bound(*lvl);
+            new_env = new_env.add(Some(n.clone()), bound.clone());
+            hole.0.replace(HoleInner::Filled(bound));
         }
 
-        real.eval(env)
+        let real = vars.iter().fold(real, |rest, (_, (name, _, kind))| {
+            Type::exists(real::Forall {
+                name: name.clone(),
+                kind: kind.clone(),
+                body: rest,
+            })
+        });
+
+        real.eval(&env)
     }
 
     /// Opens a type by replacing a closed effect to a open one.

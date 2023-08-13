@@ -50,6 +50,10 @@ impl Level {
         }
         Index(base.0 - current.0 - 1)
     }
+
+    pub fn from_index(base: Level, index: Index) -> Level {
+        Level(base.0 - index.0 - 1)
+    }
 }
 
 /// The state of the type. It's used for diferentiating between the real and virtual type.
@@ -76,6 +80,9 @@ pub enum TypeKind<S: State> {
 
     /// The forall type is used for polymorphic functions.
     Forall(S::Forall),
+
+    /// The forall type is used for polymorphic functions.
+    Exists(S::Forall),
 
     /// The type of holes.
     Hole(Hole<Virtual>),
@@ -127,6 +134,10 @@ impl<S: State> Type<S> {
 
     pub(crate) fn forall(forall: S::Forall) -> Self {
         Self::new(TypeKind::Forall(forall))
+    }
+
+    pub(crate) fn exists(forall: S::Forall) -> Self {
+        Self::new(TypeKind::Exists(forall))
     }
 
     pub(crate) fn typ() -> Type<S> {
@@ -284,6 +295,15 @@ pub mod r#virtual {
             clone.names.push_front(name);
             clone.types.push_front(Type::bound(clone.level));
             clone.kinds.push_front(kind);
+            clone.level = clone.level.inc();
+            clone
+        }
+
+        pub fn add_at_end(&self, name: Option<Symbol>, kind: Type<Virtual>) -> Self {
+            let mut clone = self.clone();
+            clone.names.push_back(name);
+            clone.types.push_back(Type::bound(clone.level));
+            clone.kinds.push_back(kind);
             clone.level = clone.level.inc();
             clone
         }
@@ -487,6 +507,18 @@ pub mod real {
             (spine, current)
         }
 
+        pub(crate) fn exists_spine(&self) -> (Vec<(Symbol, Self)>, Self) {
+            let mut spine = Vec::new();
+            let mut current = self.clone();
+
+            while let TypeKind::Exists(Forall { name, kind, body }) = current.as_ref() {
+                spine.push((name.clone(), kind.clone()));
+                current = body.clone();
+            }
+
+            (spine, current)
+        }
+
         pub fn extend(label: Qualified, ty: Type<Real>, typ: Type<Real>) -> Type<Real> {
             Type::new(TypeKind::Extend(label, ty, typ))
         }
@@ -532,7 +564,10 @@ pub mod real {
             match self.0.borrow().clone() {
                 HoleInner::Empty(s, _, l) => write!(f, "^{}~{}", s.get(), l.0),
                 HoleInner::Row(s, _, _) => write!(f, "~{}", s.get()),
-                HoleInner::Filled(forall) => forall.quote(Level(env.0.len())).format(env, f),
+                HoleInner::Filled(forall) => {
+                    write!(f, "!")?;
+                    forall.quote(Level(env.0.len())).format(env, f)
+                }
             }
         }
     }
@@ -582,7 +617,28 @@ pub mod real {
 
                     write!(f, ")")
                 }
+                TypeKind::Exists(_) => {
+                    let mut env = env.clone();
+                    write!(f, "(exists ")?;
 
+                    let (binder, rest) = self.exists_spine();
+
+                    for (i, (name, kind)) in binder.iter().enumerate() {
+                        write!(f, "({}: ", name.get())?;
+                        kind.format(&env, f)?;
+                        write!(f, ")")?;
+                        if i != binder.len() - 1 {
+                            write!(f, " ")?;
+                        }
+                        env.0.push_front(Some(name.clone()))
+                    }
+
+                    write!(f, ". ")?;
+
+                    rest.format(&env, f)?;
+
+                    write!(f, ")")
+                }
                 TypeKind::Hole(hole) => hole.format(env, f),
                 TypeKind::Variable(n) => write!(f, "{}", n.name.get()),
                 TypeKind::Bound(n) => {
