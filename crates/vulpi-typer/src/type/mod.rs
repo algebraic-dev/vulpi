@@ -121,6 +121,10 @@ impl<S: State> Type<S> {
         matches!(self.0.as_ref(), TypeKind::Row)
     }
 
+    pub fn is_empty(&self) -> bool {
+        matches!(self.0.as_ref(), TypeKind::Empty)
+    }
+
     pub(crate) fn forall(forall: S::Forall) -> Self {
         Self::new(TypeKind::Forall(forall))
     }
@@ -222,6 +226,7 @@ pub mod r#virtual {
     use im_rc::HashSet;
     use vulpi_intern::Symbol;
     use vulpi_location::Span;
+    use vulpi_show::Show;
     use vulpi_syntax::r#abstract::Qualified;
 
     use super::{eval::Eval, real::Real, Hole, HoleInner, Kind, Level, State, Type, TypeKind};
@@ -230,6 +235,12 @@ pub mod r#virtual {
     /// contains closures and can be executed.
     #[derive(Clone)]
     pub struct Virtual;
+
+    impl Show for Type<Virtual> {
+        fn show(&self) -> vulpi_show::TreeDisplay {
+            vulpi_show::TreeDisplay::label("Type")
+        }
+    }
 
     /// The typing environment is used for type checking and type inference.
     #[derive(Clone, Default)]

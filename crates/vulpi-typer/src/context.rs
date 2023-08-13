@@ -29,7 +29,7 @@ pub struct Context {
     pub counter: usize,
     pub reporter: Report,
     pub modules: Modules,
-    pub elaborated: elaborated::Program,
+    pub elaborated: elaborated::Program<Type<Virtual>>,
 }
 
 impl Context {

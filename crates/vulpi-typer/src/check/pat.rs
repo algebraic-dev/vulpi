@@ -14,7 +14,7 @@ use super::Check;
 use crate::infer::Infer;
 
 impl Check for PatternArm {
-    type Return = ();
+    type Return = elaborated::PatternArm<Type<Virtual>>;
 
     type Context<'a> = (&'a mut Context, Effect<Virtual>, Env);
 
@@ -25,18 +25,25 @@ impl Check for PatternArm {
     ) -> Self::Return {
         let mut map = Default::default();
 
+        let mut elaborated_patterns = Vec::new();
+
         for pat in &self.patterns {
             env.on(pat.span.clone());
 
             if let Some((left, _, right)) = ctx.as_function(&env, ty.clone()) {
-                pat.check(left, (ctx, &mut map, env.clone()));
+                let elab = pat.check(left, (ctx, &mut map, env.clone()));
+                elaborated_patterns.push(elab);
                 ty = right;
             } else {
                 ctx.report(
                     &env,
                     TypeErrorKind::NotAFunction(env.clone(), ty.quote(env.level)),
                 );
-                return;
+                return elaborated::PatternArm {
+                    patterns: Vec::new(),
+                    guard: None,
+                    expr: self.expr.check(ty, (ctx, &ambient, env.clone())),
+                };
             }
         }
 
@@ -44,12 +51,31 @@ impl Check for PatternArm {
             env.add_var(binding.0, binding.1);
         }
 
-        self.expr.check(ty, (ctx, &ambient, env.clone()));
+        let elab_expr = self.expr.check(ty, (ctx, &ambient, env.clone()));
+
+        let guard = self
+            .guard
+            .as_ref()
+            .map(|g| g.infer((ctx, &ambient, env.clone())));
+
+        let elab_guard = if let Some((typ, guard)) = guard {
+            let bool = ctx.find_prelude_type("Bool", env.clone());
+            ctx.subsumes(env.clone(), typ, bool);
+            Some(guard)
+        } else {
+            None
+        };
+
+        elaborated::PatternArm {
+            patterns: elaborated_patterns,
+            guard: elab_guard,
+            expr: elab_expr,
+        }
     }
 }
 
 impl Check for Vec<PatternArm> {
-    type Return = ();
+    type Return = Vec<elaborated::PatternArm<Type<Virtual>>>;
 
     type Context<'a> = (&'a mut Context, Effect<Virtual>, Env);
 
@@ -59,16 +85,22 @@ impl Check for Vec<PatternArm> {
         } else {
             let size = self[0].patterns.len();
 
-            self[0].check(ty.clone(), (ctx, ambient.clone(), env.clone()));
+            let mut elab_arms = Vec::new();
+            let elab_arm = self[0].check(ty.clone(), (ctx, ambient.clone(), env.clone()));
+
+            elab_arms.push(elab_arm);
 
             for pat in self.iter().skip(1) {
                 if pat.patterns.len() != size {
                     ctx.report(&env, TypeErrorKind::WrongArity(pat.patterns.len(), size));
-                    return;
+                    return vec![];
                 }
 
-                pat.check(ty.clone(), (ctx, ambient.clone(), env.clone()));
+                let elab_arm = pat.check(ty.clone(), (ctx, ambient.clone(), env.clone()));
+                elab_arms.push(elab_arm);
             }
+
+            elab_arms
         }
     }
 }

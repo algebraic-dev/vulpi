@@ -10,7 +10,6 @@ use r#type::TypeKind;
 pub use r#type::{r#virtual::Env, Type};
 pub use r#type::{r#virtual::Virtual, real::Real, Kind};
 use vulpi_intern::Symbol;
-use vulpi_syntax::elaborated::Decl;
 use vulpi_syntax::r#abstract::LetDecl;
 
 use crate::check::Check;
@@ -56,6 +55,12 @@ impl<T: Declare> Declare for Option<T> {
     fn declare(&self, context: (&mut Context, Env)) {
         if let Some(decl) = self {
             decl.declare(context);
+        }
+    }
+
+    fn define(&self, context: (&mut Context, Env)) {
+        if let Some(decl) = self {
+            decl.define(context);
         }
     }
 }
@@ -111,7 +116,7 @@ impl Declare for TypeDecl {
                 let mut cons_types = Vec::new();
 
                 for cons in &cons.constructors {
-                    constructors.push(cons.name.clone());
+                    constructors.push((cons.name.clone(), cons.args.len()));
 
                     let mut types = Vec::new();
 
@@ -179,9 +184,7 @@ impl Declare for TypeDecl {
             TypeDef::Abstract => elaborated::TypeDecl::Abstract,
         };
 
-        ctx.elaborated
-            .decls
-            .insert(self.name.clone(), elaborated::Decl::Type(decl));
+        ctx.elaborated.types.insert(self.name.clone(), decl);
     }
 }
 
@@ -210,15 +213,25 @@ impl Declare for ExternalDecl {
         ctx.subsumes(env.clone(), k, Kind::typ());
 
         let typ = typ.eval(&env);
+
         ctx.modules.get(&self.namespace).variables.insert(
-            self.name.clone(),
+            self.name.name.clone(),
             LetDef {
                 typ: typ.clone(),
                 binders: Default::default(),
                 unbound,
                 ambient: Type::new(TypeKind::Empty),
                 unbound_effects: vec![],
-                ret: typ,
+                ret: typ.clone(),
+                elab_binders: vec![],
+            },
+        );
+
+        ctx.elaborated.externals.insert(
+            self.name.clone(),
+            elaborated::ExternalDecl {
+                typ,
+                binding: self.ret.clone(),
             },
         );
     }
@@ -255,8 +268,8 @@ impl Declare for EffectDecl {
 
         context
             .elaborated
-            .decls
-            .insert(self.name.clone(), Decl::Effect(effects));
+            .effects
+            .insert(self.name.clone(), effects);
     }
 
     fn define(&self, (ctx, mut env): (&mut Context, Env)) {
@@ -428,7 +441,7 @@ impl Declare for LetDecl {
             let mut hash_map = Default::default();
             let (pat_ty, elab_pat) = arg.pattern.infer((ctx, &mut hash_map, env.clone()));
 
-            elab_binders.push(elab_pat);
+            elab_binders.push((elab_pat, pat_ty.clone()));
             binders.extend(hash_map);
 
             ctx.subsumes(env.clone(), pat_ty, ty.eval(&env));
@@ -485,6 +498,7 @@ impl Declare for LetDecl {
                 unbound: bound,
                 ambient: effs,
                 unbound_effects: effect_bounds,
+                elab_binders,
                 ret: ret.eval(&env),
             },
         );
@@ -501,13 +515,26 @@ impl Declare for LetDecl {
             env = env.add(Some(fv.clone()), ty.clone());
         }
 
-        for (k, v) in let_decl.binders {
-            env.add_var(k, v);
+        for (k, v) in &let_decl.binders {
+            env.add_var(k.clone(), v.clone());
         }
 
-        self.body.check(
-            let_decl.ret,
-            (ctx, let_decl.ambient.eval(&env), env.clone()),
+        let ty = let_decl.ret.clone();
+
+        let eval = let_decl.ambient.eval(&env);
+
+        let binders = std::mem::take(&mut let_decl.elab_binders);
+        let has_effect = !let_decl.ambient.is_empty();
+
+        let body = self.body.check(ty, (ctx, eval, env.clone()));
+
+        ctx.elaborated.lets.insert(
+            self.name.clone(),
+            elaborated::LetDecl {
+                binders,
+                has_effect,
+                body,
+            },
         );
     }
 }
@@ -518,6 +545,9 @@ impl Declare for ModuleDecl {
     }
 
     fn define(&self, (ctx, env): (&mut Context, Env)) {
+        if let Some(res) = &self.decls {
+            println!("ata");
+        }
         self.decls.define((ctx, env));
     }
 }

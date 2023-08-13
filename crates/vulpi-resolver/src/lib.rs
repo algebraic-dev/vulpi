@@ -1238,7 +1238,10 @@ impl Resolve for ExternalDecl {
         abs::ExternalDecl {
             namespace: ctx.current(),
             visibility: self.visibility.resolve(ctx),
-            name: self.name.symbol(),
+            name: Qualified {
+                path: ctx.current(),
+                name: self.name.symbol(),
+            },
             ty: self.typ.resolve(ctx),
             ret: self.str.symbol(),
         }

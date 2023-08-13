@@ -15,6 +15,7 @@ use vulpi_resolver::namespace::Namespace;
 use vulpi_resolver::namespace::Namespaces;
 use vulpi_resolver::scopes::Symbol;
 use vulpi_resolver::Resolve;
+use vulpi_show::Show;
 
 use vulpi_typer::Declare as Decl;
 
@@ -59,7 +60,8 @@ fn main() {
     let report = reporter.all_diagnostics();
 
     if !reporter.has_errors() {
-        println!("Ok!")
+        println!("Ok!");
+        println!("{}", ctx.elaborated.show())
     } else {
         eprintln!();
 

@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
-use vulpi_syntax::r#abstract::Qualified;
+use vulpi_syntax::{elaborated, r#abstract::Qualified};
 
 use crate::{
     r#type::{r#virtual::Virtual, Effect, Type},
@@ -28,7 +28,6 @@ pub struct TypeData {
     pub def: Def,
 }
 
-#[derive(Clone)]
 pub struct LetDef {
     pub typ: Type<Virtual>,
     pub binders: HashMap<Symbol, Type<Virtual>>,
@@ -36,24 +35,25 @@ pub struct LetDef {
     pub ambient: Effect<Real>,
     pub ret: Type<Virtual>,
     pub unbound_effects: Vec<(Symbol, Type<Virtual>)>,
+    pub elab_binders: Vec<(elaborated::Pattern, Type<Virtual>)>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct Module {
     /// The types of the functions.
-    pub variables: im_rc::HashMap<Symbol, LetDef>,
+    pub variables: HashMap<Symbol, LetDef>,
 
     /// The types of the functions.
-    pub constructors: im_rc::HashMap<Symbol, (Type<Virtual>, usize)>,
+    pub constructors: HashMap<Symbol, (Type<Virtual>, usize)>,
 
     /// The types of the types.
-    pub types: im_rc::HashMap<Symbol, TypeData>,
+    pub types: HashMap<Symbol, TypeData>,
 
     /// The fields of the records.
-    pub fields: im_rc::HashMap<Symbol, Type<Real>>,
+    pub fields: HashMap<Symbol, Type<Real>>,
 
     /// The effects of some symbols.
-    pub effects: im_rc::HashMap<Symbol, (Type<Virtual>, usize)>,
+    pub effects: HashMap<Symbol, (Type<Virtual>, usize)>,
 }
 
 #[derive(Default)]
@@ -84,9 +84,9 @@ impl Modules {
         module.effects.get(&qualified.name).unwrap().clone()
     }
 
-    pub fn let_decl(&mut self, qualified: &Qualified) -> LetDef {
+    pub fn let_decl(&mut self, qualified: &Qualified) -> &mut LetDef {
         let module = self.get(&qualified.path);
-        module.variables.get(&qualified.name).unwrap().clone()
+        module.variables.get_mut(&qualified.name).unwrap()
     }
 
     pub fn field(&mut self, qualified: &Qualified) -> Type<Real> {

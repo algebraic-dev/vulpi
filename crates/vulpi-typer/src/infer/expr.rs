@@ -81,7 +81,7 @@ impl Infer for Expr {
                 Box::new(elaborated::ExprKind::Constructor(n.clone())),
             ),
             ExprKind::Function(n) => (
-                ctx.modules.let_decl(n).typ,
+                ctx.modules.let_decl(n).typ.clone(),
                 Box::new(elaborated::ExprKind::Function(n.clone())),
             ),
             ExprKind::Effect(n) => (

@@ -455,7 +455,7 @@ pub struct EffectDecl {
 
 #[derive(Show)]
 pub struct ExternalDecl {
-    pub name: Symbol,
+    pub name: Qualified,
     pub namespace: Symbol,
     pub visibility: Visibility,
     pub ty: Type,

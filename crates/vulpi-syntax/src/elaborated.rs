@@ -173,47 +173,40 @@ pub enum ExprKind<T> {
 pub type Expr<T> = Box<ExprKind<T>>;
 
 #[derive(Show)]
-pub struct LetCase<T> {
-    pub pattern: PatternArm<T>,
-}
-
-#[derive(Show)]
-pub struct LetMode<T> {
-    pub cases: Vec<LetCase<T>>,
-}
-
-#[derive(Show)]
-pub struct Binder<T> {
-    pub pattern: Pattern,
-    pub ty: T,
-}
-
-#[derive(Show)]
 pub struct LetDecl<T> {
-    pub binders: Vec<Binder<T>>,
+    pub binders: Vec<(Pattern, T)>,
     pub has_effect: bool,
-    pub body: Vec<LetCase<T>>,
+    pub body: Vec<PatternArm<T>>,
 }
 
 #[derive(Show)]
 pub enum TypeDecl {
     Abstract,
-    Enum(Vec<Qualified>),
+    Enum(Vec<(Qualified, usize)>),
     Record(Vec<Qualified>),
 }
 
-pub struct ExternalDecl {
-    pub arguments: usize,
+#[derive(Show)]
+pub struct ExternalDecl<T> {
+    pub typ: T,
+    pub binding: Symbol,
 }
 
-pub enum Decl {
-    Let(LetDecl<Qualified>),
-    Type(TypeDecl),
-    Effect(Vec<Qualified>),
-    External(Qualified, ExternalDecl),
+#[derive(Show)]
+pub struct Program<T> {
+    pub lets: HashMap<Qualified, LetDecl<T>>,
+    pub types: HashMap<Qualified, TypeDecl>,
+    pub effects: HashMap<Qualified, Vec<Qualified>>,
+    pub externals: HashMap<Qualified, ExternalDecl<T>>,
 }
 
-#[derive(Default)]
-pub struct Program {
-    pub decls: HashMap<Qualified, Decl>,
+impl<T> Default for Program<T> {
+    fn default() -> Self {
+        Self {
+            lets: HashMap::new(),
+            types: HashMap::new(),
+            effects: HashMap::new(),
+            externals: HashMap::new(),
+        }
+    }
 }
