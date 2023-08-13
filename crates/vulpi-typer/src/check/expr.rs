@@ -1,6 +1,6 @@
 //! Checking of expressions
 
-use vulpi_syntax::r#abstract::Expr;
+use vulpi_syntax::{elaborated, r#abstract::Expr};
 
 use crate::{
     r#type::{Effect, TypeKind},
@@ -11,7 +11,7 @@ use super::Check;
 use crate::infer::Infer;
 
 impl Check for Expr {
-    type Return = ();
+    type Return = elaborated::Expr<Type<Virtual>>;
 
     type Context<'a> = (&'a mut Context, &'a Effect<Virtual>, Env);
 
@@ -30,8 +30,9 @@ impl Check for Expr {
                 )
             }
             _ => {
-                let expr_ty = self.infer((ctx, ambient, env.clone()));
+                let (expr_ty, elab_expr) = self.infer((ctx, ambient, env.clone()));
                 ctx.subsumes(env, expr_ty, ty);
+                elab_expr
             }
         }
     }

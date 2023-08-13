@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
-use vulpi_location::Spanned;
 use vulpi_macros::Show;
 
 use crate::r#abstract::Qualified;
@@ -15,7 +14,7 @@ pub enum LiteralKind {
     Unit,
 }
 
-pub type Literal = Box<Spanned<LiteralKind>>;
+pub type Literal = Box<LiteralKind>;
 
 #[derive(Show)]
 pub struct LetStatement<T> {
@@ -30,7 +29,7 @@ pub enum StatementKind<T> {
     Error,
 }
 
-pub type Statement<T> = Spanned<StatementKind<T>>;
+pub type Statement<T> = StatementKind<T>;
 
 pub type Block<T> = Vec<Statement<T>>;
 
@@ -53,6 +52,13 @@ pub struct PatEffect {
     pub cont: Option<Symbol>,
 }
 
+pub enum PatEffectKind {
+    Effect(PatEffect),
+    Variable(Symbol),
+    Wildcard,
+    Error,
+}
+
 #[derive(Show)]
 pub enum PatternKind {
     Wildcard,
@@ -64,7 +70,7 @@ pub enum PatternKind {
     Error,
 }
 
-pub type Pattern = Box<Spanned<PatternKind>>;
+pub type Pattern = Box<PatternKind>;
 
 #[derive(Show)]
 pub struct LambdaExpr<T> {
@@ -81,7 +87,6 @@ pub enum AppKind {
 #[derive(Show)]
 pub struct ApplicationExpr<T> {
     pub typ: T,
-    pub app: AppKind,
     pub func: Expr<T>,
     pub args: Vec<Expr<T>>,
 }
@@ -101,7 +106,7 @@ pub struct PatternArm<T> {
 
 #[derive(Show)]
 pub struct WhenExpr<T> {
-    pub scrutinee: Expr<T>,
+    pub scrutinee: Vec<Expr<T>>,
     pub arms: Vec<PatternArm<T>>,
 }
 
@@ -165,7 +170,7 @@ pub enum ExprKind<T> {
     Error,
 }
 
-pub type Expr<T> = Box<Spanned<ExprKind<T>>>;
+pub type Expr<T> = Box<ExprKind<T>>;
 
 #[derive(Show)]
 pub struct LetCase<T> {

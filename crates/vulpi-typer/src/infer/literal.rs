@@ -1,13 +1,12 @@
 //! Inference of literals
 
-use vulpi_syntax::{r#abstract::Literal, r#abstract::LiteralKind, r#abstract::Qualified};
+use vulpi_syntax::{elaborated, r#abstract::Literal, r#abstract::LiteralKind};
 
 use super::Infer;
 use crate::{r#type::r#virtual::Virtual, Context, Env, Type};
-use vulpi_intern::Symbol;
 
 impl Infer for Literal {
-    type Return = Type<Virtual>;
+    type Return = (Type<Virtual>, elaborated::Literal);
 
     type Context<'a> = (&'a mut Context, Env);
 
@@ -15,22 +14,23 @@ impl Infer for Literal {
         env.on(self.span.clone());
 
         match &self.data {
-            LiteralKind::String(_) => find_prelude_type("String", ctx, env),
-            LiteralKind::Integer(_) => find_prelude_type("Int", ctx, env),
-            LiteralKind::Float(_) => find_prelude_type("Float", ctx, env),
-            LiteralKind::Char(_) => find_prelude_type("Char", ctx, env),
-            LiteralKind::Unit => Type::tuple(vec![]),
+            LiteralKind::String(n) => (
+                ctx.find_prelude_type("String", env),
+                Box::new(elaborated::LiteralKind::String(n.clone())),
+            ),
+            LiteralKind::Integer(n) => (
+                ctx.find_prelude_type("Int", env),
+                Box::new(elaborated::LiteralKind::Integer(n.clone())),
+            ),
+            LiteralKind::Float(n) => (
+                ctx.find_prelude_type("Float", env),
+                Box::new(elaborated::LiteralKind::Float(n.clone())),
+            ),
+            LiteralKind::Char(n) => (
+                ctx.find_prelude_type("Char", env),
+                Box::new(elaborated::LiteralKind::Char(n.clone())),
+            ),
+            LiteralKind::Unit => (Type::tuple(vec![]), Box::new(elaborated::LiteralKind::Unit)),
         }
-    }
-}
-
-pub fn find_prelude_type(name: &str, ctx: &mut Context, env: Env) -> Type<Virtual> {
-    let path = Symbol::intern("Prelude");
-    let name = Symbol::intern(name);
-    if ctx.modules.get(&path).types.get(&name).is_some() {
-        Type::variable(Qualified { path, name })
-    } else {
-        ctx.report(&env, crate::errors::TypeErrorKind::CannotFind(name));
-        Type::error()
     }
 }

@@ -11,6 +11,7 @@ use crate::check::Check;
 use im_rc::HashMap;
 use im_rc::HashSet;
 use vulpi_intern::Symbol;
+use vulpi_syntax::elaborated;
 use vulpi_syntax::r#abstract::Qualified;
 use vulpi_syntax::{
     r#abstract::Statement,
@@ -26,7 +27,7 @@ use crate::{
 use super::Infer;
 
 impl Infer for Expr {
-    type Return = Type<Virtual>;
+    type Return = (Type<Virtual>, elaborated::Expr<Type<Virtual>>);
 
     type Context<'a> = (&'a mut Context, &'a Effect<Virtual>, Env);
 
@@ -35,11 +36,15 @@ impl Infer for Expr {
 
         match &self.data {
             ExprKind::Application(app) => {
-                let mut ty = app.func.infer((ctx, ambient, env.clone()));
+                let (mut ty, func_elab) = app.func.infer((ctx, ambient, env.clone()));
+
+                let mut elab_args = Vec::new();
+
                 for arg in &app.args {
                     env.on(arg.span.clone());
 
-                    let arg_ty = arg.infer((ctx, ambient, env.clone()));
+                    let (arg_ty, arg_elab) = arg.infer((ctx, ambient, env.clone()));
+                    elab_args.push(arg_elab);
 
                     if let Some((left, effs, right)) = ctx.as_function(&env, ty.deref()) {
                         let opened = ctx.open(&env, effs);
@@ -52,21 +57,42 @@ impl Infer for Expr {
                             &env,
                             TypeErrorKind::NotAFunction(env.clone(), ty.quote(env.level)),
                         );
-                        return Type::error();
+                        return (Type::error(), Box::new(elaborated::ExprKind::Error));
                     }
                 }
 
-                ty
+                (
+                    ty.clone(),
+                    Box::new(elaborated::ExprKind::Application(
+                        elaborated::ApplicationExpr {
+                            typ: ty,
+                            func: func_elab,
+                            args: elab_args,
+                        },
+                    )),
+                )
             }
-            ExprKind::Variable(m) => env.vars.get(m).unwrap().clone(),
-            ExprKind::Constructor(n) => ctx.modules.constructor(n).0,
-            ExprKind::Function(n) => ctx.modules.let_decl(n).typ,
-            ExprKind::Effect(n) => ctx.modules.effect(n).0,
+            ExprKind::Variable(m) => (
+                env.vars.get(m).unwrap().clone(),
+                Box::new(elaborated::ExprKind::Variable(m.clone())),
+            ),
+            ExprKind::Constructor(n) => (
+                ctx.modules.constructor(n).0,
+                Box::new(elaborated::ExprKind::Constructor(n.clone())),
+            ),
+            ExprKind::Function(n) => (
+                ctx.modules.let_decl(n).typ,
+                Box::new(elaborated::ExprKind::Function(n.clone())),
+            ),
+            ExprKind::Effect(n) => (
+                ctx.modules.effect(n).0,
+                Box::new(elaborated::ExprKind::Effect(n.clone())),
+            ),
             ExprKind::Let(e) => {
-                let val_ty = e.body.infer((ctx, ambient, env.clone()));
+                let (val_ty, body_elab) = e.body.infer((ctx, ambient, env.clone()));
 
                 let mut hashmap = Default::default();
-                let pat_ty = e.pattern.infer((ctx, &mut hashmap, env.clone()));
+                let (pat_ty, pat_elab) = e.pattern.infer((ctx, &mut hashmap, env.clone()));
 
                 ctx.subsumes(env.clone(), pat_ty, val_ty);
 
@@ -74,110 +100,155 @@ impl Infer for Expr {
                     env.add_var(binding.0, binding.1)
                 }
 
-                e.value.infer((ctx, ambient, env.clone()))
+                let (ty, value_elab) = e.value.infer((ctx, ambient, env.clone()));
+
+                (
+                    ty,
+                    Box::new(elaborated::ExprKind::Let(elaborated::LetExpr {
+                        pattern: pat_elab,
+                        value: value_elab,
+                        body: body_elab,
+                    })),
+                )
             }
             ExprKind::Tuple(t) => {
                 let mut types = Vec::new();
+                let mut elaborated = Vec::new();
 
                 for ty in &t.exprs {
-                    let ty = ty.infer((ctx, ambient, env.clone()));
+                    let (ty, elab) = ty.infer((ctx, ambient, env.clone()));
                     types.push(ty);
+                    elaborated.push(elab);
                 }
 
-                Type::tuple(types)
+                (
+                    Type::tuple(types),
+                    Box::new(elaborated::ExprKind::Tuple(
+                        vulpi_syntax::elaborated::Tuple { exprs: elaborated },
+                    )),
+                )
             }
-            ExprKind::Error => Type::error(),
+            ExprKind::Error => (Type::error(), Box::new(elaborated::ExprKind::Error)),
             ExprKind::When(when) => {
                 // TODO: Check mode
                 let ret_type = ctx.hole(&env, Kind::typ());
-                let (_, arms, ret) = when.arms.infer((ctx, ambient.clone(), env.clone()));
+                let (_, arms, ret, elab_arms) =
+                    when.arms.infer((ctx, ambient.clone(), env.clone()));
 
-                let scrutinee = when
-                    .scrutinee
-                    .iter()
-                    .map(|x| x.infer((ctx, ambient, env.clone())))
-                    .collect::<Vec<_>>();
-
-                if arms.len() != scrutinee.len() {
-                    ctx.report(&env, TypeErrorKind::WrongArity(arms.len(), scrutinee.len()));
+                if arms.len() != when.scrutinee.len() {
+                    ctx.report(
+                        &env,
+                        TypeErrorKind::WrongArity(arms.len(), when.scrutinee.len()),
+                    );
                 }
 
-                for (arm, scrutinee) in arms.into_iter().zip(scrutinee.into_iter()) {
-                    ctx.subsumes(env.clone(), arm, scrutinee);
+                let mut elab_scrutinee = Vec::new();
+
+                for (arm, scrutinee) in arms.into_iter().zip(when.scrutinee.iter()) {
+                    let elab = scrutinee.check(arm, (ctx, ambient, env.clone()));
+                    elab_scrutinee.push(elab);
                 }
 
                 ctx.subsumes(env, ret_type.clone(), ret);
 
-                ret_type
+                (
+                    ret_type,
+                    Box::new(elaborated::ExprKind::When(elaborated::WhenExpr {
+                        scrutinee: elab_scrutinee,
+                        arms: elab_arms,
+                    })),
+                )
             }
             ExprKind::Do(block) => {
                 let mut ty = Type::tuple(vec![]);
+                let mut stmts = Vec::new();
 
                 for stmt in &block.statements {
-                    (ty, env) = stmt.infer((ctx, ambient, env.clone()));
+                    let (new_ty, new_env, stmt) = stmt.infer((ctx, ambient, env.clone()));
+                    ty = new_ty;
+                    env = new_env;
+
+                    stmts.push(stmt);
                 }
 
-                ty
+                (ty, Box::new(elaborated::ExprKind::Do(stmts)))
             }
-            ExprKind::Literal(n) => n.infer((ctx, env)),
+            ExprKind::Literal(n) => {
+                let (ty, elab) = n.infer((ctx, env));
+                (ty, Box::new(elaborated::ExprKind::Literal(elab)))
+            }
             ExprKind::Annotation(ann) => {
-                let ty = ann.expr.infer((ctx, ambient, env.clone()));
+                let (ty, elab_expr) = ann.expr.infer((ctx, ambient, env.clone()));
                 let (typ, _) = ann.ty.infer((ctx, env.clone()));
                 let right = typ.eval(&env);
                 ctx.subsumes(env.clone(), ty, right.clone());
-                right
+                (right, elab_expr)
             }
             ExprKind::Lambda(lam) => {
                 let mut hashmap = Default::default();
-                let pat_ty = lam.param.infer((ctx, &mut hashmap, env.clone()));
+                let (pat_ty, elab_pat) = lam.param.infer((ctx, &mut hashmap, env.clone()));
 
                 for binding in hashmap {
                     env.add_var(binding.0, binding.1)
                 }
 
                 let ambient = ctx.lacks(&env, Default::default());
-                let body = lam.body.infer((ctx, &ambient, env.clone()));
+                let (body, elab_body) = lam.body.infer((ctx, &ambient, env.clone()));
 
-                Type::new(TypeKind::Arrow(r#virtual::Pi {
-                    ty: pat_ty,
-                    effs: ambient,
-                    body,
-                }))
+                (
+                    Type::new(TypeKind::Arrow(r#virtual::Pi {
+                        ty: pat_ty,
+                        effs: ambient,
+                        body,
+                    })),
+                    Box::new(elaborated::ExprKind::Lambda(elaborated::LambdaExpr {
+                        param: elab_pat,
+                        body: elab_body,
+                    })),
+                )
             }
             ExprKind::Projection(expr) => {
-                let ty = expr.expr.infer((ctx, ambient, env.clone()));
+                let (ty, elab_expr) = expr.expr.infer((ctx, ambient, env.clone()));
 
                 let (head, spine) = ty.application_spine();
 
                 let TypeKind::Variable(name) = head.as_ref()  else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return Type::error();
+                    return (Type::error(), Box::new(elaborated::ExprKind::Error));
                 };
 
                 let typ = ctx.modules.typ(name);
 
                 let crate::module::Def::Record(rec) = typ.def else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return Type::error();
+                    return (Type::error(), Box::new(elaborated::ExprKind::Error));
                 };
 
-                let Some(field) = rec.iter().find(|x| x.name == expr.field) else {
+                let Some(field_name) = rec.iter().find(|x| x.name == expr.field) else {
                     ctx.report(&env, TypeErrorKind::NotFoundField);
-                    return Type::error();
+                    return (Type::error(), Box::new(elaborated::ExprKind::Error));
                 };
 
-                let field = ctx.modules.field(field);
+                let field = ctx.modules.field(field_name);
 
                 let eval_ty = field.eval(&env);
 
-                ctx.instantiate_with_args(&eval_ty, spine)
+                (
+                    ctx.instantiate_with_args(&eval_ty, spine),
+                    Box::new(elaborated::ExprKind::Projection(
+                        elaborated::ProjectionExpr {
+                            expr: elab_expr,
+                            field: field_name.clone(),
+                        },
+                    )),
+                )
             }
             ExprKind::RecordInstance(instance) => {
                 let typ = ctx.modules.typ(&instance.name);
 
                 let crate::module::Def::Record(rec) = typ.def else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return Type::error();
+                    return (Type::error(), Box::new(elaborated::ExprKind::Error));
                 };
 
                 let iter = rec.into_iter().map(|x| (x.name.clone(), x));
@@ -196,6 +267,8 @@ impl Infer for Expr {
                     binders.clone(),
                 );
 
+                let mut elab_fields = Vec::new();
+
                 for (span, name, expr) in &instance.fields {
                     env.on(span.clone());
 
@@ -212,7 +285,9 @@ impl Infer for Expr {
                     let field = ctx.modules.field(qualified).eval(&env);
                     let inst_field = ctx.instantiate_with_args(&field, binders.clone());
 
-                    expr.check(inst_field.clone(), (ctx, ambient, env.clone()));
+                    let elab_expr = expr.check(inst_field.clone(), (ctx, ambient, env.clone()));
+
+                    elab_fields.push((name.clone(), elab_expr));
 
                     used.insert(name.clone());
                 }
@@ -227,26 +302,34 @@ impl Infer for Expr {
                     ctx.report(&env, TypeErrorKind::MissingField(key));
                 }
 
-                ret_type
+                (
+                    ret_type,
+                    Box::new(elaborated::ExprKind::RecordInstance(
+                        elaborated::RecordInstance {
+                            name: instance.name.clone(),
+                            fields: elab_fields,
+                        },
+                    )),
+                )
             }
             ExprKind::RecordUpdate(update) => {
-                let typ = update.expr.infer((ctx, ambient, env.clone()));
+                let (typ, elab_expr) = update.expr.infer((ctx, ambient, env.clone()));
 
                 let (head, binders) = typ.application_spine();
 
                 let TypeKind::Variable(name) = head.as_ref() else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return Type::error();
+                    return (Type::error(), Box::new(elaborated::ExprKind::Error));
                 };
 
                 let Some(typ) = ctx.modules.get(&name.path).types.get(&name.name).cloned() else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return Type::error();
+                    return (Type::error(), Box::new(elaborated::ExprKind::Error));
                 };
 
                 let crate::module::Def::Record(rec) = &typ.def else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return Type::error();
+                    return (Type::error(), Box::new(elaborated::ExprKind::Error));
                 };
 
                 let iter = rec.iter().map(|x| (x.name.clone(), x.clone()));
@@ -256,6 +339,8 @@ impl Infer for Expr {
 
                 let ret_type =
                     Type::<Virtual>::application(Type::variable(name.clone()), binders.clone());
+
+                let mut elab_fields = Vec::new();
 
                 for (span, name, expr) in &update.fields {
                     env.on(span.clone());
@@ -273,27 +358,37 @@ impl Infer for Expr {
                     let field = ctx.modules.field(qualified).eval(&env);
                     let inst_field = ctx.instantiate_with_args(&field, binders.clone());
 
-                    expr.check(inst_field.clone(), (ctx, ambient, env.clone()));
+                    let elab = expr.check(inst_field.clone(), (ctx, ambient, env.clone()));
+
+                    elab_fields.push((name.clone(), elab));
 
                     used.insert(name.clone());
                 }
 
-                ret_type
+                (
+                    ret_type,
+                    Box::new(elaborated::ExprKind::RecordUpdate(
+                        elaborated::RecordUpdate {
+                            expr: elab_expr,
+                            fields: elab_fields,
+                        },
+                    )),
+                )
             }
             ExprKind::Handler(_) => {
                 ctx.report(&env, TypeErrorKind::NotImplemented);
-                Type::error()
+                (Type::error(), Box::new(elaborated::ExprKind::Error))
             }
             ExprKind::Cases(_) => {
                 ctx.report(&env, TypeErrorKind::NotImplemented);
-                Type::error()
+                (Type::error(), Box::new(elaborated::ExprKind::Error))
             }
         }
     }
 }
 
 impl Infer for Statement {
-    type Return = (Type<Virtual>, Env);
+    type Return = (Type<Virtual>, Env, elaborated::Statement<Type<Virtual>>);
 
     type Context<'a> = (&'a mut Context, &'a Effect<Virtual>, Env);
 
@@ -301,24 +396,29 @@ impl Infer for Statement {
         env.on(self.span.clone());
         match &self.data {
             StatementKind::Let(decl) => {
-                let val_ty = decl.expr.infer((ctx, ambient, env.clone()));
-
                 let mut hashmap = Default::default();
-                let pat_ty = decl.pattern.infer((ctx, &mut hashmap, env.clone()));
+                let (pat_ty, elab_pat) = decl.pattern.infer((ctx, &mut hashmap, env.clone()));
 
-                ctx.subsumes(env.clone(), pat_ty, val_ty);
+                let elab_expr = decl.expr.check(pat_ty, (ctx, ambient, env.clone()));
 
                 for binding in hashmap {
                     env.add_var(binding.0, binding.1)
                 }
 
-                (Type::tuple(vec![]), env)
+                (
+                    Type::tuple(vec![]),
+                    env,
+                    elaborated::StatementKind::Let(elaborated::LetStatement {
+                        pattern: elab_pat,
+                        expr: elab_expr,
+                    }),
+                )
             }
             StatementKind::Expr(expr) => {
-                let ty = expr.infer((ctx, ambient, env.clone()));
-                (ty, env)
+                let (ty, elab_expr) = expr.infer((ctx, ambient, env.clone()));
+                (ty, env, elaborated::StatementKind::Expr(elab_expr))
             }
-            StatementKind::Error => (Type::error(), env),
+            StatementKind::Error => (Type::error(), env, elaborated::StatementKind::Error),
         }
     }
 }

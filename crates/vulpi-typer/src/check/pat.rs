@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
-use vulpi_syntax::{r#abstract::Pattern, r#abstract::PatternArm};
+use vulpi_syntax::{elaborated, r#abstract::Pattern, r#abstract::PatternArm};
 
 use crate::{
     errors::TypeErrorKind,
@@ -74,26 +74,28 @@ impl Check for Vec<PatternArm> {
 }
 
 impl Check for Pattern {
-    type Return = ();
+    type Return = elaborated::Pattern;
 
     type Context<'a> = (&'a mut Context, &'a mut HashMap<Symbol, Type<Virtual>>, Env);
 
     fn check(&self, ty: Type<Virtual>, (ctx, map, env): Self::Context<'_>) -> Self::Return {
         env.on(self.span.clone());
-        let infered = self.infer((ctx, map, env.clone()));
+        let (infered, pat) = self.infer((ctx, map, env.clone()));
         ctx.subsumes(env, infered, ty);
+        pat
     }
 }
 
 impl<'b> Check for EffectPat<'b> {
-    type Return = ();
+    type Return = elaborated::PatEffectKind;
 
     type Context<'a> = (&'a mut Context, &'a mut HashMap<Symbol, Type<Virtual>>, Env);
 
     fn check(&self, ty: Type<Virtual>, context: Self::Context<'_>) -> Self::Return {
         let (ctx, map, env) = context;
         env.on(self.1.span.clone());
-        let infered = self.1.infer((ctx, map, env.clone()));
+        let (infered, pat) = self.infer((ctx, map, &mut env.clone()));
         ctx.subsumes(env, infered, ty);
+        pat
     }
 }

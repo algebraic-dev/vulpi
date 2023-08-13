@@ -54,6 +54,17 @@ impl Context {
         self.counter - 1
     }
 
+    pub fn find_prelude_type(&mut self, name: &str, env: Env) -> Type<Virtual> {
+        let path = Symbol::intern("Prelude");
+        let name = Symbol::intern(name);
+        if self.modules.get(&path).types.get(&name).is_some() {
+            Type::variable(Qualified { path, name })
+        } else {
+            self.report(&env, crate::errors::TypeErrorKind::CannotFind(name));
+            Type::error()
+        }
+    }
+
     /// Creates a new name with the prefix `t_` and a unique number.
     pub fn new_name(&mut self) -> Symbol {
         Symbol::intern(&format!("t_{}", self.inc_counter()))
