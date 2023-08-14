@@ -255,7 +255,9 @@ impl<'a> Lexer<'a> {
     }
 
     fn classify_token(&mut self, line: usize) -> (TokenData, Symbol) {
-        if line != self.state.line {
+        let last_layout = self.state.layout.last();
+        let cond = last_layout.is_some() && self.state.column < *last_layout.unwrap();
+        if line != self.state.line || cond {
             let column = self.state.column;
             let last = self.state.layout.last();
 
@@ -409,6 +411,7 @@ impl<'a> Lexer<'a> {
                 (TokenData::Begin, Symbol::intern("begin"))
             }
         };
+
         Token {
             comments,
             whitespace,

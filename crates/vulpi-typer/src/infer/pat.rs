@@ -12,11 +12,7 @@ use vulpi_syntax::{
 
 use crate::{
     errors::TypeErrorKind,
-    r#type::{
-        eval::{Eval, Quote},
-        r#virtual::Virtual,
-        Effect,
-    },
+    r#type::{eval::Eval, r#virtual::Virtual, Effect},
     Context, Env, Kind, Type,
 };
 
@@ -270,7 +266,6 @@ impl<'b> Infer for EffectPat<'b> {
                 if let Some(cont) = &eff.cont {
                     let typ = ctx.skolemize(env.clone(), &typ);
                     let cont_ty = Type::<Virtual>::function(vec![typ], self.0.clone());
-                    println!("{}", cont_ty.quote(env.level).show(env));
                     map.insert(cont.clone(), cont_ty);
                 }
 

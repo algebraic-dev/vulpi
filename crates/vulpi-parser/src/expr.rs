@@ -77,6 +77,7 @@ impl<'a> Parser<'a> {
         }
 
         self.expect_or_pop_layout(TokenData::End)?;
+
         Ok(statements)
     }
 

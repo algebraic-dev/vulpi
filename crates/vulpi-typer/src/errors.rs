@@ -3,7 +3,10 @@ use vulpi_location::Span;
 use vulpi_report::{IntoDiagnostic, Text};
 use vulpi_syntax::r#abstract::Qualified;
 
-use crate::r#type::{r#virtual::Env, real::Real, Type};
+use crate::{
+    r#type::{r#virtual::Env, real::Real, Type},
+    Virtual,
+};
 
 pub enum TypeErrorKind {
     UnboundTypeVariable(Symbol),
@@ -27,6 +30,7 @@ pub enum TypeErrorKind {
     NotFoundField,
     NotARecord,
     MissingField(Symbol),
+    AmbientDoesNotContainEffects(Env, Vec<Type<Real>>),
 }
 
 pub struct TypeError {
@@ -89,6 +93,14 @@ impl IntoDiagnostic for TypeError {
             TypeErrorKind::AtLeastOneArgument => {
                 Text::from("at least one argument is required".to_string())
             }
+            TypeErrorKind::AmbientDoesNotContainEffects(env, effects) => Text::from(format!(
+                "the ambient does not contain effects: {}",
+                effects
+                    .iter()
+                    .map(|effect| effect.show(env).to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
         }
     }
 

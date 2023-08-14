@@ -232,7 +232,7 @@ impl<S: State> Hole<S> {
 }
 
 pub mod r#virtual {
-    use std::cell::RefCell;
+    use std::{cell::RefCell, collections::HashMap};
 
     use im_rc::HashSet;
     use vulpi_intern::Symbol;
@@ -382,6 +382,26 @@ pub mod r#virtual {
             spine.reverse();
 
             (current, spine)
+        }
+
+        pub(crate) fn effect_row_set(&self) -> HashMap<Qualified, Type<Virtual>> {
+            match self.deref().as_ref() {
+                TypeKind::Extend(l, t, rest) => {
+                    let mut map = rest.effect_row_set();
+                    map.insert(l.clone(), t.clone());
+                    map
+                }
+                _ => Default::default(),
+            }
+        }
+
+        pub(crate) fn is_row_effect(&self) -> bool {
+            match self.deref().as_ref() {
+                TypeKind::Extend(_, _, _) => true,
+                TypeKind::Empty => true,
+                TypeKind::Hole(m) if m.is_lacks() => true,
+                _ => false,
+            }
         }
 
         pub fn deref(&self) -> Type<Virtual> {

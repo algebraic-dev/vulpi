@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use crate::{
     module::Modules,
-    r#type::{eval::Eval, r#virtual::Pi, Hole, Index, State},
+    r#type::{eval::Eval, r#virtual::Pi, Hole, State},
 };
 use im_rc::HashSet;
 use vulpi_intern::Symbol;
@@ -245,6 +245,17 @@ impl Context {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
+    pub fn remove_effect(&mut self, label: Qualified, ty: &Type<Virtual>) -> Type<Virtual> {
+        match ty.deref().as_ref() {
+            TypeKind::Extend(l, _, rest) if label == *l => self.remove_effect(label, rest),
+            TypeKind::Extend(l, ty, rest) => {
+                Type::<Virtual>::extend(l.clone(), ty.clone(), self.remove_effect(label, rest))
+            }
+            _ => ty.clone(),
+        }
+    }
+
     pub fn skolemize(&mut self, env: Env, ty: &Type<Virtual>) -> Type<Virtual> {
         let mut vars = Default::default();
 
@@ -254,7 +265,9 @@ impl Context {
 
         let vars = vars.into_iter().collect::<Vec<_>>();
 
+        #[allow(clippy::redundant_clone)]
         let mut new_env = env.clone();
+
         for (hole, (n, lvl, _)) in vars.iter() {
             let bound = Type::bound(*lvl);
             new_env = new_env.add(Some(n.clone()), bound.clone());

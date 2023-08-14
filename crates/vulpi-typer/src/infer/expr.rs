@@ -49,6 +49,9 @@ impl Infer for Expr {
                     if let Some((left, effs, right)) = ctx.as_function(&env, ty.deref()) {
                         let opened = ctx.open(&env, effs);
                         ctx.subsumes(env.clone(), left, arg_ty);
+
+
+                        env.on(self.span.clone());
                         ctx.subsumes(env.clone(), ambient.clone(), opened);
 
                         ty = right;
@@ -375,13 +378,49 @@ impl Infer for Expr {
                     )),
                 )
             }
-            ExprKind::Handler(_) => {
-                ctx.report(&env, TypeErrorKind::NotImplemented);
-                (Type::error(), Box::new(elaborated::ExprKind::Error))
+            ExprKind::Handler(h) => {
+
+                let scrutinee = ctx.hole::<Virtual>(&env, Type::typ());
+
+                let (handle_type, elab_handler) = h.with.infer((ctx, ambient, env.clone()));
+
+                let Some((left, eff, right)) = ctx.as_function(&env, handle_type.clone()) else {
+                    ctx.report(&env, TypeErrorKind::NotAFunction(env.clone(), handle_type.quote(env.level)));
+                    return (Type::error(), Box::new(elaborated::ExprKind::Error));  
+                };
+
+                let request = ctx.find_prelude_type("Request", env.clone());
+
+                let removed_effect = ctx.hole::<Virtual>(&env, Type::effect());
+
+                let app = Type::<Virtual>::application(
+                    request,
+                    vec![removed_effect.clone(), scrutinee.clone()],
+                );
+
+                let (var, _) = removed_effect.application_spine();
+
+                ctx.subsumes(env.clone(), left, app);
+  
+                let new_ambient = if let TypeKind::Variable(name) = var.deref().as_ref() {
+                    Type::<Virtual>::extend(name.clone(), removed_effect, ambient.clone())
+                } else {
+                    ambient.clone()
+                };
+                 
+
+                let elab_expr = h.expr.check(scrutinee, (ctx, &new_ambient, env.clone()));
+
+                ctx.subsumes(env.clone(), ambient.clone(), eff);
+
+                (right, Box::new(elaborated::ExprKind::Handler(elaborated::HandlerExpr { 
+                    expr: elab_expr, 
+                    with: elab_handler 
+                })))
             }
             ExprKind::Cases(_) => {
-                ctx.report(&env, TypeErrorKind::NotImplemented);
-                (Type::error(), Box::new(elaborated::ExprKind::Error))
+                let ty = ctx.hole::<Virtual>(&env, Type::typ());
+                (ty.clone(), self.check(ty, (ctx, ambient, env.clone())))
             }
         }
     }

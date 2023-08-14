@@ -56,14 +56,41 @@ impl Context {
 
         if let Err(kind) = result {
             match kind {
-                TypeErrorKind::TypeMismatch(_, _, _) => self.report(
-                    &env,
-                    TypeErrorKind::TypeMismatch(
-                        env.clone(),
-                        left.quote(env.level),
-                        right.quote(env.level),
-                    ),
-                ),
+                TypeErrorKind::TypeMismatch(_, _, _) => {
+                    if left.is_row_effect() && right.is_row_effect() {
+                        let left = left.effect_row_set();
+                        let right = right.effect_row_set();
+
+                        let left_set = left.keys().cloned().collect::<HashSet<_>>();
+                        let right_set = right.keys().cloned().collect::<HashSet<_>>();
+
+                        let difference = right_set.difference(left_set);
+
+                        let effects = difference
+                            .iter()
+                            .map(|x| {
+                                left.get(x)
+                                    .or_else(|| right.get(x))
+                                    .unwrap()
+                                    .quote(env.level)
+                            })
+                            .collect::<Vec<_>>();
+
+                        self.report(
+                            &env,
+                            TypeErrorKind::AmbientDoesNotContainEffects(env.clone(), effects),
+                        )
+                    } else {
+                        self.report(
+                            &env,
+                            TypeErrorKind::TypeMismatch(
+                                env.clone(),
+                                left.quote(env.level),
+                                right.quote(env.level),
+                            ),
+                        )
+                    }
+                }
                 _ => self.report(&env, kind),
             }
         }
