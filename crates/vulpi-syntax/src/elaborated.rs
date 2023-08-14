@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use vulpi_intern::Symbol;
 use vulpi_macros::Show;
@@ -175,7 +175,7 @@ pub type Expr<T> = Box<ExprKind<T>>;
 #[derive(Show)]
 pub struct LetDecl<T> {
     pub binders: Vec<(Pattern, T)>,
-    pub has_effect: bool,
+    pub effects: HashSet<Qualified>,
     pub body: Vec<PatternArm<T>>,
 }
 

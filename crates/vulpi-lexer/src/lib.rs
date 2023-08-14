@@ -406,7 +406,7 @@ impl<'a> Lexer<'a> {
             LexState::Common => self.classify_token(line),
 
             LexState::PushLayout => {
-                self.state.layout.push(self.state.column);
+                self.state.layout.push(self.state.column.max(1));
                 self.state.lex_state = LexState::Common;
                 (TokenData::Begin, Symbol::intern("begin"))
             }

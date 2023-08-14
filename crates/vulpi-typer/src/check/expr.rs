@@ -5,15 +5,15 @@ use vulpi_syntax::{elaborated, r#abstract::Expr, r#abstract::ExprKind, r#abstrac
 use crate::{
     errors::TypeErrorKind,
     infer::pat::EffectPat,
-    r#type::{r#virtual, Effect, State, TypeKind},
-    Context, Env, Kind, Type, Virtual,
+    r#type::{r#virtual, Effect, TypeKind},
+    Context, Env, Kind, Real, Type, Virtual,
 };
 
 use super::Check;
 use crate::infer::Infer;
 
 impl Check for Expr {
-    type Return = elaborated::Expr<Type<Virtual>>;
+    type Return = elaborated::Expr<Type<Real>>;
 
     type Context<'a> = (&'a mut Context, &'a Effect<Virtual>, Env);
 
@@ -119,7 +119,7 @@ impl Check for Expr {
 }
 
 impl Check for Statement {
-    type Return = (elaborated::Statement<Type<Virtual>>, Env);
+    type Return = (elaborated::Statement<Type<Real>>, Env);
 
     type Context<'a> = (&'a mut Context, &'a Effect<Virtual>, Env);
 

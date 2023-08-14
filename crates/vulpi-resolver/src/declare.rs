@@ -6,6 +6,7 @@ use vulpi_location::Span;
 use vulpi_syntax::concrete::top_level::Visibility;
 use vulpi_syntax::concrete::tree::*;
 
+use crate::error::ResolverError;
 use crate::{namespace, Context};
 
 use crate::{
@@ -45,6 +46,13 @@ impl<'a> Context<'a> {
         let old = namespace.modules.insert(path.clone(), item);
         if old.is_some() {
             self.report_redeclareted(span, path);
+        }
+    }
+
+    pub fn register_namespace(&mut self, span: Span, path: paths::Path, namespace: Namespace) {
+        let namespace = self.namespaces.add_with(path.clone(), namespace);
+        if namespace.is_some() {
+            self.report_redeclareted(span, path.symbol());
         }
     }
 
@@ -109,12 +117,12 @@ impl Declare for EffectDecl {
         ctx.derive(self.name.symbol(), |ctx| {
             for field in &self.fields {
                 ctx.add_value(
-                    field.0.name.0.value.span.clone(),
-                    field.0.name.symbol(),
+                    field.name.0.value.span.clone(),
+                    field.name.symbol(),
                     Item {
-                        visibility: field.0.visibility.clone().into(),
-                        span: field.0.name.0.value.span.clone(),
-                        item: Value::Effect(ctx.qualify(field.0.name.symbol())),
+                        visibility: field.visibility.clone().into(),
+                        span: field.name.0.value.span.clone(),
+                        item: Value::Effect(ctx.qualify(field.name.symbol())),
                         parent: Some(ctx.path.symbol()),
                     },
                 );
@@ -238,6 +246,18 @@ impl Declare for ModuleDecl {
             if let Some(module) = &self.part {
                 for top_level in &module.top_levels {
                     top_level.declare(ctx);
+                }
+            } else {
+                let namespaces = ctx.io.read_module(ctx.path.clone());
+
+                match namespaces {
+                    Ok(res) => res.declare(ctx),
+                    Err(err) => {
+                        ctx.report(ResolverError {
+                            span: self.name.0.value.span.clone(),
+                            kind: err,
+                        });
+                    }
                 }
             }
         });

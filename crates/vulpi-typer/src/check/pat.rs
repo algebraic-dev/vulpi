@@ -9,14 +9,14 @@ use crate::{
     errors::TypeErrorKind,
     infer::pat::EffectPat,
     r#type::{eval::Quote, Effect},
-    Context, Env, Type, Virtual,
+    Context, Env, Real, Type, Virtual,
 };
 
 use super::Check;
 use crate::infer::Infer;
 
 impl Check for PatternArm {
-    type Return = elaborated::PatternArm<Type<Virtual>>;
+    type Return = elaborated::PatternArm<Type<Real>>;
 
     type Context<'a> = (&'a mut Context, Effect<Virtual>, Env);
 
@@ -77,7 +77,7 @@ impl Check for PatternArm {
 }
 
 impl Check for Vec<PatternArm> {
-    type Return = Vec<elaborated::PatternArm<Type<Virtual>>>;
+    type Return = Vec<elaborated::PatternArm<Type<Real>>>;
 
     type Context<'a> = (&'a mut Context, Effect<Virtual>, Env);
 

@@ -30,21 +30,21 @@ pub struct TypeData {
 
 pub struct LetDef {
     pub typ: Type<Virtual>,
-    pub binders: HashMap<Symbol, Type<Virtual>>,
-    pub unbound: Vec<(Symbol, Type<Virtual>)>,
+    pub binders: HashMap<Symbol, Type<Real>>,
+    pub unbound: Vec<(Symbol, Type<Real>)>,
     pub ambient: Effect<Real>,
     pub ret: Type<Virtual>,
-    pub unbound_effects: Vec<(Symbol, Type<Virtual>)>,
-    pub elab_binders: Vec<(elaborated::Pattern, Type<Virtual>)>,
+    pub unbound_effects: Vec<(Symbol, Type<Real>)>,
+    pub elab_binders: Vec<(elaborated::Pattern, Type<Real>)>,
 }
 
 #[derive(Default)]
-pub struct Module {
+pub struct Interface {
     /// The types of the functions.
     pub variables: HashMap<Symbol, LetDef>,
 
     /// The types of the functions.
-    pub constructors: HashMap<Symbol, (Type<Virtual>, usize)>,
+    pub constructors: HashMap<Symbol, (Type<Real>, usize)>,
 
     /// The types of the types.
     pub types: HashMap<Symbol, TypeData>,
@@ -59,7 +59,7 @@ pub struct Module {
 #[derive(Default)]
 pub struct Modules {
     /// The modules.
-    pub modules: HashMap<Symbol, Module>,
+    pub modules: HashMap<Symbol, Interface>,
 }
 
 impl Modules {
@@ -74,7 +74,7 @@ impl Modules {
         module.types.get(&qualified.name).unwrap().clone()
     }
 
-    pub fn constructor(&mut self, qualified: &Qualified) -> (Type<Virtual>, usize) {
+    pub fn constructor(&mut self, qualified: &Qualified) -> (Type<Real>, usize) {
         let module = self.get(&qualified.path);
         module.constructors.get(&qualified.name).unwrap().clone()
     }
@@ -94,7 +94,7 @@ impl Modules {
         module.fields.get(&qualified.name).unwrap().clone()
     }
 
-    pub fn get(&mut self, id: &Symbol) -> &mut Module {
+    pub fn get(&mut self, id: &Symbol) -> &mut Interface {
         self.modules.entry(id.clone()).or_default()
     }
 }

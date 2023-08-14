@@ -1,5 +1,6 @@
 //! Inference of expressions
 
+use crate::Real;
 use crate::r#type::eval::Eval;
 use crate::r#type::eval::Quote;
 use crate::r#type::r#virtual;
@@ -27,7 +28,7 @@ use crate::{
 use super::Infer;
 
 impl Infer for Expr {
-    type Return = (Type<Virtual>, elaborated::Expr<Type<Virtual>>);
+    type Return = (Type<Virtual>, elaborated::Expr<Type<Real>>);
 
     type Context<'a> = (&'a mut Context, &'a Effect<Virtual>, Env);
 
@@ -68,7 +69,7 @@ impl Infer for Expr {
                     ty.clone(),
                     Box::new(elaborated::ExprKind::Application(
                         elaborated::ApplicationExpr {
-                            typ: ty,
+                            typ: ty.quote(env.level),
                             func: func_elab,
                             args: elab_args,
                         },
@@ -80,7 +81,7 @@ impl Infer for Expr {
                 Box::new(elaborated::ExprKind::Variable(m.clone())),
             ),
             ExprKind::Constructor(n) => (
-                ctx.modules.constructor(n).0,
+                ctx.modules.constructor(n).0.eval(&env),
                 Box::new(elaborated::ExprKind::Constructor(n.clone())),
             ),
             ExprKind::Function(n) => (
@@ -411,6 +412,7 @@ impl Infer for Expr {
 
                 let elab_expr = h.expr.check(scrutinee, (ctx, &new_ambient, env.clone()));
 
+                let eff = ctx.open(&env, eff);
                 ctx.subsumes(env.clone(), ambient.clone(), eff);
 
                 (right, Box::new(elaborated::ExprKind::Handler(elaborated::HandlerExpr { 
@@ -427,7 +429,7 @@ impl Infer for Expr {
 }
 
 impl Infer for Statement {
-    type Return = (Type<Virtual>, Env, elaborated::Statement<Type<Virtual>>);
+    type Return = (Type<Virtual>, Env, elaborated::Statement<Type<Real>>);
 
     type Context<'a> = (&'a mut Context, &'a Effect<Virtual>, Env);
 

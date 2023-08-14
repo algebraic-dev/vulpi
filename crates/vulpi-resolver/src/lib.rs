@@ -3,7 +3,9 @@
 
 use std::collections::{HashMap, HashSet};
 
+use declare::{Declare, ImportResolve};
 use error::{ResolverError, ResolverErrorKind};
+use module_tree::Tree;
 use namespace::{Item, ModuleId, Namespace, Namespaces, Resolve as ResolveObj, TypeValue, Value};
 use scopes::scopable::TypeVariable;
 use scopes::{scopable::Variable, Scopable};
@@ -17,6 +19,7 @@ use vulpi_syntax::r#abstract::Qualified;
 
 pub mod declare;
 pub mod error;
+pub mod io;
 pub mod module_tree;
 pub mod namespace;
 pub mod paths;
@@ -41,10 +44,11 @@ pub struct Context<'a> {
     pub scopes: scopes::Kaleidoscope,
     pub patterns: Vec<HashMap<Symbol, Span>>,
     pub prelude: HashMap<Symbol, Qualified>,
+    pub io: &'a mut dyn io::IO,
 }
 
 impl<'a> Context<'a> {
-    pub fn new(reporter: Report, namespaces: &'a mut Namespaces) -> Self {
+    pub fn new(reporter: Report, namespaces: &'a mut Namespaces, io: &'a mut dyn io::IO) -> Self {
         Self {
             reporter,
             namespaces,
@@ -52,6 +56,7 @@ impl<'a> Context<'a> {
             scopes: scopes::Kaleidoscope::default(),
             patterns: Vec::new(),
             prelude: HashMap::new(),
+            io,
         }
     }
 
@@ -278,6 +283,20 @@ impl<'a> Context<'a> {
                 None
             }
         }
+    }
+
+    pub fn declare(&mut self, program: &Program) -> &mut Self {
+        program.declare(self);
+        self
+    }
+
+    pub fn import(&mut self, program: &Program) -> &mut Self {
+        program.resolve_imports(self);
+        self
+    }
+
+    pub fn resolve(&mut self, program: Program) -> abs::Program {
+        program.resolve(self)
     }
 }
 
@@ -1136,10 +1155,10 @@ impl Resolve for TypeDecl {
 }
 
 impl Resolve for ModuleInline {
-    type Output = abs::Module;
+    type Output = abs::Program;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        let mut module = abs::Module::default();
+        let mut module = abs::Program::default();
 
         self.top_levels
             .into_iter()
@@ -1225,7 +1244,7 @@ impl Resolve for EffectDecl {
             effects: self
                 .fields
                 .into_iter()
-                .map(|x| (name.clone(), x.0).resolve(ctx))
+                .map(|x| (name.clone(), x).resolve(ctx))
                 .collect(),
         }
     }
@@ -1248,7 +1267,7 @@ impl Resolve for ExternalDecl {
     }
 }
 
-impl Resolve for (&'_ mut abs::Module, TopLevel) {
+impl Resolve for (&'_ mut abs::Program, TopLevel) {
     type Output = ();
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
@@ -1267,10 +1286,10 @@ impl Resolve for (&'_ mut abs::Module, TopLevel) {
 }
 
 impl Resolve for Program {
-    type Output = abs::Module;
+    type Output = abs::Program;
 
     fn resolve(self, ctx: &mut Context) -> Self::Output {
-        let mut module = abs::Module::default();
+        let mut module = abs::Program::default();
 
         self.top_levels
             .into_iter()
@@ -1314,4 +1333,21 @@ fn find_constructor_raw<T>(
         }
         None => error,
     }
+}
+
+pub fn namespaces(reporter: Report) -> Namespaces {
+    let tree = Tree::new(Symbol::intern(""));
+    let mut namespaces = HashMap::new();
+
+    namespaces.insert(Symbol::intern(""), Namespace::new(paths::Path::default()));
+
+    Namespaces { tree, namespaces }
+}
+
+pub fn resolver<'a>(
+    reporter: Report,
+    namespaces: &'a mut Namespaces,
+    io: &'a mut dyn io::IO,
+) -> Context<'a> {
+    Context::new(reporter, namespaces, io)
 }

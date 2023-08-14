@@ -92,16 +92,16 @@ impl<T: vulpi_show::Show> vulpi_show::Show for Item<T> {
 /// A [Namespace] is a bunch of [Name] mapped to [Qualified] definitions. It's used in the first
 /// step of the resolution process to map all the names to their definitions. After that, it's
 /// thrown away and a [] is created.
-#[derive(Show, Clone)]
+#[derive(Clone)]
 pub struct Namespace {
-    pub name: Symbol,
+    pub name: paths::Path,
     pub values: HashMap<Symbol, Item<Value>>,
     pub types: HashMap<Symbol, Item<TypeValue>>,
     pub modules: HashMap<Symbol, Item<ModuleId>>,
 }
 
 impl Namespace {
-    pub fn new(name: Symbol) -> Self {
+    pub fn new(name: paths::Path) -> Self {
         Self {
             name,
             values: HashMap::new(),
@@ -148,7 +148,17 @@ impl Namespaces {
 
         self.namespaces
             .entry(symbol.clone())
-            .or_insert_with(|| Namespace::new(symbol.clone()));
+            .or_insert_with(|| Namespace::new(name.clone()));
+
+        self.tree.add(name.slice(), symbol)
+    }
+
+    pub fn add_with(&mut self, name: paths::Path, namespace: Namespace) -> Option<&mut Tree> {
+        let symbol = name.symbol();
+
+        self.namespaces
+            .entry(symbol.clone())
+            .or_insert_with(|| namespace);
 
         self.tree.add(name.slice(), symbol)
     }

@@ -13,7 +13,7 @@ use vulpi_syntax::{
 use crate::{
     errors::TypeErrorKind,
     r#type::{eval::Eval, r#virtual::Virtual, Effect},
-    Context, Env, Kind, Type,
+    Context, Env, Kind, Real, Type,
 };
 
 use super::Infer;
@@ -22,7 +22,7 @@ impl Infer for PatternArm {
     type Return = (
         Vec<Type<Virtual>>,
         Type<Virtual>,
-        elaborated::PatternArm<Type<Virtual>>,
+        elaborated::PatternArm<Type<Real>>,
     );
 
     type Context<'a> = (&'a mut Context, Effect<Virtual>, Env);
@@ -74,7 +74,7 @@ impl Infer for Vec<PatternArm> {
         Type<Virtual>,
         Vec<Type<Virtual>>,
         Type<Virtual>,
-        Vec<elaborated::PatternArm<Type<Virtual>>>,
+        Vec<elaborated::PatternArm<Type<Real>>>,
     );
 
     type Context<'a> = (&'a mut Context, Effect<Virtual>, Env);
@@ -176,7 +176,9 @@ impl Infer for Pattern {
                 )
             }
             PatternKind::Application(app) => {
-                let (mut typ, arity) = ctx.modules.constructor(&app.func);
+                let (typ, arity) = ctx.modules.constructor(&app.func);
+
+                let mut typ = typ.eval(&env);
 
                 if arity != app.args.len() {
                     ctx.report(&env, TypeErrorKind::WrongArity(arity, app.args.len()));

@@ -3,6 +3,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
+use renderer::{classic::Classic, Renderer};
 use vulpi_location::{FileId, Span};
 
 pub mod hash;
@@ -157,4 +158,18 @@ impl Report {
     pub fn has_errors(&self) -> bool {
         self.0.borrow().has_errors()
     }
+
+    pub fn to_stderr(&self, ctx: Classic) {
+        if self.has_errors() {
+            eprintln!();
+
+            for diagnostic in self.all_diagnostics().iter().rev() {
+                diagnostic.render(&ctx, &mut std::io::stderr()).unwrap();
+            }
+        }
+    }
+}
+
+pub fn hash_reporter() -> Report {
+    Report::new(hash::HashReporter::new())
 }

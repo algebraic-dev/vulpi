@@ -167,8 +167,8 @@ pub struct EffectDecl {
     pub effect: Token,
     pub name: Upper,
     pub binders: Vec<TypeBinder>,
-    pub where_: Token,
-    pub fields: Vec<(EffectField, Option<Token>)>,
+    pub where_: Option<Token>,
+    pub fields: Vec<EffectField>,
 }
 
 #[derive(Show)]

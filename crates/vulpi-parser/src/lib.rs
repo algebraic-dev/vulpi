@@ -6,6 +6,7 @@ use vulpi_lexer::Lexer;
 use vulpi_location::{Byte, FileId, Span, Spanned};
 use vulpi_report::{Diagnostic, Report};
 
+use vulpi_syntax::concrete::tree::Program;
 use vulpi_syntax::concrete::Parenthesis;
 use vulpi_syntax::tokens::{Token, TokenData};
 
@@ -237,4 +238,11 @@ impl<'a> Parser<'a> {
 
         Ok(Parenthesis { left, data, right })
     }
+}
+
+/// The entrypoint of the parsing, it parses a string into a Program.
+pub fn parse(reporter: Report, file_id: FileId, source: &str) -> Program {
+    let lexer = Lexer::new(source, file_id, reporter.clone());
+    let mut parser = Parser::new(lexer, file_id, reporter);
+    parser.program()
 }

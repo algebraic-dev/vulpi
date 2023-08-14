@@ -237,7 +237,6 @@ pub mod r#virtual {
     use im_rc::HashSet;
     use vulpi_intern::Symbol;
     use vulpi_location::Span;
-    use vulpi_show::Show;
     use vulpi_syntax::r#abstract::Qualified;
 
     use super::{eval::Eval, real::Real, Hole, HoleInner, Kind, Level, State, Type, TypeKind};
@@ -246,12 +245,6 @@ pub mod r#virtual {
     /// contains closures and can be executed.
     #[derive(Clone)]
     pub struct Virtual;
-
-    impl Show for Type<Virtual> {
-        fn show(&self) -> vulpi_show::TreeDisplay {
-            vulpi_show::TreeDisplay::label("Type")
-        }
-    }
 
     /// The typing environment is used for type checking and type inference.
     #[derive(Clone, Default)]
@@ -455,10 +448,11 @@ pub mod r#virtual {
 pub mod real {
     use std::fmt::Display;
 
-    use vulpi_intern::Symbol;
-    use vulpi_syntax::r#abstract::Qualified;
-
     use crate::Virtual;
+    use vulpi_intern::Symbol;
+    use vulpi_show::Show as OShow;
+
+    use vulpi_syntax::r#abstract::Qualified;
 
     use super::{
         eval::Quote, r#virtual::Env, Hole, HoleInner, Index, Level, State, Type, TypeKind,
@@ -497,6 +491,12 @@ pub mod real {
     impl From<Env> for NameEnv {
         fn from(env: Env) -> Self {
             Self(env.names)
+        }
+    }
+
+    impl OShow for Type<Real> {
+        fn show(&self) -> vulpi_show::TreeDisplay {
+            vulpi_show::TreeDisplay::label("Type")
         }
     }
 

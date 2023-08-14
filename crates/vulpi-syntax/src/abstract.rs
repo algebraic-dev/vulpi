@@ -433,7 +433,7 @@ pub struct ModuleDecl {
     pub namespace: Symbol,
     pub visibility: Visibility,
     pub name: Symbol,
-    pub decls: Option<Module>,
+    pub decls: Option<Program>,
 }
 
 #[derive(Show)]
@@ -463,7 +463,7 @@ pub struct ExternalDecl {
 }
 
 #[derive(Show, Default)]
-pub struct Module {
+pub struct Program {
     pub lets: Vec<LetDecl>,
     pub types: Vec<TypeDecl>,
     pub modules: Vec<ModuleDecl>,

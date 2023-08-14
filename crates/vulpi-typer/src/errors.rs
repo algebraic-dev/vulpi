@@ -3,10 +3,7 @@ use vulpi_location::Span;
 use vulpi_report::{IntoDiagnostic, Text};
 use vulpi_syntax::r#abstract::Qualified;
 
-use crate::{
-    r#type::{r#virtual::Env, real::Real, Type},
-    Virtual,
-};
+use crate::r#type::{r#virtual::Env, real::Real, Type};
 
 pub enum TypeErrorKind {
     UnboundTypeVariable(Symbol),

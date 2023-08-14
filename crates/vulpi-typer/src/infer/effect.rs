@@ -32,7 +32,7 @@ impl Infer for Option<Effects> {
 
                 let (head, _) = ty.application_spine();
 
-                let TypeKind::Variable(name) = head.as_ref() else { unreachable!() };
+                let TypeKind::Variable(name) = head.as_ref() else { return ty };
 
                 last = Type::new(TypeKind::Extend(name.clone(), ty, last));
             }

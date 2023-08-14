@@ -10,6 +10,7 @@ use r#type::TypeKind;
 pub use r#type::{r#virtual::Env, Type};
 pub use r#type::{r#virtual::Virtual, real::Real, Kind};
 use vulpi_intern::Symbol;
+use vulpi_report::Report;
 use vulpi_syntax::r#abstract::LetDecl;
 
 use crate::check::Check;
@@ -21,7 +22,7 @@ use module::{Def, LetDef, TypeData};
 
 use vulpi_syntax::{
     elaborated,
-    r#abstract::{EffectDecl, ExternalDecl, Module, ModuleDecl, TypeDecl, TypeDef},
+    r#abstract::{EffectDecl, ExternalDecl, ModuleDecl, Program, TypeDecl, TypeDef},
 };
 
 pub mod check;
@@ -143,7 +144,7 @@ impl Declare for TypeDecl {
                     ctx.modules
                         .get(&name.path)
                         .constructors
-                        .insert(name.name.clone(), (cons_typ.eval(&env), arity));
+                        .insert(name.name.clone(), (cons_typ, arity));
                 }
 
                 elaborated::TypeDecl::Enum(constructors)
@@ -206,7 +207,7 @@ impl Declare for ExternalDecl {
         for fv in fvs {
             let ty = ctx.hole(&env, Type::typ());
             env = env.add(Some(fv.clone()), ty.clone());
-            unbound.push((fv, ty))
+            unbound.push((fv, ty.quote(env.level)))
         }
 
         let (typ, k) = self.ty.infer((ctx, env.clone()));
@@ -230,7 +231,7 @@ impl Declare for ExternalDecl {
         ctx.elaborated.externals.insert(
             self.name.clone(),
             elaborated::ExternalDecl {
-                typ,
+                typ: typ.quote(env.level),
                 binding: self.ret.clone(),
             },
         );
@@ -413,19 +414,19 @@ impl Declare for LetDecl {
             efvs.extend(arg.ty.data.free_effects());
         }
 
-        let mut bound = Vec::new();
+        let mut unbound = Vec::new();
         let mut effect_bounds = Vec::new();
 
         for fv in fvs {
             let ty = ctx.hole(&env, Type::typ());
             env = env.add(Some(fv.clone()), ty.clone());
-            bound.push((fv, ty));
+            unbound.push((fv, ty.quote(env.level)));
         }
 
         for fv in efvs {
             let ty = ctx.lacks(&env, Default::default());
             env = env.add(Some(fv.clone()), ty.clone());
-            effect_bounds.push((fv, ty));
+            effect_bounds.push((fv, ty.quote(env.level)));
         }
 
         let mut args = Vec::new();
@@ -444,7 +445,7 @@ impl Declare for LetDecl {
                 .pattern
                 .check(pat_ty.clone(), (ctx, &mut hash_map, env.clone()));
 
-            elab_binders.push((elab_pat, pat_ty.clone()));
+            elab_binders.push((elab_pat, pat_ty.clone().quote(env.level)));
             binders.extend(hash_map);
 
             args.push(ty);
@@ -483,20 +484,25 @@ impl Declare for LetDecl {
             });
         }
 
-        for (name, kind) in bound.clone() {
+        for (name, kind) in unbound.clone() {
             typ = Type::forall(Forall {
                 name,
-                kind: kind.quote(env.level),
+                kind,
                 body: typ,
             });
         }
+
+        let binders = binders
+            .into_iter()
+            .map(|x| (x.0, x.1.quote(env.level)))
+            .collect();
 
         ctx.modules.get(&self.name.path.clone()).variables.insert(
             self.name.name.clone(),
             LetDef {
                 typ: typ.eval(&env),
                 binders,
-                unbound: bound,
+                unbound,
                 ambient: effs,
                 unbound_effects: effect_bounds,
                 elab_binders,
@@ -509,15 +515,15 @@ impl Declare for LetDecl {
         let let_decl = ctx.modules.let_decl(&self.name);
 
         for (fv, ty) in &let_decl.unbound {
-            env = env.add(Some(fv.clone()), ty.clone());
+            env = env.add(Some(fv.clone()), ty.eval(&env).clone());
         }
 
         for (fv, ty) in &let_decl.unbound_effects {
-            env = env.add(Some(fv.clone()), ty.clone());
+            env = env.add(Some(fv.clone()), ty.eval(&env).clone());
         }
 
         for (k, v) in &let_decl.binders {
-            env.add_var(k.clone(), v.clone());
+            env.add_var(k.clone(), v.eval(&env).clone());
         }
 
         let ty = let_decl.ret.clone();
@@ -525,7 +531,13 @@ impl Declare for LetDecl {
         let eval = let_decl.ambient.eval(&env);
 
         let binders = std::mem::take(&mut let_decl.elab_binders);
-        let has_effect = !let_decl.ambient.is_empty();
+
+        let effects = let_decl
+            .ambient
+            .eval(&env)
+            .effect_row_set()
+            .into_keys()
+            .collect();
 
         let body = self.body.check(ty, (ctx, eval, env.clone()));
 
@@ -533,7 +545,7 @@ impl Declare for LetDecl {
             self.name.clone(),
             elaborated::LetDecl {
                 binders,
-                has_effect,
+                effects,
                 body,
             },
         );
@@ -550,7 +562,7 @@ impl Declare for ModuleDecl {
     }
 }
 
-impl Declare for Module {
+impl Declare for Program {
     fn declare(&self, (ctx, env): (&mut Context, Env)) {
         self.modules.declare((ctx, env.clone()));
         self.types.declare((ctx, env.clone()));
@@ -566,4 +578,32 @@ impl Declare for Module {
         self.lets.define((ctx, env.clone()));
         self.externals.define((ctx, env));
     }
+}
+
+pub struct TypeEnv {
+    pub context: Context,
+    pub env: Env,
+}
+
+impl TypeEnv {
+    pub fn declare(&mut self, program: &Program) -> &mut Self {
+        program.declare((&mut self.context, self.env.clone()));
+        self
+    }
+
+    pub fn define(&mut self, program: &Program) -> &mut Self {
+        program.define((&mut self.context, self.env.clone()));
+        self
+    }
+
+    pub fn output(&mut self) -> elaborated::Program<Type<Real>> {
+        std::mem::take(&mut self.context.elaborated)
+    }
+}
+
+pub fn type_checker(reporter: Report) -> TypeEnv {
+    let context = Context::new(reporter);
+    let env = Env::default();
+
+    TypeEnv { context, env }
 }

@@ -210,10 +210,15 @@ impl<'a> Parser<'a> {
         let effect = self.expect(TokenData::Effect)?;
         let name = self.upper()?;
         let binders = self.many(Self::type_binder)?;
-        let where_ = self.expect(TokenData::Where)?;
-        self.expect(TokenData::Begin)?;
-        let fields = self.sep_by(TokenData::Sep, Self::effect_field)?;
-        self.expect(TokenData::End)?;
+
+        let (where_, fields) = if self.at(TokenData::Where) {
+            (
+                Some(self.expect(TokenData::Where)?),
+                self.block(Self::effect_field)?,
+            )
+        } else {
+            (None, vec![])
+        };
 
         Ok(EffectDecl {
             visibility,
