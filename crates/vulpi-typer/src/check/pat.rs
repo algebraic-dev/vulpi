@@ -121,7 +121,11 @@ impl Check for Pattern {
 
                 Box::new(elaborated::PatternKind::Variable(n.clone()))
             }
-            _ => self.check(ty, (ctx, map, env)),
+            _ => {
+                let (typ, elab_pat) = self.infer((ctx, map, env.clone()));
+                ctx.subsumes(env, typ, ty);
+                elab_pat
+            }
         }
     }
 }

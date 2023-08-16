@@ -1,7 +1,7 @@
 //! This file declares a mutable environment that is useful to keep track of information that does
 //! not need to be immutable like the Env.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
 use crate::{
     module::Modules,
@@ -153,6 +153,16 @@ impl Context {
             ty = self.instantiate_with(&ty, arg);
         }
         ty
+    }
+
+    pub fn instantiate_all(&mut self, env: &Env, ty: &Type<Virtual>) -> Type<Virtual> {
+        match ty.deref().as_ref() {
+            TypeKind::Forall(_) => {
+                let res = self.instantiate(env, ty);
+                self.instantiate_all(env, &res)
+            }
+            _ => ty.clone(),
+        }
     }
 
     fn accumulate_variables(

@@ -1335,7 +1335,7 @@ fn find_constructor_raw<T>(
     }
 }
 
-pub fn namespaces(reporter: Report) -> Namespaces {
+pub fn namespaces() -> Namespaces {
     let tree = Tree::new(Symbol::intern(""));
     let mut namespaces = HashMap::new();
 

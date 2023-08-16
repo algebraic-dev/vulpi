@@ -377,6 +377,20 @@ pub mod r#virtual {
             (current, spine)
         }
 
+        pub(crate) fn arrow_spine(&self) -> Vec<Self> {
+            let mut spine = Vec::new();
+            let mut current = self.clone();
+
+            while let TypeKind::Arrow(pi) = current.deref().as_ref() {
+                spine.push(pi.ty.clone());
+                current = pi.body.clone();
+            }
+
+            spine.push(current);
+
+            spine
+        }
+
         pub(crate) fn effect_row_set(&self) -> HashMap<Qualified, Type<Virtual>> {
             match self.deref().as_ref() {
                 TypeKind::Extend(l, t, rest) => {

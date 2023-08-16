@@ -5,7 +5,7 @@ use vulpi_macros::Show;
 
 use crate::r#abstract::Qualified;
 
-#[derive(Show)]
+#[derive(Show, PartialEq, Eq, Clone)]
 pub enum LiteralKind {
     String(Symbol),
     Integer(Symbol),

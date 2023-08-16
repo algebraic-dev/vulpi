@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 pub use context::Context;
+use coverage::{Problem, Witness};
 use r#type::real::Arrow;
 use r#type::TypeKind;
 pub use r#type::{r#virtual::Env, Type};
@@ -27,6 +28,7 @@ use vulpi_syntax::{
 
 pub mod check;
 pub mod context;
+pub mod coverage;
 pub mod errors;
 pub mod infer;
 pub mod module;
@@ -539,7 +541,16 @@ impl Declare for LetDecl {
             .into_keys()
             .collect();
 
+        let types = ty.arrow_spine();
         let body = self.body.check(ty, (ctx, eval, env.clone()));
+
+        let problem = Problem::exhaustiveness(&body, types);
+
+        if let Witness::NonExhaustive(case) = problem.exaustive(ctx, env) {
+            panic!("{}", case)
+        } else {
+            panic!("Ok");
+        };
 
         ctx.elaborated.lets.insert(
             self.name.clone(),
