@@ -3,7 +3,10 @@ use vulpi_location::Span;
 use vulpi_report::{IntoDiagnostic, Text};
 use vulpi_syntax::r#abstract::Qualified;
 
-use crate::r#type::{r#virtual::Env, real::Real, Type};
+use crate::{
+    coverage::{Pat, Row},
+    r#type::{r#virtual::Env, real::Real, Type},
+};
 
 pub enum TypeErrorKind {
     UnboundTypeVariable(Symbol),
@@ -28,6 +31,7 @@ pub enum TypeErrorKind {
     NotARecord,
     MissingField(Symbol),
     AmbientDoesNotContainEffects(Env, Vec<Type<Real>>),
+    NonExhaustive(Row<Pat>),
 }
 
 pub struct TypeError {
@@ -98,6 +102,9 @@ impl IntoDiagnostic for TypeError {
                     .collect::<Vec<_>>()
                     .join(", ")
             )),
+            TypeErrorKind::NonExhaustive(row) => {
+                Text::from(format!("non-exhaustive patterns: {}", row))
+            }
         }
     }
 

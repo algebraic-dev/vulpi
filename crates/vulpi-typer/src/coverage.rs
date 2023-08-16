@@ -19,6 +19,7 @@ pub enum Pat {
     Constructor(Qualified, Vec<Pat>),
     Wildcard,
     Literal(Literal),
+    Or(Box<Pat>, Box<Pat>),
 }
 
 impl Display for Pat {
@@ -35,11 +36,15 @@ impl Display for Pat {
                 write!(f, ")")
             }
             Pat::Constructor(name, args) => {
-                write!(f, "({}", name.name.get())?;
-                for arg in args.iter() {
-                    write!(f, " {}", arg)?;
+                if args.is_empty() {
+                    write!(f, "{}", name.name.get())
+                } else {
+                    write!(f, "({}", name.name.get())?;
+                    for arg in args.iter() {
+                        write!(f, " {}", arg)?;
+                    }
+                    write!(f, ")")
                 }
-                write!(f, ")")
             }
             Pat::Wildcard => write!(f, "_"),
             Pat::Literal(lit) => match &**lit {
@@ -49,6 +54,9 @@ impl Display for Pat {
                 LiteralKind::Char(c) => write!(f, "'{}'", c.get()),
                 LiteralKind::Unit => write!(f, "()"),
             },
+            Pat::Or(l, r) => {
+                write!(f, "{} | {}", l, r)
+            }
         }
     }
 }
@@ -150,6 +158,19 @@ impl Row<Pat> {
         }
     }
 
+    pub fn default_row(self) -> Vec<Row<Pat>> {
+        let first = &self.0[0];
+        match first {
+            Pat::Wildcard => vec![self.pop_front()],
+            Pat::Or(l, r) => {
+                let mut l = self.preppend(*l.clone()).default_row();
+                l.extend(self.preppend(*r.clone()).default_row());
+                l
+            }
+            _ => vec![],
+        }
+    }
+
     pub fn is_wildcard(&self) -> bool {
         self.0[0].is_wildcard()
     }
@@ -165,7 +186,7 @@ pub struct Matrix<T>(Vec<Row<T>>);
 
 impl Matrix<Pat> {
     pub fn is_wildcard(&self) -> bool {
-        self.0[0].is_wildcard()
+        self.0.iter().all(|x| x.is_wildcard())
     }
 
     pub fn used_constructors(&self) -> HashSet<Qualified> {
@@ -179,6 +200,10 @@ impl Matrix<Pat> {
                 .flat_map(|x| x.specialize(useful.clone()))
                 .collect(),
         )
+    }
+
+    pub fn default_matrix(self) -> Matrix<Pat> {
+        Matrix(self.0.into_iter().flat_map(|x| x.default_row()).collect())
     }
 }
 
@@ -322,15 +347,11 @@ impl Problem {
         case_pats: Vec<Pat>,
         case: Pat,
     ) -> Witness {
-        println!("{}", self);
-
         let specialized = Self {
             types: self.types.inline(types),
             case: self.case.inline(case_pats),
             matrix: self.matrix.specialize(case),
         };
-
-        println!("{}", specialized);
 
         specialized.exaustive(ctx, env)
     }
@@ -339,7 +360,7 @@ impl Problem {
         Self {
             types: self.types.pop_front(),
             case: self.case.pop_front(),
-            matrix: self.matrix.specialize(Pat::Wildcard),
+            matrix: self.matrix.default_matrix(),
         }
     }
 
@@ -357,7 +378,6 @@ impl Problem {
         case_pats: Vec<Pat>,
         args: Vec<Type<Virtual>>,
     ) -> Witness {
-        println!("On {}", name.name.get());
         let (signature, _) = ctx.modules.constructor(&name);
         let signature = ctx.instantiate_with_args(&signature.eval(&env), args);
 
@@ -410,10 +430,12 @@ impl Problem {
                 Completeness::Complete(_) => self.split(ctx, env, type_name, type_spine),
                 Completeness::Incomplete(Finitude::Finite(cons)) => {
                     let name = cons.into_iter().collect::<Vec<_>>()[0].clone();
-                    let (ty, size) = ctx.modules.constructor(&name);
-                    let pat = self.synthetize(ctx, name.clone());
-                    let args = ctx.instantiate_all(&env, &ty.eval(&env)).arrow_spine();
-                    let witness = self.specialize_cons(ctx, env, name, wildcards(size), args);
+                    // let (ty, size) = ctx.modules.constructor(&name);
+                    let pat = self.synthetize(ctx, name);
+                    // let args = ctx.instantiate_all(&env, &ty.eval(&env)).arrow_spine();
+                    // let witness = self.specialize_cons(ctx, env, name, wildcards(size), args);
+
+                    let witness = self.default_matrix().exaustive(ctx, env);
 
                     witness.preppend(pat)
                 }

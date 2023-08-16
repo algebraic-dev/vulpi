@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 pub use context::Context;
 use coverage::{Problem, Witness};
+use errors::TypeErrorKind;
 use r#type::real::Arrow;
 use r#type::TypeKind;
 pub use r#type::{r#virtual::Env, Type};
@@ -542,15 +543,26 @@ impl Declare for LetDecl {
             .collect();
 
         let types = ty.arrow_spine();
+
+        ctx.errored = false;
+
         let body = self.body.check(ty, (ctx, eval, env.clone()));
 
-        let problem = Problem::exhaustiveness(&body, types);
+        if !ctx.errored {
+            let problem = Problem::exhaustiveness(&body, types);
+            let patterns = &self.body.last().unwrap().patterns;
 
-        if let Witness::NonExhaustive(case) = problem.exaustive(ctx, env) {
-            panic!("{}", case)
-        } else {
-            panic!("Ok");
-        };
+            env.on(patterns
+                .first()
+                .unwrap()
+                .span
+                .clone()
+                .mix(patterns.last().unwrap().span.clone()));
+
+            if let Witness::NonExhaustive(case) = problem.exaustive(ctx, env.clone()) {
+                ctx.report(&env, TypeErrorKind::NonExhaustive(case));
+            };
+        }
 
         ctx.elaborated.lets.insert(
             self.name.clone(),

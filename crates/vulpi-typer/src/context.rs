@@ -1,7 +1,7 @@
 //! This file declares a mutable environment that is useful to keep track of information that does
 //! not need to be immutable like the Env.
 
-use std::{collections::HashMap, ops::Deref};
+use std::collections::HashMap;
 
 use crate::{
     module::Modules,
@@ -30,6 +30,7 @@ pub struct Context {
     pub reporter: Report,
     pub modules: Modules,
     pub elaborated: elaborated::Program<Type<Real>>,
+    pub errored: bool,
 }
 
 impl Context {
@@ -39,10 +40,12 @@ impl Context {
             reporter,
             modules: Default::default(),
             elaborated: Default::default(),
+            errored: false,
         }
     }
 
     pub fn report(&mut self, env: &Env, kind: TypeErrorKind) {
+        self.errored = true;
         self.reporter.report(Diagnostic::new(TypeError {
             span: env.span.borrow().clone(),
             kind,
