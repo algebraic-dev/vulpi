@@ -523,6 +523,12 @@ impl Resolve for PatternKind {
             PatternKind::Application(n) => n.resolve(ctx),
             PatternKind::EffectApp(n) => n.resolve(ctx),
             PatternKind::Parenthesis(n) => n.data.resolve(ctx).data,
+            PatternKind::Tuple(tuple) => abs::PatternKind::Tuple(
+                tuple
+                    .into_iter()
+                    .map(|x| Box::new(x.0.resolve(ctx)))
+                    .collect(),
+            ),
         })
     }
 }
@@ -974,7 +980,7 @@ impl Resolve for ExprKind {
             ExprKind::Function(x) => expect_function_or_effect(x, ctx),
             ExprKind::Do(x) => abs::ExprKind::Do(x.resolve(ctx)),
             ExprKind::Lambda(x) => x.resolve(ctx).data,
-            ExprKind::Application(x) => abs::ExprKind::Application(x.resolve(ctx)),
+            ExprKind::Application(x) => accumulate(abs::ExprKind::Application(x.resolve(ctx))),
             ExprKind::Acessor(x) => abs::ExprKind::Projection(x.resolve(ctx)),
             ExprKind::Binary(x) => x.resolve(ctx),
             ExprKind::Let(x) => abs::ExprKind::Let(x.resolve(ctx)),
@@ -1350,4 +1356,23 @@ pub fn resolver<'a>(
     io: &'a mut dyn io::IO,
 ) -> Context<'a> {
     Context::new(reporter, namespaces, io)
+}
+
+pub fn accumulate(app: abs::ExprKind) -> abs::ExprKind {
+    match app {
+        abs::ExprKind::Application(app1) => match app1.func.data {
+            abs::ExprKind::Application(app2) => {
+                let mut args = app2.args;
+                args.extend(app1.args);
+
+                abs::ExprKind::Application(abs::ApplicationExpr {
+                    func: app2.func,
+                    args,
+                    app: abs::AppKind::Normal,
+                })
+            }
+            _ => vulpi_syntax::r#abstract::ExprKind::Application(app1),
+        },
+        _ => app,
+    }
 }

@@ -41,6 +41,7 @@ pub enum PatternKind {
     Variable(Lower),
     Literal(Literal),
     Annotation(PatAscription),
+    Tuple(Vec<(Pattern, Option<Token>)>),
     Or(PatOr),
     Application(PatApplication),
     EffectApp(PatEffectApp),

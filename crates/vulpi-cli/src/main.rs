@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use vulpi_ir::compiler;
 use vulpi_parser::parse;
 use vulpi_report::hash_reporter;
 use vulpi_report::renderer::classic::Classic;
@@ -81,6 +82,6 @@ fn main() {
         let ctx = Classic::new(&loader.fs, cwd);
         reporter.to_stderr(ctx)
     } else {
-        println!("{}", elaborated.show())
+        let compiler = compiler().first_pass(elaborated);
     }
 }

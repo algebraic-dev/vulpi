@@ -59,7 +59,7 @@ impl Interner {
 
     fn get(&self, id: &Symbol) -> Option<String> {
         match id {
-            Symbol::Generated(_) => None,
+            Symbol::Generated(n) => Some(format!("%{n}")),
             Symbol::Interned(id) => self.id_to_string.borrow().get(*id).cloned(),
         }
     }

@@ -138,6 +138,21 @@ impl Infer for Pattern {
                 ctx.hole(&env, Type::typ()),
                 Box::new(elaborated::PatternKind::Wildcard),
             ),
+            PatternKind::Tuple(tuple) => {
+                let mut types = Vec::new();
+                let mut elab_pats = Vec::new();
+
+                for pat in tuple {
+                    let (typ, elab_pat) = pat.infer((ctx, map, env.clone()));
+                    types.push(typ);
+                    elab_pats.push(elab_pat);
+                }
+
+                (
+                    Type::tuple(types),
+                    Box::new(elaborated::PatternKind::Tuple(elab_pats)),
+                )
+            }
             PatternKind::Variable(symbol) => {
                 let value = ctx.hole(&env, Type::typ());
 
@@ -164,19 +179,10 @@ impl Infer for Pattern {
                 (eval_typ, pat)
             }
             PatternKind::Or(or) => {
-                let (left, left_pat) = or.left.infer((ctx, map, env.clone()));
-                let (right, right_pat) = or.right.infer((ctx, map, env.clone()));
-                ctx.subsumes(env, left.clone(), right);
-                (
-                    left,
-                    Box::new(elaborated::PatternKind::Or(PatOr {
-                        left: left_pat,
-                        right: right_pat,
-                    })),
-                )
+                todo!("Or patterns are not yet implemented")
             }
             PatternKind::Application(app) => {
-                let (typ, arity) = ctx.modules.constructor(&app.func);
+                let (typ, arity, _) = ctx.modules.constructor(&app.func);
 
                 let mut typ = typ.eval(&env);
 
@@ -242,7 +248,7 @@ impl<'b> Infer for EffectPat<'b> {
                 )
             }
             PatternKind::Effect(eff) => {
-                let (mut typ, arity) = ctx.modules.effect(&eff.func);
+                let (mut typ, _, arity) = ctx.modules.effect(&eff.func);
 
                 if arity != eff.args.len() {
                     ctx.report(env, TypeErrorKind::WrongArity(arity, eff.args.len()));

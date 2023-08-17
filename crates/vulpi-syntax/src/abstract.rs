@@ -256,6 +256,7 @@ pub enum PatternKind {
     Wildcard,
     Variable(Symbol),
     Literal(Literal),
+    Tuple(Vec<Pattern>),
     Ascription(PatAscription),
     Or(PatOr),
     Application(PatApplication),

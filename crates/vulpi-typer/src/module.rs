@@ -28,14 +28,14 @@ pub struct TypeData {
     pub def: Def,
 }
 
+#[derive(Clone)]
 pub struct LetDef {
     pub typ: Type<Virtual>,
-    pub binders: HashMap<Symbol, Type<Real>>,
     pub unbound: Vec<(Symbol, Type<Real>)>,
+    pub args: Vec<Type<Real>>,
     pub ambient: Effect<Real>,
     pub ret: Type<Virtual>,
     pub unbound_effects: Vec<(Symbol, Type<Real>)>,
-    pub elab_binders: Vec<(elaborated::Pattern, Type<Real>)>,
 }
 
 #[derive(Default)]
@@ -44,7 +44,7 @@ pub struct Interface {
     pub variables: HashMap<Symbol, LetDef>,
 
     /// The types of the functions.
-    pub constructors: HashMap<Symbol, (Type<Real>, usize)>,
+    pub constructors: HashMap<Symbol, (Type<Real>, usize, Qualified)>,
 
     /// The types of the types.
     pub types: HashMap<Symbol, TypeData>,
@@ -53,7 +53,7 @@ pub struct Interface {
     pub fields: HashMap<Symbol, Type<Real>>,
 
     /// The effects of some symbols.
-    pub effects: HashMap<Symbol, (Type<Virtual>, usize)>,
+    pub effects: HashMap<Symbol, (Type<Virtual>, Qualified, usize)>,
 }
 
 #[derive(Default)]
@@ -74,12 +74,12 @@ impl Modules {
         module.types.get(&qualified.name).unwrap().clone()
     }
 
-    pub fn constructor(&mut self, qualified: &Qualified) -> (Type<Real>, usize) {
+    pub fn constructor(&mut self, qualified: &Qualified) -> (Type<Real>, usize, Qualified) {
         let module = self.get(&qualified.path);
         module.constructors.get(&qualified.name).unwrap().clone()
     }
 
-    pub fn effect(&mut self, qualified: &Qualified) -> (Type<Virtual>, usize) {
+    pub fn effect(&mut self, qualified: &Qualified) -> (Type<Virtual>, Qualified, usize) {
         let module = self.get(&qualified.path);
         module.effects.get(&qualified.name).unwrap().clone()
     }

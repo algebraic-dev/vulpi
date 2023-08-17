@@ -5,7 +5,7 @@ use vulpi_macros::Show;
 
 use crate::r#abstract::Qualified;
 
-#[derive(Show, PartialEq, Eq, Clone)]
+#[derive(Show, PartialEq, Eq, Hash, Clone)]
 pub enum LiteralKind {
     String(Symbol),
     Integer(Symbol),
@@ -33,13 +33,13 @@ pub type Statement<T> = StatementKind<T>;
 
 pub type Block<T> = Vec<Statement<T>>;
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct PatOr {
     pub left: Pattern,
     pub right: Pattern,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct PatApplication {
     pub func: Qualified,
     pub args: Vec<Pattern>,
@@ -59,13 +59,13 @@ pub enum PatEffectKind {
     Error,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum PatternKind {
     Wildcard,
     Variable(Symbol),
     Literal(Literal),
-    Or(PatOr),
     Application(PatApplication),
+    Tuple(Vec<Pattern>),
 
     Error,
 }
@@ -151,9 +151,9 @@ pub enum ExprKind<T> {
     Application(ApplicationExpr<T>),
 
     Variable(Symbol),
-    Constructor(Qualified),
-    Function(Qualified),
-    Effect(Qualified),
+    Constructor(Qualified, Qualified),
+    Function(Qualified, T),
+    Effect(Qualified, Qualified),
 
     Projection(ProjectionExpr<T>),
     Let(LetExpr<T>),

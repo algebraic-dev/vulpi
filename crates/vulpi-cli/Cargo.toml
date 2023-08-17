@@ -16,3 +16,4 @@ vulpi-vfs = { path = "../vulpi-vfs" }
 vulpi-resolver = { path = "../vulpi-resolver" }
 vulpi-typer = { path = "../vulpi-typer" }
 vulpi-syntax = { path = "../vulpi-syntax" }
+vulpi-ir = { path = "../vulpi-ir" }

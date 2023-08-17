@@ -66,6 +66,11 @@ impl Pat {
         match &**pat {
             PatternKind::Wildcard => Some(Pat::Wildcard),
             PatternKind::Variable(_) => Some(Pat::Wildcard),
+            PatternKind::Tuple(args) => Some(Pat::Tuple(
+                args.iter()
+                    .map(Pat::from_pattern)
+                    .collect::<Option<Vec<_>>>()?,
+            )),
             PatternKind::Literal(l) => Some(Pat::Literal(l.clone())),
             PatternKind::Application(p) => Some(Pat::Constructor(
                 p.func.clone(),
@@ -75,7 +80,6 @@ impl Pat {
                     .collect::<Option<Vec<_>>>()?,
             )),
             PatternKind::Error => None,
-            PatternKind::Or(_) => todo!(),
         }
     }
 
@@ -378,7 +382,7 @@ impl Problem {
         case_pats: Vec<Pat>,
         args: Vec<Type<Virtual>>,
     ) -> Witness {
-        let (signature, _) = ctx.modules.constructor(&name);
+        let (signature, _, _) = ctx.modules.constructor(&name);
         let signature = ctx.instantiate_with_args(&signature.eval(&env), args);
 
         let spine = signature.arrow_spine();
@@ -412,7 +416,7 @@ impl Problem {
     }
 
     pub fn synthetize(&self, ctx: &mut Context, name: Qualified) -> Pat {
-        let (_, args) = ctx.modules.constructor(&name);
+        let (_, args, _) = ctx.modules.constructor(&name);
         Pat::Constructor(name.clone(), wildcards(args))
     }
 
@@ -458,7 +462,7 @@ impl Problem {
 
         if let crate::module::Def::Enum(constructors) = typ.def {
             for constructor in constructors {
-                let (_, size) = ctx.modules.constructor(&constructor);
+                let (_, size, _) = ctx.modules.constructor(&constructor);
 
                 let witness = self.clone().specialize_cons(
                     ctx,

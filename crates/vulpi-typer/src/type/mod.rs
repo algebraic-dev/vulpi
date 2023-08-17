@@ -377,7 +377,7 @@ pub mod r#virtual {
             (current, spine)
         }
 
-        pub(crate) fn arrow_spine(&self) -> Vec<Self> {
+        pub fn arrow_spine(&self) -> Vec<Self> {
             let mut spine = Vec::new();
             let mut current = self.clone();
 
@@ -551,6 +551,20 @@ pub mod real {
             }
 
             (spine, current)
+        }
+
+        pub fn arrow_spine(&self) -> Vec<Self> {
+            let mut spine = Vec::new();
+            let mut current = self.clone();
+
+            while let TypeKind::Arrow(pi) = current.as_ref() {
+                spine.push(pi.ty.clone());
+                current = pi.body.clone();
+            }
+
+            spine.push(current);
+
+            spine
         }
 
         pub fn extend(label: Qualified, ty: Type<Real>, typ: Type<Real>) -> Type<Real> {

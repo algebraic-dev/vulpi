@@ -147,7 +147,7 @@ impl Declare for TypeDecl {
                     ctx.modules
                         .get(&name.path)
                         .constructors
-                        .insert(name.name.clone(), (cons_typ, arity));
+                        .insert(name.name.clone(), (cons_typ, arity, self.name.clone()));
                 }
 
                 elaborated::TypeDecl::Enum(constructors)
@@ -222,12 +222,11 @@ impl Declare for ExternalDecl {
             self.name.name.clone(),
             LetDef {
                 typ: typ.clone(),
-                binders: Default::default(),
                 unbound,
                 ambient: Type::new(TypeKind::Empty),
                 unbound_effects: vec![],
                 ret: typ.clone(),
-                elab_binders: vec![],
+                args: vec![],
             },
         );
 
@@ -380,10 +379,10 @@ impl Declare for EffectDecl {
                 });
             }
 
-            ctx.modules
-                .get(&name.path)
-                .effects
-                .insert(name.name.clone(), (cons_typ.eval(&env), arity));
+            ctx.modules.get(&name.path).effects.insert(
+                name.name.clone(),
+                (cons_typ.eval(&env), self.name.clone(), arity),
+            );
         }
     }
 }
@@ -435,21 +434,13 @@ impl Declare for LetDecl {
         let mut args = Vec::new();
 
         let mut binders: HashMap<Symbol, Type<Virtual>> = Default::default();
-        let mut elab_binders = Vec::new();
 
         for arg in &self.binders {
             let (ty, kind) = arg.ty.infer((ctx, env.clone()));
             env.on(arg.ty.span.clone());
             ctx.subsumes(env.clone(), kind, Kind::typ());
 
-            let mut hash_map = Default::default();
             let pat_ty = ty.eval(&env);
-            let elab_pat = arg
-                .pattern
-                .check(pat_ty.clone(), (ctx, &mut hash_map, env.clone()));
-
-            elab_binders.push((elab_pat, pat_ty.clone().quote(env.level)));
-            binders.extend(hash_map);
 
             args.push(ty);
         }
@@ -465,6 +456,8 @@ impl Declare for LetDecl {
         } else {
             (Type::new(TypeKind::Empty), ctx.hole(&env, Kind::typ()))
         };
+
+        let func_args = args.clone();
 
         let ret_type = if has_effect {
             let ty = args.pop().unwrap();
@@ -495,27 +488,21 @@ impl Declare for LetDecl {
             });
         }
 
-        let binders = binders
-            .into_iter()
-            .map(|x| (x.0, x.1.quote(env.level)))
-            .collect();
-
         ctx.modules.get(&self.name.path.clone()).variables.insert(
             self.name.name.clone(),
             LetDef {
                 typ: typ.eval(&env),
-                binders,
                 unbound,
                 ambient: effs,
                 unbound_effects: effect_bounds,
-                elab_binders,
                 ret: ret.eval(&env),
+                args: func_args,
             },
         );
     }
 
     fn define(&self, (ctx, mut env): (&mut Context, Env)) {
-        let let_decl = ctx.modules.let_decl(&self.name);
+        let let_decl = ctx.modules.let_decl(&self.name).clone();
 
         for (fv, ty) in &let_decl.unbound {
             env = env.add(Some(fv.clone()), ty.eval(&env).clone());
@@ -525,15 +512,22 @@ impl Declare for LetDecl {
             env = env.add(Some(fv.clone()), ty.eval(&env).clone());
         }
 
-        for (k, v) in &let_decl.binders {
-            env.add_var(k.clone(), v.eval(&env).clone());
+        let mut binders = Default::default();
+        let mut elab_binders = Vec::new();
+
+        for (binder, ty) in self.binders.iter().zip(let_decl.args.iter()) {
+            let pat = binder
+                .pattern
+                .check(ty.eval(&env), (ctx, &mut binders, env.clone()));
+
+            elab_binders.push((pat, ty.clone()));
         }
 
         let ty = let_decl.ret.clone();
 
         let eval = let_decl.ambient.eval(&env);
 
-        let binders = std::mem::take(&mut let_decl.elab_binders);
+        let binders = elab_binders;
 
         let effects = let_decl
             .ambient
@@ -552,16 +546,18 @@ impl Declare for LetDecl {
             let problem = Problem::exhaustiveness(&body, types);
             let patterns = &self.body.last().unwrap().patterns;
 
-            env.on(patterns
-                .first()
-                .unwrap()
-                .span
-                .clone()
-                .mix(patterns.last().unwrap().span.clone()));
+            if patterns.first().is_some() {
+                env.on(patterns
+                    .first()
+                    .unwrap()
+                    .span
+                    .clone()
+                    .mix(patterns.last().unwrap().span.clone()));
 
-            if let Witness::NonExhaustive(case) = problem.exaustive(ctx, env.clone()) {
-                ctx.report(&env, TypeErrorKind::NonExhaustive(case));
-            };
+                if let Witness::NonExhaustive(case) = problem.exaustive(ctx, env.clone()) {
+                    ctx.report(&env, TypeErrorKind::NonExhaustive(case));
+                };
+            }
         }
 
         ctx.elaborated.lets.insert(

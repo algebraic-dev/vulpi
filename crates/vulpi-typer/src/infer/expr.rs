@@ -12,6 +12,7 @@ use crate::check::Check;
 use im_rc::HashMap;
 use im_rc::HashSet;
 use vulpi_intern::Symbol;
+use vulpi_location::Spanned;
 use vulpi_syntax::elaborated;
 use vulpi_syntax::r#abstract::Qualified;
 use vulpi_syntax::{
@@ -65,6 +66,7 @@ impl Infer for Expr {
                     }
                 }
 
+
                 (
                     ty.clone(),
                     Box::new(elaborated::ExprKind::Application(
@@ -82,15 +84,15 @@ impl Infer for Expr {
             ),
             ExprKind::Constructor(n) => (
                 ctx.modules.constructor(n).0.eval(&env),
-                Box::new(elaborated::ExprKind::Constructor(n.clone())),
+                Box::new(elaborated::ExprKind::Constructor(ctx.modules.constructor(n).2, n.clone())),
             ),
             ExprKind::Function(n) => (
                 ctx.modules.let_decl(n).typ.clone(),
-                Box::new(elaborated::ExprKind::Function(n.clone())),
+                Box::new(elaborated::ExprKind::Function(n.clone(), ctx.modules.let_decl(n).typ.clone().quote(env.level))),
             ),
             ExprKind::Effect(n) => (
                 ctx.modules.effect(n).0,
-                Box::new(elaborated::ExprKind::Effect(n.clone())),
+                Box::new(elaborated::ExprKind::Effect(ctx.modules.effect(n).1, n.clone())),
             ),
             ExprKind::Let(e) => {
                 let (val_ty, body_elab) = e.body.infer((ctx, ambient, env.clone()));
