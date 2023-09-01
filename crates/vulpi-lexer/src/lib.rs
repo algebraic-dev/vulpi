@@ -256,6 +256,7 @@ impl<'a> Lexer<'a> {
 
     fn classify_token(&mut self, line: usize) -> (TokenData, Symbol) {
         let last_layout = self.state.layout.last();
+
         let cond = last_layout.is_some() && self.state.column < *last_layout.unwrap();
         if line != self.state.line || cond {
             let column = self.state.column;
@@ -406,9 +407,16 @@ impl<'a> Lexer<'a> {
             LexState::Common => self.classify_token(line),
 
             LexState::PushLayout => {
-                self.state.layout.push(self.state.column.max(1));
                 self.state.lex_state = LexState::Common;
-                (TokenData::Begin, Symbol::intern("begin"))
+
+                let last = self.state.layout.last().copied().unwrap_or_default();
+
+                if self.state.column <= last {
+                    self.classify_token(line)
+                } else {
+                    self.state.layout.push(self.state.column);
+                    (TokenData::Begin, Symbol::intern("begin"))
+                }
             }
         };
 

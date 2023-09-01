@@ -63,6 +63,10 @@ impl<'a> Parser<'a> {
     }
 
     pub fn block<T>(&mut self, parse: impl Fn(&mut Self) -> Result<T>) -> Result<Vec<T>> {
+        if !self.at(TokenData::Begin) {
+            return Ok(vec![]);
+        }
+
         self.expect(TokenData::Begin)?;
         let mut statements = Vec::new();
 
