@@ -1,10 +1,12 @@
 //! Inference of expressions
 
-use crate::Real;
+use crate::coverage::Problem;
+use crate::coverage::Witness;
 use crate::r#type::eval::Eval;
 use crate::r#type::eval::Quote;
 use crate::r#type::r#virtual;
 use crate::r#type::TypeKind;
+use crate::Real;
 
 use crate::Kind;
 
@@ -12,7 +14,6 @@ use crate::check::Check;
 use im_rc::HashMap;
 use im_rc::HashSet;
 use vulpi_intern::Symbol;
-use vulpi_location::Spanned;
 use vulpi_syntax::elaborated;
 use vulpi_syntax::r#abstract::Qualified;
 use vulpi_syntax::{
@@ -52,7 +53,6 @@ impl Infer for Expr {
                         let opened = ctx.open(&env, effs);
                         ctx.subsumes(env.clone(), left, arg_ty);
 
-
                         env.on(self.span.clone());
                         ctx.subsumes(env.clone(), ambient.clone(), opened);
 
@@ -65,7 +65,6 @@ impl Infer for Expr {
                         return (Type::error(), Box::new(elaborated::ExprKind::Error));
                     }
                 }
-
 
                 (
                     ty.clone(),
@@ -84,15 +83,24 @@ impl Infer for Expr {
             ),
             ExprKind::Constructor(n) => (
                 ctx.modules.constructor(n).0.eval(&env),
-                Box::new(elaborated::ExprKind::Constructor(ctx.modules.constructor(n).2, n.clone())),
+                Box::new(elaborated::ExprKind::Constructor(
+                    ctx.modules.constructor(n).2,
+                    n.clone(),
+                )),
             ),
             ExprKind::Function(n) => (
                 ctx.modules.let_decl(n).typ.clone(),
-                Box::new(elaborated::ExprKind::Function(n.clone(), ctx.modules.let_decl(n).typ.clone().quote(env.level))),
+                Box::new(elaborated::ExprKind::Function(
+                    n.clone(),
+                    ctx.modules.let_decl(n).typ.clone().quote(env.level),
+                )),
             ),
             ExprKind::Effect(n) => (
                 ctx.modules.effect(n).0,
-                Box::new(elaborated::ExprKind::Effect(ctx.modules.effect(n).1, n.clone())),
+                Box::new(elaborated::ExprKind::Effect(
+                    ctx.modules.effect(n).1,
+                    n.clone(),
+                )),
             ),
             ExprKind::Let(e) => {
                 let (val_ty, body_elab) = e.body.infer((ctx, ambient, env.clone()));
@@ -138,8 +146,13 @@ impl Infer for Expr {
             ExprKind::When(when) => {
                 // TODO: Check mode
                 let ret_type = ctx.hole(&env, Kind::typ());
+
+                ctx.errored = false;
+
                 let (_, arms, ret, elab_arms) =
                     when.arms.infer((ctx, ambient.clone(), env.clone()));
+
+                let perform = !ctx.errored;
 
                 if arms.len() != when.scrutinee.len() {
                     ctx.report(
@@ -150,12 +163,20 @@ impl Infer for Expr {
 
                 let mut elab_scrutinee = Vec::new();
 
-                for (arm, scrutinee) in arms.into_iter().zip(when.scrutinee.iter()) {
+                for (arm, scrutinee) in arms.iter().cloned().zip(when.scrutinee.iter()) {
                     let elab = scrutinee.check(arm, (ctx, ambient, env.clone()));
                     elab_scrutinee.push(elab);
                 }
 
-                ctx.subsumes(env, ret_type.clone(), ret);
+                ctx.subsumes(env.clone(), ret_type.clone(), ret);
+
+                if perform {
+                    let problem = Problem::exhaustiveness(&elab_arms, arms);
+
+                    if let Witness::NonExhaustive(case) = problem.exaustive(ctx, env.clone()) {
+                        ctx.report(&env, TypeErrorKind::NonExhaustive(case));
+                    };
+                }
 
                 (
                     ret_type,
@@ -382,14 +403,13 @@ impl Infer for Expr {
                 )
             }
             ExprKind::Handler(h) => {
-
                 let scrutinee = ctx.hole::<Virtual>(&env, Type::typ());
 
                 let (handle_type, elab_handler) = h.with.infer((ctx, ambient, env.clone()));
 
                 let Some((left, eff, right)) = ctx.as_function(&env, handle_type.clone()) else {
                     ctx.report(&env, TypeErrorKind::NotAFunction(env.clone(), handle_type.quote(env.level)));
-                    return (Type::error(), Box::new(elaborated::ExprKind::Error));  
+                    return (Type::error(), Box::new(elaborated::ExprKind::Error));
                 };
 
                 let request = ctx.find_prelude_type("Request", env.clone());
@@ -404,23 +424,25 @@ impl Infer for Expr {
                 let (var, _) = removed_effect.application_spine();
 
                 ctx.subsumes(env.clone(), left, app);
-  
+
                 let new_ambient = if let TypeKind::Variable(name) = var.deref().as_ref() {
                     Type::<Virtual>::extend(name.clone(), removed_effect, ambient.clone())
                 } else {
                     ambient.clone()
                 };
-                 
 
                 let elab_expr = h.expr.check(scrutinee, (ctx, &new_ambient, env.clone()));
 
                 let eff = ctx.open(&env, eff);
                 ctx.subsumes(env.clone(), ambient.clone(), eff);
 
-                (right, Box::new(elaborated::ExprKind::Handler(elaborated::HandlerExpr { 
-                    expr: elab_expr, 
-                    with: elab_handler 
-                })))
+                (
+                    right,
+                    Box::new(elaborated::ExprKind::Handler(elaborated::HandlerExpr {
+                        expr: elab_expr,
+                        with: elab_handler,
+                    })),
+                )
             }
             ExprKind::Cases(_) => {
                 let ty = ctx.hole::<Virtual>(&env, Type::typ());

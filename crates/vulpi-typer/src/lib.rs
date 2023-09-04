@@ -2,8 +2,6 @@
 //! higher rank, higher kinded, algebraic type system. It is also responsible for type inference
 //! and type checking of the ambient effects system.
 
-use std::collections::HashMap;
-
 pub use context::Context;
 use coverage::{Problem, Witness};
 use errors::TypeErrorKind;
@@ -11,7 +9,6 @@ use r#type::real::Arrow;
 use r#type::TypeKind;
 pub use r#type::{r#virtual::Env, Type};
 pub use r#type::{r#virtual::Virtual, real::Real, Kind};
-use vulpi_intern::Symbol;
 use vulpi_report::Report;
 use vulpi_syntax::r#abstract::LetDecl;
 
@@ -433,14 +430,11 @@ impl Declare for LetDecl {
 
         let mut args = Vec::new();
 
-        let mut binders: HashMap<Symbol, Type<Virtual>> = Default::default();
-
         for arg in &self.binders {
             let (ty, kind) = arg.ty.infer((ctx, env.clone()));
             env.on(arg.ty.span.clone());
-            ctx.subsumes(env.clone(), kind, Kind::typ());
 
-            let pat_ty = ty.eval(&env);
+            ctx.subsumes(env.clone(), kind, Kind::typ());
 
             args.push(ty);
         }
@@ -521,6 +515,10 @@ impl Declare for LetDecl {
                 .check(ty.eval(&env), (ctx, &mut binders, env.clone()));
 
             elab_binders.push((pat, ty.clone()));
+        }
+
+        for binder in binders {
+            env.add_var(binder.0, binder.1);
         }
 
         let ty = let_decl.ret.clone();

@@ -21,9 +21,10 @@ pub enum Case {
     Tuple(usize),
     Cons(Qualified, usize),
     Literal(Literal),
+    Wildcard,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Row(usize, VecDeque<Pattern>);
 
 pub fn head_constructor(pat: &Pattern) -> Option<Case> {
@@ -45,7 +46,8 @@ impl Row {
     }
 
     pub fn preppend(self, patterns: Vec<Pattern>) -> Self {
-        let mut pats = self.1;
+        let mut pats = self.1.clone();
+        pats.pop_front();
         let mut vec: VecDeque<_> = patterns.into();
         vec.extend(pats);
         Row(self.0, vec)
@@ -71,6 +73,18 @@ impl Row {
             (Case::Tuple(n), PatternKind::Tuple(pats)) if *n == pats.len() => Some(self.inline()),
             (Case::Cons(q, _), PatternKind::Application(a)) if a.func == *q => Some(self.inline()),
             (Case::Literal(l), PatternKind::Literal(p)) if l == p => Some(self.inline()),
+            (Case::Tuple(n), PatternKind::Variable(_) | PatternKind::Wildcard) => {
+                Some(self.preppend(vec![Box::new(PatternKind::Wildcard); *n]))
+            }
+            (Case::Cons(_, n), PatternKind::Variable(_) | PatternKind::Wildcard) => {
+                Some(self.preppend(vec![Box::new(PatternKind::Wildcard); *n]))
+            }
+            (Case::Literal(_), PatternKind::Variable(_) | PatternKind::Wildcard) => {
+                Some(self.pop_front())
+            }
+            (Case::Wildcard, PatternKind::Variable(_) | PatternKind::Wildcard) => {
+                Some(self.pop_front())
+            }
             _ => None,
         }
     }
@@ -94,7 +108,7 @@ impl Row {
 pub enum CaseTree {
     Leaf(usize),
     Fail,
-    Select(Vec<(Case, CaseTree)>),
+    Select(usize, Vec<(Case, CaseTree)>),
 }
 
 impl Display for Case {
@@ -103,6 +117,7 @@ impl Display for Case {
             Case::Tuple(n) => write!(f, "tuple({})", n),
             Case::Cons(q, n) => write!(f, "cons({}, {})", q.name.get(), n),
             Case::Literal(_) => write!(f, "literal"),
+            Case::Wildcard => write!(f, "wildcard"),
         }
     }
 }
@@ -112,8 +127,8 @@ impl Display for CaseTree {
         match self {
             CaseTree::Leaf(n) => write!(f, "{}", n),
             CaseTree::Fail => write!(f, "fail"),
-            CaseTree::Select(switches) => {
-                writeln!(f, "select {{")?;
+            CaseTree::Select(n, switches) => {
+                writeln!(f, "select {n} {{")?;
                 for (case, tree) in switches {
                     writeln!(f, "  {} => {},\n", case, tree)?;
                 }
@@ -126,6 +141,7 @@ impl Display for CaseTree {
 #[derive(Clone)]
 pub struct Problem {
     pub rows: Vec<Row>,
+    pub place: usize,
 }
 
 impl Problem {
@@ -138,7 +154,7 @@ impl Problem {
             rows.push(Row(i, pats));
         }
 
-        Problem { rows }
+        Problem { rows, place: 0 }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -149,8 +165,9 @@ impl Problem {
         self.rows.first().unwrap()
     }
 
-    pub fn specialize(self, case: &Case) -> Problem {
+    pub fn specialize(self, place: usize, case: &Case) -> Problem {
         Problem {
+            place,
             rows: self
                 .rows
                 .into_iter()
@@ -175,13 +192,20 @@ impl Problem {
             let head_constructors = self.head_constructors();
             let mut switches = vec![];
 
-            for constructor in head_constructors {
-                let subproblem = self.clone().specialize(&constructor);
+            if head_constructors.is_empty() {
+                return self
+                    .clone()
+                    .specialize(self.place + 1, &Case::Wildcard)
+                    .compile();
+            }
+
+            for (i, constructor) in head_constructors.into_iter().enumerate() {
+                let subproblem = self.clone().specialize(i, &constructor);
                 let subswitch = subproblem.compile();
                 switches.push((constructor, subswitch));
             }
 
-            CaseTree::Select(switches)
+            CaseTree::Select(self.place, switches)
         }
     }
 }

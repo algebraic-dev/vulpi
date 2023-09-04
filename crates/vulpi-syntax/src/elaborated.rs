@@ -5,7 +5,7 @@ use vulpi_macros::Show;
 
 use crate::r#abstract::Qualified;
 
-#[derive(Show, PartialEq, Eq, Hash, Clone)]
+#[derive(Show, PartialEq, Eq, Hash, Clone, Debug)]
 pub enum LiteralKind {
     String(Symbol),
     Integer(Symbol),
@@ -39,7 +39,7 @@ pub struct PatOr {
     pub right: Pattern,
 }
 
-#[derive(Show, Clone)]
+#[derive(Show, Clone, Debug)]
 pub struct PatApplication {
     pub func: Qualified,
     pub args: Vec<Pattern>,
@@ -59,7 +59,7 @@ pub enum PatEffectKind {
     Error,
 }
 
-#[derive(Show, Clone)]
+#[derive(Show, Clone, Debug)]
 pub enum PatternKind {
     Wildcard,
     Variable(Symbol),

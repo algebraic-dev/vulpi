@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
 use vulpi_syntax::{
-    elaborated::{self, PatApplication, PatOr},
+    elaborated::{self, PatApplication},
     r#abstract::Pattern,
     r#abstract::PatternArm,
     r#abstract::PatternKind,
@@ -178,8 +178,8 @@ impl Infer for Pattern {
                 ctx.subsumes(env, eval_typ.clone(), value);
                 (eval_typ, pat)
             }
-            PatternKind::Or(or) => {
-                todo!("Or patterns are not yet implemented")
+            PatternKind::Or(_) => {
+                unimplemented!("Or patterns are not yet implemented")
             }
             PatternKind::Application(app) => {
                 let (typ, arity, _) = ctx.modules.constructor(&app.func);

@@ -6,7 +6,7 @@ use vulpi_typer::r#type::TypeKind;
 
 use crate::{
     ir::{self, FnDecl},
-    pattern::{extract_accesors, Problem},
+    pattern::{extract_accesors, CaseTree, Problem},
     Context,
 };
 
@@ -122,9 +122,13 @@ impl FirstPass for (Qualified, LetDecl<Type>) {
             .map(|(x, y)| ir::Statement::Let(x, y))
             .collect::<Vec<_>>();
 
-        block.push(ir::Statement::Expr(Box::new(ir::ExprKind::Tree(
-            body, bodies,
-        ))));
+        if let CaseTree::Leaf(x) = body {
+            block.push(ir::Statement::Expr(bodies.swap_remove(x)))
+        } else {
+            block.push(ir::Statement::Expr(Box::new(ir::ExprKind::Tree(
+                body, bodies,
+            ))));
+        }
 
         let body = Box::new(ir::ExprKind::Block(block));
 
@@ -247,10 +251,49 @@ impl FirstPass for Expr<Type> {
                 }
             }
             ExprKind::Function(name, _) => Box::new(ir::ExprKind::FunPtr(name)),
-            ExprKind::Effect(_, name) => todo!(),
-            ExprKind::Projection(proj) => {}
-            ExprKind::Let(_) => todo!(),
-            ExprKind::When(_) => todo!(),
+            ExprKind::When(when) => {
+                let problem = Problem::new(&when.arms);
+
+                let tree = problem.compile();
+
+                let mut exprs = Vec::new();
+
+                let scrutinee: Vec<_> = when.scrutinee.iter().map(|_| ctx.fresh()).collect();
+
+                let mut bodies: Vec<_> = when
+                    .scrutinee
+                    .into_iter()
+                    .zip(scrutinee.iter())
+                    .map(|(x, name)| ir::Statement::Let(name.clone(), x.first_pass(ctx)))
+                    .collect();
+
+                for arm in when.arms {
+                    let mut statements = Vec::new();
+
+                    for (i, pat) in arm.patterns.into_iter().enumerate() {
+                        let scrutinee = Box::new(ir::ExprKind::Variable(scrutinee[i].clone()));
+
+                        let accessors = extract_accesors(&pat, scrutinee);
+
+                        let accessors = accessors
+                            .into_iter()
+                            .map(|x| ir::Statement::Let(x.0, x.1))
+                            .collect::<Vec<_>>();
+
+                        statements.extend(accessors);
+                    }
+
+                    statements.push(ir::Statement::Expr(arm.expr.first_pass(ctx)));
+
+                    exprs.push(Box::new(ir::ExprKind::Block(statements)))
+                }
+
+                bodies.push(ir::Statement::Expr(Box::new(ir::ExprKind::Tree(
+                    tree, exprs,
+                ))));
+
+                Box::new(ir::ExprKind::Block(bodies))
+            }
             ExprKind::Do(block) => {
                 let block = block
                     .into_iter()
@@ -260,11 +303,17 @@ impl FirstPass for Expr<Type> {
                 Box::new(ir::ExprKind::Block(block))
             }
             ExprKind::Literal(lit) => Box::new(lit.first_pass(ctx)),
+            ExprKind::Effect(_, _) => todo!(),
+            ExprKind::Let(_) => todo!(),
+            ExprKind::Projection(proj) => {
+                let (name, place) = ctx.fields.get(&proj.field).unwrap();
+                todo!()
+            }
             ExprKind::RecordInstance(_) => todo!(),
             ExprKind::RecordUpdate(_) => todo!(),
+            ExprKind::Tuple(_) => todo!(),
             ExprKind::Handler(_) => todo!(),
             ExprKind::Cases(_) => todo!(),
-            ExprKind::Tuple(_) => todo!(),
             ExprKind::Error => unreachable!(),
         }
     }

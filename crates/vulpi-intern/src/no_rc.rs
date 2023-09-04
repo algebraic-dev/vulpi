@@ -13,10 +13,16 @@ thread_local! {
 /// A symbol is a reference to a string inside the interner. It is used to compare strings by
 /// comparing their ids instead of comparing their content because it is more efficient (it makes
 /// the comparison an integer comparison instead of a string comparison).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Symbol {
     Generated(usize),
     Interned(usize),
+}
+
+impl std::fmt::Debug for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.get())
+    }
 }
 
 impl Symbol {
