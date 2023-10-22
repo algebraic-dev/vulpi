@@ -1,6 +1,0 @@
-let ok : Int =
-    when 2 is 
-        2 | 3 if a == 2 => 1
-        1               => 0
-        _               => 2
-

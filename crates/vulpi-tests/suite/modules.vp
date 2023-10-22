@@ -1,6 +1,0 @@
-mod MyOwn where
-    type Result a b = 
-        | Ok a
-        | Err b
-
-let main : Result Int Int = MyOwn.Result 2 3

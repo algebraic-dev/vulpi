@@ -1,7 +1,0 @@
-let inc (n: Int) : Int = n + 1
-
-let main : Int = 
-    1
-    |> inc
-    |> inc
-    |> inc
