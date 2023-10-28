@@ -5,3 +5,7 @@ version = 3
 [[package]]
 name = "vulpi-cli"
 version = "0.1.0"
+
+[[package]]
+name = "vulpi-lsp"
+version = "0.1.0"

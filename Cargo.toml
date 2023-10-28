@@ -1,7 +1,8 @@
 [workspace]
 
 members = [
-    "crates/vulpi-cli"
+    "crates/vulpi-cli",
+    "crates/vulpi-lsp"
 ]
 
 resolver = "2"
