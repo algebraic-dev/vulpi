@@ -113,7 +113,15 @@ impl<'a> Lexer<'a> {
         match self.advance() {
             Some(c) => {
                 let result = match c {
-                    '=' => TokenData::Equal,
+                    '=' => {
+                        match self.peek() {
+                            Some('=') => {
+                                self.advance();
+                                TokenData::DoubleEqual
+                            },
+                            _ => TokenData::Equal
+                        }
+                    },
                     '+' => TokenData::Plus,
                     c if c.is_lowercase() => {
                         self.accumulate(is_identifier_char);
@@ -141,10 +149,11 @@ mod tests {
 
     #[test]
     fn test_lex() {
-        let mut lexer = Lexer::new("a=+");
+        let mut lexer = Lexer::new("a=+==");
         assert_eq!(lexer.lex().kind, TokenData::LowerIdent);
         assert_eq!(lexer.lex().kind, TokenData::Equal);
         assert_eq!(lexer.lex().kind, TokenData::Plus);
+        assert_eq!(lexer.lex().kind, TokenData::DoubleEqual);
         assert_eq!(lexer.lex().kind, TokenData::Eof);
     }
 }
