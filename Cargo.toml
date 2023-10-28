@@ -2,7 +2,8 @@
 
 members = [
     "crates/vulpi-cli",
-    "crates/vulpi-lsp"
+    "crates/vulpi-lsp",
+    "crates/vulpi-location",
 ]
 
 resolver = "2"
