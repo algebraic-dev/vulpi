@@ -42,11 +42,11 @@ pub enum TokenData {
     LeftArrow,  // '<-'
     RightArrow, // '->'
     FatArrow,   // '=>'
-    Unit,
+    Unit, // () 
 
     LowerIdent, // Identifier
     UpperIdent, // Identifier
-    Wildcard,
+    Wildcard, // '_' Identifier
 
     Colon,       // ':'
     Semicolon,   // ';'

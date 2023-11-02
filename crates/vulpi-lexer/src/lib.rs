@@ -118,16 +118,112 @@ impl<'a> Lexer<'a> {
                             Some('=') => {
                                 self.advance();
                                 TokenData::DoubleEqual
-                            },
+                            }
+                            Some('>') => {
+                                self.advance();
+                                TokenData::FatArrow
+                            }
                             _ => TokenData::Equal
                         }
                     },
-                    '+' => TokenData::Plus,
+                    '(' => {
+                        match self.peek() {
+                            Some(')') => {
+                                self.advance();
+                                TokenData::Unit
+                            }
+                            _ => TokenData::LPar
+                        }
+                    },
+                    '-' => {
+                        match self.peek() {
+                            Some('>') => {
+                                self.advance();
+                                TokenData::RightArrow
+                            }
+                            _ => TokenData::Minus
+                        }
+                        
+                    },
+                    '>' => {
+                        match self.peek() {
+                            Some('=') => {
+                                self.advance();
+                                TokenData::GreaterEqual
+                            }
+                            _ => TokenData::Greater
+                        }
+                    },
+                    '<' => {
+                        match self.peek() {
+                            Some('-') => {
+                                self.advance();
+                                TokenData::LeftArrow
+                            }
+                            Some('=') => {
+                                self.advance();
+                                TokenData::LessEqual
+                            }
+                            _ => TokenData::Less
+                        }
+                    },
+                    '|' => {
+                        match self.peek() {
+                            Some('>') => {
+                                self.advance();
+                                TokenData::PipeRight
+                            }
+                            Some('|') => {
+                                self.advance();
+                                TokenData::Or
+                            }
+                            _ => TokenData::Bar
+                        }
+                        
+                    },
+                    '!' => {
+                        match self.peek() {
+                            Some('=') => {
+                                self.advance();
+                                TokenData::NotEqual
+                            }
+                            _ => TokenData::Exclamation
+                        }
+                    },
+                    '&' => {
+                        match self.peek() {
+                            Some('&') => {
+                                self.advance();
+                                TokenData::And
+                            }
+                            _ => TokenData::Ampersand
+                        }
+                    }
                     c if c.is_lowercase() => {
                         self.accumulate(is_identifier_char);
                         TokenData::LowerIdent
-                    }
-                    _ => panic!("cannot read")
+                    },
+                    c if c.is_uppercase() => {
+                        self.accumulate(is_identifier_char);
+                        TokenData::UpperIdent
+                    },
+                    '{' => TokenData::LBrace,
+                    '}' => TokenData::RBrace,
+                    ')' => TokenData::RPar,
+                    '[' => TokenData::LBracket,
+                    ']' => TokenData:: RBracket,
+                    '+' => TokenData::Plus,
+                    '*' => TokenData::Star,
+                    '/' => TokenData::Slash,
+                    '\\' => TokenData::BackSlash, 
+                    '%' => TokenData::Percent,
+                    '^' => TokenData::Caret,
+                    '~' => TokenData::Tilde,
+                    ':' => TokenData::Colon,
+                    ';' => TokenData::Semicolon,
+                    ',' => TokenData::Comma,
+                    '.' => TokenData::Dot,
+                    _ => panic!("cannot read"),
                 };
 
                 Token {
@@ -149,11 +245,45 @@ mod tests {
 
     #[test]
     fn test_lex() {
-        let mut lexer = Lexer::new("a=+==");
+        let mut lexer = Lexer::new("a=+==!)=>.,;:~^%\\/*+][)}{A&&&!=|>|||<-<=<>>=-->()");
         assert_eq!(lexer.lex().kind, TokenData::LowerIdent);
         assert_eq!(lexer.lex().kind, TokenData::Equal);
         assert_eq!(lexer.lex().kind, TokenData::Plus);
         assert_eq!(lexer.lex().kind, TokenData::DoubleEqual);
+        assert_eq!(lexer.lex().kind, TokenData::Exclamation);
+        assert_eq!(lexer.lex().kind, TokenData::RPar);
+        assert_eq!(lexer.lex().kind, TokenData::FatArrow);
+        assert_eq!(lexer.lex().kind, TokenData::Dot);
+        assert_eq!(lexer.lex().kind, TokenData::Comma);
+        assert_eq!(lexer.lex().kind, TokenData::Semicolon);
+        assert_eq!(lexer.lex().kind, TokenData::Colon);
+        assert_eq!(lexer.lex().kind, TokenData::Tilde);
+        assert_eq!(lexer.lex().kind, TokenData::Caret);
+        assert_eq!(lexer.lex().kind, TokenData::Percent);
+        assert_eq!(lexer.lex().kind, TokenData::BackSlash);
+        assert_eq!(lexer.lex().kind, TokenData::Slash);
+        assert_eq!(lexer.lex().kind, TokenData::Star);
+        assert_eq!(lexer.lex().kind, TokenData::Plus);
+        assert_eq!(lexer.lex().kind, TokenData::RBracket);
+        assert_eq!(lexer.lex().kind, TokenData::LBracket);
+        assert_eq!(lexer.lex().kind, TokenData::RPar);
+        assert_eq!(lexer.lex().kind, TokenData::RBrace);
+        assert_eq!(lexer.lex().kind, TokenData::LBrace);
+        assert_eq!(lexer.lex().kind, TokenData::UpperIdent);
+        assert_eq!(lexer.lex().kind, TokenData::And);
+        assert_eq!(lexer.lex().kind, TokenData::Ampersand);
+        assert_eq!(lexer.lex().kind, TokenData::NotEqual);
+        assert_eq!(lexer.lex().kind, TokenData::PipeRight);
+        assert_eq!(lexer.lex().kind, TokenData::Or);
+        assert_eq!(lexer.lex().kind, TokenData::Bar);
+        assert_eq!(lexer.lex().kind, TokenData::LeftArrow);
+        assert_eq!(lexer.lex().kind, TokenData::LessEqual);
+        assert_eq!(lexer.lex().kind, TokenData::Less);
+        assert_eq!(lexer.lex().kind, TokenData::Greater);
+        assert_eq!(lexer.lex().kind, TokenData::GreaterEqual);
+        assert_eq!(lexer.lex().kind, TokenData::Minus);
+        assert_eq!(lexer.lex().kind, TokenData::RightArrow);
+        assert_eq!(lexer.lex().kind, TokenData::Unit);
         assert_eq!(lexer.lex().kind, TokenData::Eof);
     }
 }
