@@ -201,7 +201,7 @@ impl<'a> Lexer<'a> {
                     }
                     c if c.is_lowercase() => {
                         self.accumulate(is_identifier_char);
-                        TokenData::LowerIdent
+                        self.classify_identifier()
                     },
                     c if c.is_uppercase() => {
                         self.accumulate(is_identifier_char);
@@ -237,6 +237,42 @@ impl<'a> Lexer<'a> {
             },
         }
     }
+
+    pub fn classify_identifier(&mut  self) -> TokenData {
+        let data = &self.code[self.state.start..self.state.index];
+        match data {
+            "is" => {
+                TokenData::Is
+            }
+            "do" => {
+                TokenData::Do
+            }
+            "where" => {
+                TokenData::Where
+            }
+            "cases" => {
+                TokenData::Cases
+            }
+            "effect" => TokenData::Effect,
+            "handle" => TokenData::Handle,
+            "mod" => TokenData::Mod,
+            "let" => TokenData::Let,
+            "when" => TokenData::When,
+            "with" => TokenData::With,
+            "if" => TokenData::If,
+            "else" => TokenData::Else,
+            "then" => TokenData::Then,
+            "use" => TokenData::Use,
+            "as" => TokenData::As,
+            "type" => TokenData::Type,
+            "pub" => TokenData::Pub,
+            "in" => TokenData::In,
+            "forall" => TokenData::Forall,
+            "_" => TokenData::Wildcard,
+            "external" => TokenData::External,
+            _ => TokenData::LowerIdent,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -245,8 +281,8 @@ mod tests {
 
     #[test]
     fn test_lex() {
-        let mut lexer = Lexer::new("a=+==!)=>.,;:~^%\\/*+][)}{A&&&!=|>|||<-<=<>>=-->()");
-        assert_eq!(lexer.lex().kind, TokenData::LowerIdent);
+        let mut lexer = Lexer::new("mod=+==!)=>.,;:~^%\\/*+][)}{A&&&!=|>|||<-<=<>>=-->()");
+        assert_eq!(lexer.lex().kind, TokenData::Mod);
         assert_eq!(lexer.lex().kind, TokenData::Equal);
         assert_eq!(lexer.lex().kind, TokenData::Plus);
         assert_eq!(lexer.lex().kind, TokenData::DoubleEqual);
