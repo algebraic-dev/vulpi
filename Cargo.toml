@@ -3,6 +3,7 @@
 members = [
     "crates/vulpi-cli",
     "crates/vulpi-lsp",
+    "crates/vulpi-lexer",
     "crates/vulpi-location",
     "crates/vulpi-vfs"
 ]
