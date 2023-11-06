@@ -733,6 +733,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "vulpi-lexer"
+version = "0.1.0"
+dependencies = [
+ "vulpi-location",
+]
+
+[[package]]
+name = "vulpi-location"
+version = "0.1.0"
+
+[[package]]
 name = "vulpi-lsp"
 version = "0.1.0"
 dependencies = [
