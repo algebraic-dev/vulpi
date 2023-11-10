@@ -83,7 +83,8 @@ impl Check for Vec<PatternArm> {
 
     fn check(&self, ty: Type<Virtual>, (ctx, ambient, env): Self::Context<'_>) -> Self::Return {
         if self.is_empty() {
-            todo!()
+            ctx.report(&env, TypeErrorKind::EmptyCase);
+            vec![]
         } else {
             let size = self[0].patterns.len();
 

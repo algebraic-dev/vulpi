@@ -64,8 +64,10 @@ impl<'a> Parser<'a> {
             let eq = self.expect(TokenData::Equal)?;
             let expr = self.expr()?;
             LetMode::Body(eq, expr)
-        } else {
+        } else if self.at(TokenData::Bar) {
             LetMode::Cases(self.many(Self::let_case)?)
+        } else {
+            self.unexpected()?
         };
 
         Ok(LetDecl {

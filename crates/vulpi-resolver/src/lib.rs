@@ -1065,6 +1065,7 @@ impl Resolve for LetDecl {
                 path: ctx.current(),
                 name: self.name.symbol(),
             },
+            span: self.let_.value.span.clone().mix(self.ret.as_ref().map(|x| x.2.span.clone()).unwrap_or(self.name.0.value.span.clone())),
             binders: ctx.scope_pattern(|ctx| self.binders.resolve(ctx)),
             ret: self.ret.map(|x| (x.1.resolve(ctx), x.2.resolve(ctx))),
             body: self.body.resolve(ctx),

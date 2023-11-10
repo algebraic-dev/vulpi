@@ -13,7 +13,7 @@ use crate::{
     Context, Env, Real, Type, Virtual,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Pat {
     Tuple(Vec<Pat>),
     Constructor(Qualified, Vec<Pat>),
@@ -431,7 +431,9 @@ impl Problem {
             self.specialize_wildcard(ctx, env)
         } else {
             match self.is_complete_signature(ctx, type_name.clone()) {
-                Completeness::Complete(_) => self.split(ctx, env, type_name, type_spine),
+                Completeness::Complete(_) => {
+                    self.split(ctx, env, type_name, type_spine)
+                },
                 Completeness::Incomplete(Finitude::Finite(cons)) => {
                     let name = cons.into_iter().collect::<Vec<_>>()[0].clone();
                     // let (ty, size) = ctx.modules.constructor(&name);
@@ -503,12 +505,12 @@ impl Problem {
     pub fn match_exhaustiveness(self, ctx: &mut Context, env: Env) -> Witness {
         let case = self.case.first();
         let current = self.types.first();
-
+        
         match (case, current.deref().as_ref()) {
             (Pat::Wildcard, TypeKind::Application(_, _))
             | (Pat::Wildcard, TypeKind::Variable(_)) => {
                 let (head, spine) = current.application_spine();
-                match head.as_ref() {
+                match head.deref().as_ref() {
                     TypeKind::Variable(name) => {
                         self.exhaustiveness_wildcard(ctx, env, name.clone(), spine)
                     }

@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub enum TypeErrorKind {
+    EmptyCase,
     UnboundTypeVariable(Symbol),
     TypeMismatch(Env, Type<Real>, Type<Real>),
     KindMismatch(Env, Type<Real>, Type<Real>),
@@ -47,6 +48,7 @@ impl IntoDiagnostic for TypeError {
                 left.show(env),
                 right.show(env)
             )),
+            TypeErrorKind::EmptyCase => Text::from("empty case".to_string()),
             TypeErrorKind::KindMismatch(env, left, right) => Text::from(format!(
                 "kind mismatch: {} != {}",
                 left.show(env),

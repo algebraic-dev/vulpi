@@ -388,6 +388,7 @@ pub struct Binder {
 
 #[derive(Show)]
 pub struct LetDecl {
+    pub span: Span,
     pub visibility: Visibility,
     pub name: Qualified,
     pub binders: Vec<Binder>,

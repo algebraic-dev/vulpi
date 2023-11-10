@@ -14,7 +14,7 @@ use vulpi_resolver::namespaces;
 use vulpi_resolver::paths;
 use vulpi_resolver::resolver;
 use vulpi_resolver::scopes::Symbol;
-use vulpi_show::Show;
+
 use vulpi_syntax::concrete::tree::Program;
 
 use vulpi_typer::type_checker;
@@ -65,7 +65,7 @@ fn main() {
     let mut loader = Loader::new(cwd.clone());
     let program = loader.start().unwrap();
 
-    let reporter = hash_reporter();
+    let reporter = loader.reporter.clone();
     let mut namespaces = namespaces();
 
     let program = resolver(reporter.clone(), &mut namespaces, &mut loader)

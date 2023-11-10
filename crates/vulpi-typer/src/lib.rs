@@ -496,6 +496,8 @@ impl Declare for LetDecl {
     }
 
     fn define(&self, (ctx, mut env): (&mut Context, Env)) {
+        env.on(self.span.clone());
+
         let let_decl = ctx.modules.let_decl(&self.name).clone();
 
         for (fv, ty) in &let_decl.unbound {
@@ -534,12 +536,13 @@ impl Declare for LetDecl {
             .into_keys()
             .collect();
 
-        let types = ty.arrow_spine();
-
+        
         ctx.errored = false;
-
-        let body = self.body.check(ty, (ctx, eval, env.clone()));
-
+        
+        let body = self.body.check(ty.clone(), (ctx, eval, env.clone()));
+        
+        let types = ty.arrow_spine();
+        
         if !ctx.errored {
             let problem = Problem::exhaustiveness(&body, types);
             let patterns = &self.body.last().unwrap().patterns;
