@@ -17,7 +17,7 @@ use vulpi_intern::Symbol;
 use vulpi_syntax::elaborated;
 use vulpi_syntax::r#abstract::Qualified;
 use vulpi_syntax::{
-    r#abstract::Statement,
+    r#abstract::Sttm,
     r#abstract::{Expr, ExprKind, StatementKind},
 };
 
@@ -452,7 +452,7 @@ impl Infer for Expr {
     }
 }
 
-impl Infer for Statement {
+impl Infer for Sttm {
     type Return = (Type<Virtual>, Env, elaborated::Statement<Type<Real>>);
 
     type Context<'a> = (&'a mut Context, &'a Effect<Virtual>, Env);

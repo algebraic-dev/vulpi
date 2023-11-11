@@ -21,7 +21,7 @@ use module::{Def, LetDef, TypeData};
 
 use vulpi_syntax::{
     elaborated,
-    r#abstract::{EffectDecl, ExternalDecl, ModuleDecl, Program, TypeDecl, TypeDef},
+    r#abstract::{EffectDecl, ExtDecl, ModuleDecl, Program, TypeDecl, TypeDef},
 };
 
 pub mod check;
@@ -198,7 +198,7 @@ fn get_definition_of_type(type_def: &TypeDef) -> Def {
     }
 }
 
-impl Declare for ExternalDecl {
+impl Declare for ExtDecl {
     fn declare(&self, (ctx, mut env): (&mut Context, Env)) {
         let fvs = self.ty.data.free_variables();
 

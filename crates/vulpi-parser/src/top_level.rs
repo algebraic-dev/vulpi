@@ -214,10 +214,8 @@ impl<'a> Parser<'a> {
         let binders = self.many(Self::type_binder)?;
 
         let (where_, fields) = if self.at(TokenData::Where) {
-            (
-                Some(self.expect(TokenData::Where)?),
-                self.block(Self::effect_field)?,
-            )
+            let where_keyword = self.expect(TokenData::Where)?;
+            (Some(where_keyword), self.block(Self::effect_field)?)
         } else {
             (None, vec![])
         };
@@ -240,7 +238,11 @@ impl<'a> Parser<'a> {
             let where_ = self.expect(TokenData::Where)?;
             let top_levels = self.block(Self::top_level)?;
 
-            Some(ModuleInline { name: name.clone(), where_, top_levels })
+            Some(ModuleInline {
+                name: name.clone(),
+                where_,
+                top_levels,
+            })
         } else {
             None
         };
@@ -253,7 +255,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn external_decl(&mut self, visibility: Visibility) -> Result<ExternalDecl> {
+    pub fn external_decl(&mut self, visibility: Visibility) -> Result<ExtDecl> {
         let external = self.expect(TokenData::External)?;
         let name = self.lower()?;
         let colon = self.expect(TokenData::Colon)?;
@@ -261,7 +263,7 @@ impl<'a> Parser<'a> {
         let equal = self.expect(TokenData::Equal)?;
         let str = self.expect(TokenData::String)?;
 
-        Ok(ExternalDecl {
+        Ok(ExtDecl {
             visibility,
             external,
             name,

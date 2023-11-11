@@ -217,11 +217,11 @@ pub enum StatementKind {
     Error,
 }
 
-pub type Statement = Spanned<StatementKind>;
+pub type Sttm = Spanned<StatementKind>;
 
 #[derive(Show)]
 pub struct Block {
-    pub statements: Vec<Statement>,
+    pub statements: Vec<Sttm>,
 }
 
 // Patterns
@@ -395,10 +395,21 @@ impl ExprKind {
 
 pub type Expr = Box<Spanned<ExprKind>>;
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum Visibility {
     Public,
+    Super,
     Private,
+}
+
+impl From<crate::concrete::top_level::Visibility> for Visibility {
+    fn from(visibility: crate::concrete::tree::Visibility) -> Self {
+        use crate::concrete::top_level::Visibility::*;
+        match visibility {
+            Public(_) => Visibility::Public,
+            Private => Visibility::Private,
+        }
+    }
 }
 
 #[derive(Show)]
@@ -411,7 +422,7 @@ pub struct Binder {
 pub struct LetDecl {
     pub span: Span,
     pub visibility: Visibility,
-    pub name: Qualified,
+    pub name: Symbol,
     pub binders: Vec<Binder>,
     pub ret: Option<(Option<Effects>, Type)>,
     pub body: Vec<PatternArm>,
@@ -469,20 +480,26 @@ pub struct EffectField {
 
 #[derive(Show)]
 pub struct EffectDecl {
-    pub namespace: Symbol,
     pub visibility: Visibility,
-    pub name: Qualified,
+    pub name: Symbol,
     pub binders: Vec<TypeBinder>,
     pub effects: Vec<EffectField>,
 }
 
 #[derive(Show)]
-pub struct ExternalDecl {
-    pub name: Qualified,
-    pub namespace: Symbol,
+pub struct ExtDecl {
+    pub name: Symbol,
     pub visibility: Visibility,
     pub ty: Type,
     pub ret: Symbol,
+}
+
+pub enum TopLevel {
+    Let(LetDecl),
+    Type(TypeDecl),
+    Module(ModuleDecl),
+    Effect(EffectDecl),
+    External(ExtDecl),
 }
 
 #[derive(Show, Default)]
@@ -491,5 +508,5 @@ pub struct Program {
     pub types: Vec<TypeDecl>,
     pub modules: Vec<ModuleDecl>,
     pub effects: Vec<EffectDecl>,
-    pub externals: Vec<ExternalDecl>,
+    pub externals: Vec<ExtDecl>,
 }

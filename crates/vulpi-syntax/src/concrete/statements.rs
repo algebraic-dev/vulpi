@@ -20,11 +20,11 @@ pub enum StatementKind {
     Error(Vec<Token>),
 }
 
-pub type Statement = Spanned<StatementKind>;
+pub type Sttm = Spanned<StatementKind>;
 
 #[derive(Show)]
 pub struct Block {
-    pub statements: Vec<Statement>,
+    pub statements: Vec<Sttm>,
 }
 
 #[derive(Show)]

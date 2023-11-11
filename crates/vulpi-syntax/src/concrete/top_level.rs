@@ -192,7 +192,7 @@ pub struct EffectDecl {
 }
 
 #[derive(Show)]
-pub struct ExternalDecl {
+pub struct ExtDecl {
     pub visibility: Visibility,
     pub external: Token,
     pub name: Lower,
@@ -210,7 +210,7 @@ pub enum TopLevel {
     Module(Box<ModuleDecl>),
     Effect(Box<EffectDecl>),
     Error(Vec<Token>),
-    External(Box<ExternalDecl>),
+    External(Box<ExtDecl>),
 }
 
 #[derive(Show)]

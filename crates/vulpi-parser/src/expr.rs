@@ -58,7 +58,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn statement(&mut self) -> Result<Statement> {
+    pub fn statement(&mut self) -> Result<Sttm> {
         self.spanned(Self::statement_kind)
     }
 

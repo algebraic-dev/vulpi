@@ -1,6 +1,6 @@
 //! Checking of expressions
 
-use vulpi_syntax::{elaborated, r#abstract::Expr, r#abstract::ExprKind, r#abstract::Statement};
+use vulpi_syntax::{elaborated, r#abstract::Expr, r#abstract::ExprKind, r#abstract::Sttm};
 
 use crate::{
     errors::TypeErrorKind,
@@ -118,7 +118,7 @@ impl Check for Expr {
     }
 }
 
-impl Check for Statement {
+impl Check for Sttm {
     type Return = (elaborated::Statement<Type<Real>>, Env);
 
     type Context<'a> = (&'a mut Context, &'a Effect<Virtual>, Env);

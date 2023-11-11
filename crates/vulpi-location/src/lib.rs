@@ -79,6 +79,13 @@ impl<T> Spanned<T> {
             span: self.span.clone(),
         }
     }
+
+    pub fn with<U>(self, data: U) -> Spanned<U> {
+        Spanned {
+            data,
+            span: self.span,
+        }
+    }
 }
 
 impl<T: Debug> Debug for Spanned<T> {
