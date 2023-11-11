@@ -240,7 +240,7 @@ impl<'a> Parser<'a> {
             let where_ = self.expect(TokenData::Where)?;
             let top_levels = self.block(Self::top_level)?;
 
-            Some(ModuleInline { where_, top_levels })
+            Some(ModuleInline { name: name.clone(), where_, top_levels })
         } else {
             None
         };

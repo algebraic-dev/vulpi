@@ -1,3 +1,4 @@
+use vulpi_intern::Symbol;
 use vulpi_macros::Show;
 
 use crate::tokens::Token;
@@ -120,6 +121,7 @@ pub struct UseDecl {
 
 #[derive(Show)]
 pub struct ModuleInline {
+    pub name: Upper,
     pub where_: Token,
     pub top_levels: Vec<TopLevel>,
 }
@@ -150,6 +152,24 @@ pub struct ModuleDecl {
     pub mod_: Token,
     pub name: Upper,
     pub part: Option<ModuleInline>,
+}
+
+impl ModuleDecl {
+    fn declares(&self, mut path: Vec<Symbol>) -> Vec<Vec<Symbol>> {
+        if let Some(module) = &self.part {
+            let mut paths = Vec::new();
+
+            for module in module.modules() {
+                path.push(module.name.symbol());
+                paths.extend(module.declares(path.clone()));
+            }
+            
+            paths
+        } else {
+            path.push(self.name.symbol());
+            vec![path]
+        }
+    }
 }
 
 #[derive(Show)]
@@ -243,5 +263,15 @@ impl Program {
                 TopLevel::Effect(effect) => Some(&**effect),
                 _ => None,
             })
+    }
+
+    pub fn declares(&self) -> Vec<Vec<Symbol>> {
+        let mut dependencies = Vec::new();
+
+        for module in self.modules() {
+            dependencies.extend(module.declares(Vec::new()));
+        }
+
+        dependencies
     }
 }

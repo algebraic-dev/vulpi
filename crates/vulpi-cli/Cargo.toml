@@ -7,13 +7,4 @@ edition = "2021"
 
 [dependencies]
 
-vulpi-lexer = { path = "../vulpi-lexer" }
-vulpi-location = { path = "../vulpi-location" }
-vulpi-parser = { path = "../vulpi-parser" }
-vulpi-report = { path = "../vulpi-report" }
-vulpi-show = { path = "../vulpi-show" }
-vulpi-vfs = { path = "../vulpi-vfs" }
-vulpi-resolver = { path = "../vulpi-resolver" }
-vulpi-typer = { path = "../vulpi-typer" }
-vulpi-syntax = { path = "../vulpi-syntax" }
-vulpi-ir = { path = "../vulpi-ir" }
+vulpi-build = { path = "../vulpi-build" }

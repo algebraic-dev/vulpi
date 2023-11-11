@@ -8,12 +8,12 @@ use crate::{renderer::LineGuide, Color, Diagnostic, Style, Text, Word};
 use super::Renderer;
 
 pub struct Classic<'a> {
-    fs: &'a dyn FileSystem<PathBuf, String>,
+    fs: &'a dyn FileSystem<Path = PathBuf>,
     cwd: PathBuf,
 }
 
 impl<'a> Classic<'a> {
-    pub fn new(fs: &'a (dyn FileSystem<PathBuf, String> + 'static), cwd: PathBuf) -> Self {
+    pub fn new(fs: &'a (dyn FileSystem<Path = PathBuf> + 'static), cwd: PathBuf) -> Self {
         Self { fs, cwd }
     }
 }
@@ -92,7 +92,7 @@ impl<'a> Renderer<Classic<'a>> for Diagnostic {
 
         let range = self.location();
 
-        let line_guide = LineGuide::new(content);
+        let line_guide = LineGuide::new(&content);
 
         let start = line_guide.to_line_and_column(range.start).unwrap();
         let end = line_guide.to_line_and_column(range.end).unwrap();

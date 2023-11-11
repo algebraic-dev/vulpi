@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
-use vulpi_syntax::{elaborated, r#abstract::Qualified};
+use vulpi_syntax::r#abstract::Qualified;
 
 use crate::{
     r#type::{r#virtual::Virtual, Effect, Type},

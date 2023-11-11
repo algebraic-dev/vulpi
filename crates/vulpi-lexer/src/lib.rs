@@ -392,6 +392,7 @@ impl<'a> Lexer<'a> {
         (result, symbol)
     }
 
+    /// Removes an entry from the layout stack.
     pub fn pop_layout(&mut self) {
         self.state.layout.pop();
     }

@@ -372,6 +372,27 @@ pub enum ExprKind {
     Error,
 }
 
+impl ExprKind {
+    pub fn accumulate(self) -> ExprKind {
+        match self {
+            ExprKind::Application(app1) => match app1.func.data {
+                ExprKind::Application(app2) => {
+                    let mut args = app2.args;
+                    args.extend(app1.args);
+    
+                    ExprKind::Application(ApplicationExpr {
+                        func: app2.func,
+                        args,
+                        app: AppKind::Normal,
+                    })
+                }
+                _ => ExprKind::Application(app1),
+            },
+            _ => self,
+        }
+    }
+}
+
 pub type Expr = Box<Spanned<ExprKind>>;
 
 #[derive(Show)]

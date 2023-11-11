@@ -31,7 +31,7 @@ pub enum Either<L, R> {
     Right(R),
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Upper(pub Token);
 
 impl Upper {

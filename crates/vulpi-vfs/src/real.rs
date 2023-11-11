@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fs, path::PathBuf};
 
+use filetime::FileTime;
 use vulpi_location::FileId;
 
 use super::{Error, FileSystem};
@@ -28,7 +29,9 @@ impl RealFileSystem {
     }
 }
 
-impl FileSystem<PathBuf, String> for RealFileSystem {
+impl FileSystem for RealFileSystem {
+    type Path = PathBuf;
+
     fn load(&mut self, path: PathBuf) -> Result<FileId, Error> {
         let path = self.get_path(path)?;
 
@@ -61,9 +64,9 @@ impl FileSystem<PathBuf, String> for RealFileSystem {
         Ok(())
     }
 
-    fn read(&self, id: FileId) -> Result<&String, Error> {
+    fn read(&self, id: FileId) -> Result<String, Error> {
         let file = self.file_map.get(&id).ok_or(Error::NotFoundId)?;
-        Ok(&file.1)
+        Ok(file.1.clone())
     }
 
     fn create(&mut self, path: PathBuf) -> Result<FileId, Error> {
@@ -103,5 +106,11 @@ impl FileSystem<PathBuf, String> for RealFileSystem {
     fn path(&self, id: FileId) -> Result<&PathBuf, Error> {
         let file = self.file_map.get(&id).ok_or(Error::NotFoundId)?;
         Ok(&file.0)
+    }
+
+    fn modification_time(&self, path: PathBuf) -> Result<FileTime, Error> {
+        let metadata = fs::metadata(path.clone()).map_err(|_| Error::NotFound(path.clone()))?;
+
+        Ok(FileTime::from_last_modification_time(&metadata))
     }
 }
