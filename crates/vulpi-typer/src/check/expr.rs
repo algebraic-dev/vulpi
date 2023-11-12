@@ -27,9 +27,9 @@ impl Check for Expr {
             (ExprKind::Do(block), _) => {
                 let mut stmts = Vec::new();
 
-                if !block.statements.is_empty() {
-                    for (i, stmt) in block.statements.iter().enumerate() {
-                        let is_last = i == block.statements.len() - 1;
+                if !block.sttms.is_empty() {
+                    for (i, stmt) in block.sttms.iter().enumerate() {
+                        let is_last = i == block.sttms.len() - 1;
                         let (elab, new_env) = if is_last {
                             stmt.check(ty.clone(), (ctx, ambient, env.clone()))
                         } else {

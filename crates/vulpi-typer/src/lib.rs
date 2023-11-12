@@ -513,7 +513,7 @@ impl Declare for LetDecl {
 
         for (binder, ty) in self.binders.iter().zip(let_decl.args.iter()) {
             let pat = binder
-                .pattern
+                .pat
                 .check(ty.eval(&env), (ctx, &mut binders, env.clone()));
 
             elab_binders.push((pat, ty.clone()));

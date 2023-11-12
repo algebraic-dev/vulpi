@@ -246,7 +246,7 @@ impl<'a> Parser<'a> {
             let range = self.with_span(left.span.clone());
             Ok(Box::new(Spanned {
                 span: range,
-                data: ExprKind::Acessor(ProjectionExpr {
+                data: ExprKind::Projection(ProjectionExpr {
                     expr: left,
                     dot,
                     field,
@@ -321,87 +321,17 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    pub fn if_expr(&mut self) -> Result<Box<Expr>> {
-        let if_ = self.expect(TokenData::If)?;
-        let cond = self.expr()?;
-        let then = self.expect(TokenData::Then)?;
-        let then_expr = self.expr()?;
-        let else_ = self.expect(TokenData::Else)?;
-        let else_expr = self.expr()?;
-
-        let range = self.with_span(if_.value.span.clone());
-
-        Ok(Box::new(Spanned {
-            span: range,
-            data: ExprKind::If(IfExpr {
-                if_,
-                cond,
-                then,
-                then_expr,
-                else_,
-                else_expr,
-            }),
-        }))
-    }
-
-    pub fn cases_expr(&mut self) -> Result<Box<Expr>> {
-        let cases = self.expect(TokenData::Cases)?;
-        let arms = self.block(Self::pattern_arm)?;
-        let range = self.with_span(cases.value.span.clone());
-        Ok(Box::new(Spanned {
-            span: range,
-            data: ExprKind::Cases(CasesExpr { cases, arms }),
-        }))
-    }
-
-    pub fn handler_expr(&mut self) -> Result<Box<Expr>> {
-        let handle = self.expect(TokenData::Handle)?;
-        let expr = self.expr()?;
-        let with = self.expect(TokenData::With)?;
-        let handler = self.expr()?;
-
-        let range = self.with_span(handle.value.span.clone());
-
-        Ok(Box::new(Spanned {
-            span: range,
-            data: ExprKind::Handler(HandlerExpr {
-                handle,
-                expr,
-                with,
-                handler,
-            }),
-        }))
-    }
-
     pub fn expr_part(&mut self) -> Result<Box<Expr>> {
         match self.token() {
             TokenData::BackSlash => self.lambda_expr(),
             TokenData::Let => self.let_expr(),
             TokenData::Do => self.expr_do(),
             TokenData::When => self.when_expr(),
-            TokenData::If => self.if_expr(),
-            TokenData::Cases => self.cases_expr(),
-            TokenData::Handle => self.handler_expr(),
             _ => self.expr_annotation(),
         }
     }
 
     pub fn expr(&mut self) -> Result<Box<Expr>> {
-        let left = self.expr_part()?;
-        if self.at(TokenData::PipeRight) {
-            let pipe_right = self.bump();
-            let right = self.expr()?;
-            let range = self.with_span(left.span.clone());
-            Ok(Box::new(Spanned {
-                span: range,
-                data: ExprKind::Binary(BinaryExpr {
-                    left,
-                    op: Operator::Pipe(pipe_right),
-                    right,
-                }),
-            }))
-        } else {
-            Ok(left)
-        }
+        self.expr_part()
     }
 }

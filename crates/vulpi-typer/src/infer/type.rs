@@ -34,9 +34,7 @@ impl Infer for r#abstract::Type {
                 env.on(pi.right.span.clone());
                 ctx.subsumes(env.clone(), kind, Kind::typ());
 
-                let effs = pi.effects.infer((ctx, env.clone()));
-
-                let typ = Type::new(r#type::TypeKind::Arrow(real::Arrow { ty, effs, body }));
+                let typ = Type::new(r#type::TypeKind::Arrow(real::Arrow { ty, body }));
                 (typ, Kind::typ())
             }
             TypeKind::Tuple(t) => {

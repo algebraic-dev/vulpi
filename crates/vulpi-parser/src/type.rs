@@ -60,30 +60,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn effect(&mut self) -> Result<Effect> {
-        if self.at(TokenData::LowerIdent) {
-            let var = self.lower()?;
-            Ok(Effect::Variable(var))
-        } else {
-            let var = self.path_upper()?;
-            let args = self.many(Self::type_atom)?;
-
-            Ok(Effect::Application(var, args))
-        }
-    }
-
-    pub fn type_effects(&mut self) -> Result<Effects> {
-        let left_brace = self.expect(TokenData::LBrace)?;
-        let effects = self.sep_by(TokenData::Comma, |this| this.spanned(Self::effect))?;
-        let right_brace = self.expect(TokenData::RBrace)?;
-
-        Ok(Effects {
-            left_brace,
-            right_brace,
-            effects,
-        })
-    }
-
     fn type_atom_raw(&mut self) -> Result<TypeKind> {
         match self.token() {
             TokenData::LowerIdent => self.type_variable().map(TypeKind::TypeVariable),
@@ -135,12 +111,6 @@ impl<'a> Parser<'a> {
         if self.at(TokenData::RightArrow) {
             let arrow = self.bump();
 
-            let effects = if self.at(TokenData::LBrace) {
-                Some(self.type_effects()?)
-            } else {
-                None
-            };
-
             let right = self.type_arrow()?;
 
             Ok(Box::new(Spanned {
@@ -148,7 +118,6 @@ impl<'a> Parser<'a> {
                 data: TypeKind::Arrow(TypeArrow {
                     left,
                     arrow,
-                    effects,
                     right,
                 }),
             }))

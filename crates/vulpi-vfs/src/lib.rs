@@ -7,6 +7,7 @@ use filetime::FileTime;
 use vulpi_location::FileId;
 
 pub mod real;
+pub mod path;
 
 #[derive(Debug)]
 pub enum Error {

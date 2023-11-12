@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 filetime = "0.2.22"
 vulpi-location = { path = "../vulpi-location" }
+vulpi-intern = { path = "../vulpi-intern" }

@@ -123,20 +123,6 @@ pub struct RecordUpdate {
     pub right_brace: Token,
 }
 
-#[derive(Show)]
-pub struct HandlerExpr {
-    pub handle: Token,
-    pub expr: Box<Expr>,
-    pub with: Token,
-    pub handler: Box<Expr>,
-}
-
-#[derive(Show)]
-pub struct CasesExpr {
-    pub cases: Token,
-    pub arms: Vec<PatternArm>,
-}
-
 pub type Tuple = Parenthesis<Vec<(Box<Spanned<ExprKind>>, Option<Token>)>>;
 
 #[derive(Show)]
@@ -148,16 +134,12 @@ pub enum ExprKind {
     Constructor(Path<Upper>),
     Function(Path<Lower>),
 
-    Acessor(ProjectionExpr),
+    Projection(ProjectionExpr),
     Binary(BinaryExpr),
     Let(LetExpr),
-    If(IfExpr),
     When(WhenExpr),
     Do(DoExpr),
     Literal(Literal),
-
-    Handler(HandlerExpr),
-    Cases(CasesExpr),
 
     Annotation(AnnotationExpr),
     RecordInstance(RecordInstance),

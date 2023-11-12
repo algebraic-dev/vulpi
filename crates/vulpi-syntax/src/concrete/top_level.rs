@@ -12,7 +12,7 @@ pub enum Visibility {
 use super::{
     expr::{Expr, PatternArm},
     kind::Kind,
-    r#type::{Effects, Type},
+    r#type::Type,
     tree::Pattern,
     Lower, Parenthesis, Path, Upper,
 };
@@ -44,7 +44,7 @@ pub struct LetDecl {
     pub let_: Token,
     pub name: Lower,
     pub binders: Vec<Binder>,
-    pub ret: Option<(Token, Option<Effects>, Box<Type>)>,
+    pub ret: Option<(Token, Box<Type>)>,
     pub body: LetMode,
 }
 
@@ -173,25 +173,6 @@ impl ModuleDecl {
 }
 
 #[derive(Show)]
-pub struct EffectField {
-    pub visibility: Visibility,
-    pub name: Lower,
-    pub args: Vec<Box<Type>>,
-    pub colon: Token,
-    pub ret: Box<Type>,
-}
-
-#[derive(Show)]
-pub struct EffectDecl {
-    pub visibility: Visibility,
-    pub effect: Token,
-    pub name: Upper,
-    pub binders: Vec<TypeBinder>,
-    pub where_: Option<Token>,
-    pub fields: Vec<EffectField>,
-}
-
-#[derive(Show)]
 pub struct ExtDecl {
     pub visibility: Visibility,
     pub external: Token,
@@ -208,7 +189,6 @@ pub enum TopLevel {
     Type(Box<TypeDecl>),
     Use(Box<UseDecl>),
     Module(Box<ModuleDecl>),
-    Effect(Box<EffectDecl>),
     Error(Vec<Token>),
     External(Box<ExtDecl>),
 }
@@ -252,15 +232,6 @@ impl Program {
             .iter()
             .filter_map(|top_level| match top_level {
                 TopLevel::Let(let_) => Some(&**let_),
-                _ => None,
-            })
-    }
-
-    pub fn effects(&self) -> impl Iterator<Item = &EffectDecl> {
-        self.top_levels
-            .iter()
-            .filter_map(|top_level| match top_level {
-                TopLevel::Effect(effect) => Some(&**effect),
                 _ => None,
             })
     }

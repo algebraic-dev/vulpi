@@ -1,4 +1,4 @@
-use vulpi_location::Spanned;
+
 use vulpi_syntax::{
     concrete::{pattern::*, Either},
     tokens::TokenData,
@@ -46,43 +46,13 @@ impl<'a> Parser<'a> {
                 }
             })
             .map(Box::new)
-        } else if self.at(TokenData::LBrace) {
-            self.spanned(|this| {
-                let left_brace = this.bump();
-                let func = this.path_lower()?;
-                let args = this.many(Self::pattern_atom)?;
-
-                let arrow = if this.at(TokenData::RightArrow) {
-                    Some((this.bump(), this.lower()?))
-                } else {
-                    None
-                };
-                let right_brace = this.expect(TokenData::RBrace)?;
-                Ok(PatternKind::EffectApp(PatEffectApp {
-                    left_brace,
-                    func,
-                    args,
-                    right_brace,
-                    arrow,
-                }))
-            })
-            .map(Box::new)
         } else {
             self.pattern_atom()
         }
     }
 
     pub fn pattern(&mut self) -> Result<Box<Pattern>> {
-        let left = self.pattern_application()?;
-        if self.at(TokenData::Bar) {
-            let pipe = self.bump();
-            let right = self.pattern()?;
-            Ok(Box::new(Spanned {
-                span: left.span.clone().mix(right.span.clone()),
-                data: PatternKind::Or(PatOr { left, pipe, right }),
-            }))
-        } else {
-            Ok(left)
-        }
+        self.pattern_application()
     }
+
 }

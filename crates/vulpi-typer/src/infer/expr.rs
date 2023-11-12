@@ -18,7 +18,7 @@ use vulpi_syntax::elaborated;
 use vulpi_syntax::r#abstract::Qualified;
 use vulpi_syntax::{
     r#abstract::Sttm,
-    r#abstract::{Expr, ExprKind, StatementKind},
+    r#abstract::{Expr, ExprKind, SttmKind},
 };
 
 use crate::{
@@ -190,7 +190,7 @@ impl Infer for Expr {
                 let mut ty = Type::tuple(vec![]);
                 let mut stmts = Vec::new();
 
-                for stmt in &block.statements {
+                for stmt in &block.sttms {
                     let (new_ty, new_env, stmt) = stmt.infer((ctx, ambient, env.clone()));
                     ty = new_ty;
                     env = new_env;
@@ -460,9 +460,9 @@ impl Infer for Sttm {
     fn infer(&self, (ctx, ambient, mut env): Self::Context<'_>) -> Self::Return {
         env.on(self.span.clone());
         match &self.data {
-            StatementKind::Let(decl) => {
+            SttmKind::Let(decl) => {
                 let mut hashmap = Default::default();
-                let (pat_ty, elab_pat) = decl.pattern.infer((ctx, &mut hashmap, env.clone()));
+                let (pat_ty, elab_pat) = decl.pat.infer((ctx, &mut hashmap, env.clone()));
 
                 let elab_expr = decl.expr.check(pat_ty, (ctx, ambient, env.clone()));
 
@@ -479,11 +479,11 @@ impl Infer for Sttm {
                     }),
                 )
             }
-            StatementKind::Expr(expr) => {
+            SttmKind::Expr(expr) => {
                 let (ty, elab_expr) = expr.infer((ctx, ambient, env.clone()));
                 (ty, env, elaborated::StatementKind::Expr(elab_expr))
             }
-            StatementKind::Error => (Type::error(), env, elaborated::StatementKind::Error),
+            SttmKind::Error => (Type::error(), env, elaborated::StatementKind::Error),
         }
     }
 }

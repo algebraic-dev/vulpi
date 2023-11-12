@@ -13,13 +13,6 @@ pub struct PatAscription {
 }
 
 #[derive(Show)]
-pub struct PatOr {
-    pub left: Box<Pattern>,
-    pub pipe: Token,
-    pub right: Box<Pattern>,
-}
-
-#[derive(Show)]
 pub struct PatApplication {
     pub func: Path<Upper>,
     pub args: Vec<Box<Pattern>>,
@@ -42,9 +35,7 @@ pub enum PatternKind {
     Literal(Literal),
     Annotation(PatAscription),
     Tuple(Vec<(Pattern, Option<Token>)>),
-    Or(PatOr),
     Application(PatApplication),
-    EffectApp(PatEffectApp),
     Parenthesis(Parenthesis<Box<Pattern>>),
 }
 

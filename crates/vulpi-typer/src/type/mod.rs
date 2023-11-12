@@ -69,12 +69,6 @@ pub enum TypeKind<S: State> {
     /// The type of types
     Type,
 
-    /// The type of effects
-    Effect,
-
-    /// The type of the rows
-    Row,
-
     /// The pi type is used for dependent functions.
     Arrow(S::Pi),
 
@@ -98,12 +92,6 @@ pub enum TypeKind<S: State> {
 
     /// The type for type applications
     Application(S::Type, S::Type),
-
-    /// The type for empty rows in effect rows.
-    Empty,
-
-    /// The type for extending rows in effect rows.
-    Extend(Qualified, S::Type, S::Type),
 
     /// A type error.
     Error,
@@ -344,7 +332,6 @@ pub mod r#virtual {
     /// A pi type without binder. It's used for a bunch of things but not right now :>
     pub struct Pi {
         pub ty: Type<Virtual>,
-        pub effs: Type<Virtual>,
         pub body: Type<Virtual>,
     }
 
@@ -391,26 +378,6 @@ pub mod r#virtual {
             spine
         }
 
-        pub(crate) fn effect_row_set(&self) -> HashMap<Qualified, Type<Virtual>> {
-            match self.deref().as_ref() {
-                TypeKind::Extend(l, t, rest) => {
-                    let mut map = rest.effect_row_set();
-                    map.insert(l.clone(), t.clone());
-                    map
-                }
-                _ => Default::default(),
-            }
-        }
-
-        pub(crate) fn is_row_effect(&self) -> bool {
-            match self.deref().as_ref() {
-                TypeKind::Extend(_, _, _) => true,
-                TypeKind::Empty => true,
-                TypeKind::Hole(m) if m.is_lacks() => true,
-                _ => false,
-            }
-        }
-
         pub fn deref(&self) -> Type<Virtual> {
             match self.as_ref() {
                 TypeKind::Hole(h) => match h.0.borrow().clone() {
@@ -427,31 +394,10 @@ pub mod r#virtual {
                 .fold(left, |acc, x| Type::new(TypeKind::Application(acc, x)))
         }
 
-        pub fn extend(label: Qualified, ty: Type<Virtual>, typ: Type<Virtual>) -> Type<Virtual> {
-            Type::new(TypeKind::Extend(label, ty, typ))
-        }
-
-        pub(crate) fn row_spine(&self) -> (Option<Hole<Virtual>>, Vec<(Qualified, Self)>) {
-            let mut spine = Vec::new();
-            let mut current = self.clone();
-
-            while let TypeKind::Extend(label, ty, rest) = current.as_ref() {
-                spine.push((label.clone(), ty.clone()));
-                current = rest.clone();
-            }
-
-            match current.as_ref() {
-                TypeKind::Empty => (None, spine),
-                TypeKind::Hole(e) => (Some(e.clone()), spine),
-                _ => (None, spine),
-            }
-        }
-
         pub(crate) fn function(right: Vec<Self>, ret: Self) -> Self {
             right.into_iter().rev().fold(ret, |body, ty| {
                 Type::new(TypeKind::Arrow(Pi {
                     ty,
-                    effs: Type::new(TypeKind::Empty),
                     body,
                 }))
             })
@@ -480,7 +426,6 @@ pub mod real {
     /// A pi type without binder. It's used for a bunch of things but not right now :>
     pub struct Arrow {
         pub ty: Type<Real>,
-        pub effs: Type<Real>,
         pub body: Type<Real>,
     }
 
@@ -567,25 +512,6 @@ pub mod real {
             spine
         }
 
-        pub fn extend(label: Qualified, ty: Type<Real>, typ: Type<Real>) -> Type<Real> {
-            Type::new(TypeKind::Extend(label, ty, typ))
-        }
-
-        pub(crate) fn row_spine(&self) -> (Option<Self>, Vec<(Qualified, Self)>) {
-            let mut spine = Vec::new();
-            let mut current = self.clone();
-
-            while let TypeKind::Extend(label, ty, rest) = current.as_ref() {
-                spine.push((label.clone(), ty.clone()));
-                current = rest.clone();
-            }
-
-            match current.as_ref() {
-                TypeKind::Empty => (None, spine),
-                _ => (Some(current), spine),
-            }
-        }
-
         pub(crate) fn application(left: Self, right: Vec<Self>) -> Self {
             right
                 .into_iter()
@@ -596,7 +522,6 @@ pub mod real {
             right.into_iter().rev().fold(ret, |body, ty| {
                 Type::new(TypeKind::Arrow(Arrow {
                     ty,
-                    effs: Type::new(TypeKind::Empty),
                     body,
                 }))
             })
@@ -623,23 +548,11 @@ pub mod real {
     impl Formattable for Type<Real> {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self.as_ref() {
-                TypeKind::Row => write!(f, "Row"),
                 TypeKind::Type => write!(f, "Type"),
-                TypeKind::Effect => write!(f, "Effect"),
                 TypeKind::Arrow(pi) => {
                     write!(f, "(")?;
                     pi.ty.format(env, f)?;
                     write!(f, " -> ")?;
-
-                    match pi.effs.as_ref() {
-                        TypeKind::Empty => (),
-                        _ => {
-                            write!(f, "{{")?;
-                            pi.effs.format(env, f)?;
-                            write!(f, "}} ")?;
-                        }
-                    }
-
                     pi.body.format(env, f)?;
                     write!(f, ")")
                 }
@@ -719,24 +632,6 @@ pub mod real {
                         arg.format(env, f)?;
                     }
                     write!(f, ")")
-                }
-                TypeKind::Empty => write!(f, "{{}}"),
-                TypeKind::Extend(_, _, _) => {
-                    let (last, args) = self.row_spine();
-
-                    for (i, (_, e)) in args.iter().enumerate() {
-                        e.format(env, f)?;
-                        if i != args.len() - 1 {
-                            write!(f, ", ")?;
-                        }
-                    }
-
-                    if let Some(last) = last {
-                        write!(f, " | ")?;
-                        last.format(env, f)?;
-                    }
-
-                    Ok(())
                 }
                 TypeKind::Error => write!(f, "<ERROR>"),
             }

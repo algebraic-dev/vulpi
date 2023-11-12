@@ -49,13 +49,8 @@ impl<'a> Parser<'a> {
 
         let ret = if self.at(TokenData::Colon) {
             let colon = self.bump();
-            let effects = if self.at(TokenData::LBrace) {
-                Some(self.type_effects()?)
-            } else {
-                None
-            };
             let typ = self.typ()?;
-            Some((colon, effects, typ))
+            Some((colon, typ))
         } else {
             None
         };
@@ -193,43 +188,6 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn effect_field(&mut self) -> Result<EffectField> {
-        let visibility = self.visibility()?;
-        let name = self.lower()?;
-        let args = self.many(Self::type_atom)?;
-        let colon = self.expect(TokenData::Colon)?;
-        let ret = self.typ()?;
-        Ok(EffectField {
-            visibility,
-            name,
-            args,
-            colon,
-            ret,
-        })
-    }
-
-    pub fn effect_decl(&mut self, visibility: Visibility) -> Result<EffectDecl> {
-        let effect = self.expect(TokenData::Effect)?;
-        let name = self.upper()?;
-        let binders = self.many(Self::type_binder)?;
-
-        let (where_, fields) = if self.at(TokenData::Where) {
-            let where_keyword = self.expect(TokenData::Where)?;
-            (Some(where_keyword), self.block(Self::effect_field)?)
-        } else {
-            (None, vec![])
-        };
-
-        Ok(EffectDecl {
-            visibility,
-            effect,
-            name,
-            binders,
-            where_,
-            fields,
-        })
-    }
-
     pub fn mod_decl(&mut self, visibility: Visibility) -> Result<ModuleDecl> {
         let mod_ = self.expect(TokenData::Mod)?;
         let name = self.upper()?;
@@ -280,7 +238,6 @@ impl<'a> Parser<'a> {
             TokenData::Let => self.let_decl(vis).map(Box::new).map(TopLevel::Let),
             TokenData::Type => self.type_decl(vis).map(Box::new).map(TopLevel::Type),
             TokenData::Use => self.use_decl(vis).map(Box::new).map(TopLevel::Use),
-            TokenData::Effect => self.effect_decl(vis).map(Box::new).map(TopLevel::Effect),
             TokenData::Mod => self.mod_decl(vis).map(Box::new).map(TopLevel::Module),
             TokenData::External => self
                 .external_decl(vis)

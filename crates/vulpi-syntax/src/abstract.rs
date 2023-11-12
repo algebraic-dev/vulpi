@@ -23,7 +23,6 @@ impl Show for Qualified {
 #[derive(Show)]
 pub enum KindType {
     Star,
-    Effect,
     Constraint,
     Arrow(Kind, Kind),
     Error,
@@ -34,15 +33,8 @@ pub type Kind = Box<Spanned<KindType>>;
 // Types
 
 #[derive(Show)]
-pub struct Effects {
-    pub effects: Vec<Type>,
-    pub rest: Option<Type>,
-}
-
-#[derive(Show)]
 pub struct PiType {
     pub left: Type,
-    pub effects: Option<Effects>,
     pub right: Type,
 }
 
@@ -85,12 +77,6 @@ impl TypeKind {
             TypeKind::Arrow(pi) => {
                 let mut set = pi.left.data.free_variables();
                 set.extend(pi.right.data.free_variables());
-
-                if let Some(effs) = &pi.effects {
-                    for eff in &effs.effects {
-                        set.extend(eff.data.free_variables());
-                    }
-                }
 
                 set
             }
@@ -135,58 +121,6 @@ impl TypeKind {
         }
     }
 
-    pub fn free_effects(&self) -> HashSet<Symbol> {
-        match self {
-            TypeKind::Arrow(pi) => {
-                let mut set = pi.left.data.free_effects();
-                set.extend(pi.right.data.free_effects());
-
-                if let Some(effs) = &pi.effects {
-                    for eff in &effs.effects {
-                        set.extend(eff.data.free_effects());
-                    }
-                    if let Some(rest) = &effs.rest {
-                        set.extend(rest.data.free_variables());
-                    }
-                }
-
-                set
-            }
-            TypeKind::Tuple(t) => {
-                let mut set = HashSet::new();
-
-                for ty in t {
-                    set.extend(ty.data.free_effects());
-                }
-
-                set
-            }
-            TypeKind::Application(app) => {
-                let mut set = app.func.data.free_effects();
-
-                for arg in &app.args {
-                    set.extend(arg.data.free_effects());
-                }
-
-                set
-            }
-            TypeKind::Forall(f) => {
-                let mut set = HashSet::new();
-
-                set.extend(f.body.data.free_effects());
-
-                for binder in &f.params {
-                    match binder {
-                        TypeBinder::Implicit(p) => set.remove(p),
-                        TypeBinder::Explicit(p, _) => set.remove(p),
-                    };
-                }
-
-                set
-            }
-            _ => HashSet::new(),
-        }
-    }
 }
 
 // Literal
@@ -205,23 +139,23 @@ pub type Literal = Box<Spanned<LiteralKind>>;
 // Statements
 
 #[derive(Show)]
-pub struct LetStatement {
-    pub pattern: Pattern,
+pub struct LetSttm {
+    pub pat: Pattern,
     pub expr: Expr,
 }
 
 #[derive(Show)]
-pub enum StatementKind {
-    Let(LetStatement),
+pub enum SttmKind {
+    Let(LetSttm),
     Expr(Expr),
     Error,
 }
 
-pub type Sttm = Spanned<StatementKind>;
+pub type Sttm = Spanned<SttmKind>;
 
 #[derive(Show)]
 pub struct Block {
-    pub statements: Vec<Sttm>,
+    pub sttms: Vec<Sttm>,
 }
 
 // Patterns
@@ -244,12 +178,6 @@ pub struct PatApplication {
     pub args: Vec<Pattern>,
 }
 
-#[derive(Show)]
-pub struct PatEffect {
-    pub func: Qualified,
-    pub args: Vec<Pattern>,
-    pub cont: Option<Symbol>,
-}
 
 #[derive(Show)]
 pub enum PatternKind {
@@ -260,7 +188,6 @@ pub enum PatternKind {
     Ascription(PatAscription),
     Or(PatOr),
     Application(PatApplication),
-    Effect(PatEffect),
 
     Error,
 }
@@ -354,7 +281,6 @@ pub enum ExprKind {
     Variable(Symbol),
     Constructor(Qualified),
     Function(Qualified),
-    Effect(Qualified),
 
     Projection(ProjectionExpr),
     Let(LetExpr),
@@ -414,7 +340,7 @@ impl From<crate::concrete::top_level::Visibility> for Visibility {
 
 #[derive(Show)]
 pub struct Binder {
-    pub pattern: Pattern,
+    pub pat: Pattern,
     pub ty: Type,
 }
 
@@ -424,13 +350,13 @@ pub struct LetDecl {
     pub visibility: Visibility,
     pub name: Symbol,
     pub binders: Vec<Binder>,
-    pub ret: Option<(Option<Effects>, Type)>,
+    pub ret: Option<Type>,
     pub body: Vec<PatternArm>,
 }
 
 #[derive(Show)]
 pub struct Constructor {
-    pub name: Qualified,
+    pub name: Symbol,
     pub args: Vec<Type>,
     pub typ: Option<Type>,
 }
@@ -442,7 +368,7 @@ pub struct SumDecl {
 
 #[derive(Show)]
 pub struct RecordDecl {
-    pub fields: Vec<(Qualified, Type)>,
+    pub fields: Vec<(Symbol, Type, Visibility)>,
 }
 
 #[derive(Show)]
@@ -455,36 +381,19 @@ pub enum TypeDef {
 
 #[derive(Show)]
 pub struct TypeDecl {
-    pub namespace: Symbol,
     pub visibility: Visibility,
-    pub name: Qualified,
+    pub name: Symbol,
     pub binders: Vec<TypeBinder>,
     pub def: TypeDef,
 }
 
 #[derive(Show)]
 pub struct ModuleDecl {
-    pub namespace: Symbol,
     pub visibility: Visibility,
     pub name: Symbol,
     pub decls: Option<Program>,
 }
 
-#[derive(Show)]
-pub struct EffectField {
-    pub visibility: Visibility,
-    pub name: Qualified,
-    pub args: Vec<Type>,
-    pub ty: Type,
-}
-
-#[derive(Show)]
-pub struct EffectDecl {
-    pub visibility: Visibility,
-    pub name: Symbol,
-    pub binders: Vec<TypeBinder>,
-    pub effects: Vec<EffectField>,
-}
 
 #[derive(Show)]
 pub struct ExtDecl {
@@ -498,7 +407,6 @@ pub enum TopLevel {
     Let(LetDecl),
     Type(TypeDecl),
     Module(ModuleDecl),
-    Effect(EffectDecl),
     External(ExtDecl),
 }
 
@@ -507,6 +415,5 @@ pub struct Program {
     pub lets: Vec<LetDecl>,
     pub types: Vec<TypeDecl>,
     pub modules: Vec<ModuleDecl>,
-    pub effects: Vec<EffectDecl>,
     pub externals: Vec<ExtDecl>,
 }
