@@ -86,7 +86,7 @@ impl Declare for TypeDecl {
             self.name.name.clone(),
             TypeData {
                 kind,
-                binders: names.into_iter().zip(binders.into_iter()).collect(),
+                binders: names.into_iter().zip(binders).collect(),
                 module: self.namespace.clone(),
                 def,
             },

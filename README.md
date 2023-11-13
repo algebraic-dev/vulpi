@@ -18,9 +18,9 @@
             - [x] Update
             - [x] Declaration
             - [x] Projection
-        - [x] Effects
-            - [x] Declaration
-            - [x] Handler
+        - [ ] Effects
+            - [ ] Declaration
+            - [ ] Handler
         - [ ] Traits
             - [ ] Implementation
             - [ ] Constraint Syntax

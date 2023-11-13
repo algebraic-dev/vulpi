@@ -19,15 +19,6 @@ pub struct PatApplication {
 }
 
 #[derive(Show, Clone)]
-pub struct PatEffectApp {
-    pub left_brace: Token,
-    pub func: Path<Lower>,
-    pub args: Vec<Box<Pattern>>,
-    pub right_brace: Token,
-    pub arrow: Option<(Token, Lower)>,
-}
-
-#[derive(Show, Clone)]
 pub enum PatternKind {
     Wildcard(Token),
     Constructor(Path<Upper>),

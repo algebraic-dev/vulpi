@@ -2,8 +2,8 @@
 
 #![allow(clippy::only_used_in_recursion)]
 
-use im_rc::HashSet;
-use vulpi_syntax::r#abstract::Qualified;
+
+
 
 use crate::{context::Context, errors::TypeErrorKind};
 

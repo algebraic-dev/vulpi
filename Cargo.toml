@@ -12,6 +12,7 @@ members = [
     "crates/vulpi-tests",
     "crates/vulpi-vfs",
     "crates/vulpi-resolver",
+    "crates/vulpi-typer",
     "crates/vulpi-cli",
 ]
 

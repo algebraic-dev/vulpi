@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
 use vulpi_macros::Show;
@@ -43,20 +43,6 @@ pub struct PatOr {
 pub struct PatApplication {
     pub func: Qualified,
     pub args: Vec<Pattern>,
-}
-
-#[derive(Show)]
-pub struct PatEffect {
-    pub func: Qualified,
-    pub args: Vec<Pattern>,
-    pub cont: Option<Symbol>,
-}
-
-pub enum PatEffectKind {
-    Effect(PatEffect),
-    Variable(Symbol),
-    Wildcard,
-    Error,
 }
 
 #[derive(Show, Clone, Debug)]
@@ -153,7 +139,6 @@ pub enum ExprKind<T> {
     Variable(Symbol),
     Constructor(Qualified, Qualified),
     Function(Qualified, T),
-    Effect(Qualified, Qualified),
 
     Projection(ProjectionExpr<T>),
     Let(LetExpr<T>),
@@ -195,7 +180,6 @@ pub struct ExternalDecl<T> {
 pub struct Program<T> {
     pub lets: HashMap<Qualified, LetDecl<T>>,
     pub types: HashMap<Qualified, TypeDecl>,
-    pub effects: HashMap<Qualified, Vec<Qualified>>,
     pub externals: HashMap<Qualified, ExternalDecl<T>>,
 }
 
@@ -204,7 +188,6 @@ impl<T> Default for Program<T> {
         Self {
             lets: HashMap::new(),
             types: HashMap::new(),
-            effects: HashMap::new(),
             externals: HashMap::new(),
         }
     }

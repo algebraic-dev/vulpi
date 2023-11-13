@@ -21,17 +21,14 @@ pub enum TypeErrorKind {
     WrongArity(usize, usize),
     NotAFunction(Env, Type<Real>),
     NotImplemented,
-    NotEffect,
     MissingLabel(Qualified),
     InvalidLabels(Vec<Qualified>),
-    EffectsNotAllowedInNormalPatterns,
     PatternsNotAllowedHere,
 
     DuplicatedField,
     NotFoundField,
     NotARecord,
     MissingField(Symbol),
-    AmbientDoesNotContainEffects(Env, Vec<Type<Real>>),
     NonExhaustive(Row<Pat>),
 }
 
@@ -75,7 +72,6 @@ impl IntoDiagnostic for TypeError {
             TypeErrorKind::MissingField(name) => {
                 Text::from(format!("missing field: {}", name.get()))
             }
-            TypeErrorKind::NotEffect => Text::from("not effect".to_string()),
             TypeErrorKind::MissingLabel(name) => {
                 Text::from(format!("missing label: {}", name.name.get()))
             }
@@ -87,23 +83,14 @@ impl IntoDiagnostic for TypeError {
                     .collect::<Vec<_>>()
                     .join(", ")
             )),
-            TypeErrorKind::EffectsNotAllowedInNormalPatterns => {
-                Text::from("effects are not allowed in normal patterns".to_string())
-            }
+
             TypeErrorKind::PatternsNotAllowedHere => {
                 Text::from("patterns are not allowed here".to_string())
             }
             TypeErrorKind::AtLeastOneArgument => {
                 Text::from("at least one argument is required".to_string())
             }
-            TypeErrorKind::AmbientDoesNotContainEffects(env, effects) => Text::from(format!(
-                "the ambient does not contain effects: {}",
-                effects
-                    .iter()
-                    .map(|effect| effect.show(env).to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
+
             TypeErrorKind::NonExhaustive(row) => {
                 Text::from(format!("non-exhaustive patterns: {}", row))
             }

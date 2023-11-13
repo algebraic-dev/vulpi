@@ -7,7 +7,7 @@ pub mod unify;
 
 use std::{cell::RefCell, hash::Hash, rc::Rc};
 
-use im_rc::HashSet;
+
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 
@@ -192,12 +192,12 @@ impl<S: State> Hole<S> {
 }
 
 pub mod r#virtual {
-    use std::{cell::RefCell, collections::HashMap};
+    use std::{cell::RefCell};
 
-    use im_rc::HashSet;
+    
     use vulpi_intern::Symbol;
     use vulpi_location::Span;
-    use vulpi_syntax::r#abstract::Qualified;
+    
 
     use super::{eval::Eval, real::Real, Hole, HoleInner, Kind, Level, State, Type, TypeKind};
 
@@ -380,7 +380,7 @@ pub mod real {
     use vulpi_intern::Symbol;
     use vulpi_show::Show as OShow;
 
-    use vulpi_syntax::r#abstract::Qualified;
+    
 
     use super::{
         eval::Quote, r#virtual::Env, Hole, HoleInner, Index, Level, State, Type, TypeKind,

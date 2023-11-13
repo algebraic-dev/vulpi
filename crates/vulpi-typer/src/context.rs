@@ -7,7 +7,6 @@ use crate::{
     module::Modules,
     r#type::{eval::Eval, r#virtual::Pi, Hole, State},
 };
-use im_rc::HashSet;
 use vulpi_intern::Symbol;
 use vulpi_report::{Diagnostic, Report};
 use vulpi_syntax::{elaborated, r#abstract::Qualified};
