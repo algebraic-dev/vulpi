@@ -9,7 +9,6 @@ use vulpi_location::FileId;
 
 pub mod path;
 
-
 #[derive(Debug)]
 pub enum Error {
     NotFound(PathBuf),

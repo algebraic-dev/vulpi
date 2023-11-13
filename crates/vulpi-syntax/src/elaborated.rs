@@ -23,13 +23,13 @@ pub struct LetStatement<T> {
 }
 
 #[derive(Show)]
-pub enum StatementKind<T> {
+pub enum SttmKind<T> {
     Let(LetStatement<T>),
     Expr(Expr<T>),
     Error,
 }
 
-pub type Statement<T> = StatementKind<T>;
+pub type Statement<T> = SttmKind<T>;
 
 pub type Block<T> = Vec<Statement<T>>;
 
@@ -175,7 +175,6 @@ pub type Expr<T> = Box<ExprKind<T>>;
 #[derive(Show)]
 pub struct LetDecl<T> {
     pub binders: Vec<(Pattern, T)>,
-    pub effects: HashSet<Qualified>,
     pub body: Vec<PatternArm<T>>,
 }
 

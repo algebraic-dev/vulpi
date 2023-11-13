@@ -258,17 +258,6 @@ pub struct RecordUpdate {
 }
 
 #[derive(Show)]
-pub struct HandlerExpr {
-    pub expr: Expr,
-    pub with: Expr,
-}
-
-#[derive(Show)]
-pub struct CasesExpr {
-    pub arms: Vec<PatternArm>,
-}
-
-#[derive(Show)]
 pub struct Tuple {
     pub exprs: Vec<Expr>,
 }
@@ -291,8 +280,6 @@ pub enum ExprKind {
     Annotation(AnnotationExpr),
     RecordInstance(RecordInstance),
     RecordUpdate(RecordUpdate),
-    Handler(HandlerExpr),
-    Cases(CasesExpr),
     Tuple(Tuple),
 
     Error,
@@ -348,7 +335,7 @@ pub struct Binder {
 pub struct LetDecl {
     pub span: Span,
     pub visibility: Visibility,
-    pub name: Symbol,
+    pub name: Qualified,
     pub binders: Vec<Binder>,
     pub ret: Option<Type>,
     pub body: Vec<PatternArm>,

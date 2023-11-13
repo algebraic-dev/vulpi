@@ -517,7 +517,10 @@ pub mod top_level {
                     .collect();
                 abs::LetDecl {
                     span,
-                    name,
+                    name: abs::Qualified {
+                        path: ctx.module.name().symbol(),
+                        name,
+                    },
                     visibility: decl.visibility.into(),
                     body: pattern::transform_let_mode(ctx, decl.body),
                     ret: decl
@@ -1185,11 +1188,4 @@ pub fn resolve(ctx: &Context, program: tree::Program) -> Solver<abs::Program> {
 
         program
     })
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn test_petgraph_acyclic() {}
 }
