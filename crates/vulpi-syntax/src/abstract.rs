@@ -321,7 +321,7 @@ impl ExprKind {
 
 pub type Expr = Box<Spanned<ExprKind>>;
 
-#[derive(Show, Clone)]
+#[derive(Show, Clone, PartialEq, Eq)]
 pub enum Visibility {
     Public,
     Super,
@@ -356,7 +356,7 @@ pub struct LetDecl {
 
 #[derive(Show)]
 pub struct Constructor {
-    pub name: Symbol,
+    pub name: Qualified,
     pub args: Vec<Type>,
     pub typ: Option<Type>,
 }
@@ -368,7 +368,7 @@ pub struct SumDecl {
 
 #[derive(Show)]
 pub struct RecordDecl {
-    pub fields: Vec<(Symbol, Type, Visibility)>,
+    pub fields: Vec<(Qualified, Type, Visibility)>,
 }
 
 #[derive(Show)]
@@ -382,7 +382,8 @@ pub enum TypeDef {
 #[derive(Show)]
 pub struct TypeDecl {
     pub visibility: Visibility,
-    pub name: Symbol,
+    pub name: Qualified,
+    pub namespace: Symbol,
     pub binders: Vec<TypeBinder>,
     pub def: TypeDef,
 }
@@ -397,8 +398,9 @@ pub struct ModuleDecl {
 
 #[derive(Show)]
 pub struct ExtDecl {
-    pub name: Symbol,
+    pub name: Qualified,
     pub visibility: Visibility,
+    pub namespace: Symbol,
     pub ty: Type,
     pub ret: Symbol,
 }

@@ -5,7 +5,7 @@ use crate::tokens::Token;
 
 use super::{Parenthesis, Upper};
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum KindType {
     Star(Token),
     Variable(Upper),

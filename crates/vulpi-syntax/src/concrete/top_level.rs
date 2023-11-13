@@ -17,7 +17,7 @@ use super::{
     Lower, Parenthesis, Path, Upper,
 };
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Binder {
     pub left_paren: Token,
     pub pattern: Box<Pattern>,
@@ -26,19 +26,19 @@ pub struct Binder {
     pub right_paren: Token,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct LetCase {
     pub pipe: Token,
     pub arm: PatternArm,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum LetMode {
     Body(Token, Box<Expr>),
     Cases(Vec<LetCase>),
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct LetDecl {
     pub visibility: Visibility,
     pub let_: Token,
@@ -48,7 +48,7 @@ pub struct LetDecl {
     pub body: LetMode,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Constructor {
     pub pipe: Token,
     pub name: Upper,
@@ -56,12 +56,12 @@ pub struct Constructor {
     pub typ: Option<(Token, Box<Type>)>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct SumDecl {
     pub constructors: Vec<Constructor>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Field {
     pub visibility: Visibility,
     pub name: Lower,
@@ -69,34 +69,34 @@ pub struct Field {
     pub ty: Box<Type>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct RecordDecl {
     pub left_brace: Token,
     pub fields: Vec<(Field, Option<Token>)>,
     pub right_brace: Token,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct ExplicitTypeBinder {
     pub name: Lower,
     pub colon: Token,
     pub kind: Box<Kind>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum TypeBinder {
     Implicit(Lower),
     Explicit(Parenthesis<ExplicitTypeBinder>),
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum TypeDef {
     Sum(SumDecl),
     Record(RecordDecl),
     Synonym(Box<Type>),
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct TypeDecl {
     pub visibility: Visibility,
     pub type_: Token,
@@ -105,13 +105,13 @@ pub struct TypeDecl {
     pub def: Option<(Token, TypeDef)>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct UseAlias {
     pub as_: Token,
     pub alias: Upper,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct UseDecl {
     pub visibility: Visibility,
     pub use_: Token,
@@ -119,7 +119,7 @@ pub struct UseDecl {
     pub alias: Option<UseAlias>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct ModuleInline {
     pub name: Upper,
     pub where_: Token,
@@ -146,7 +146,7 @@ impl ModuleInline {
     }
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct ModuleDecl {
     pub visibility: Visibility,
     pub mod_: Token,
@@ -172,7 +172,7 @@ impl ModuleDecl {
     }
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct ExtDecl {
     pub visibility: Visibility,
     pub external: Token,
@@ -183,7 +183,7 @@ pub struct ExtDecl {
     pub str: Token,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum TopLevel {
     Let(Box<LetDecl>),
     Type(Box<TypeDecl>),
@@ -193,7 +193,7 @@ pub enum TopLevel {
     External(Box<ExtDecl>),
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Program {
     pub top_levels: Vec<TopLevel>,
     pub eof: Token,

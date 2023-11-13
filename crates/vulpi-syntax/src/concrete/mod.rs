@@ -40,7 +40,7 @@ impl Upper {
     }
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Lower(pub Token);
 
 impl Lower {
@@ -49,13 +49,13 @@ impl Lower {
     }
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum Ident {
     Upper(Upper),
     Lower(Lower),
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Path<T> {
     pub segments: Vec<(Upper, Token)>,
     pub last: T,
@@ -112,7 +112,7 @@ impl Path<Ident> {
     }
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Parenthesis<T> {
     pub left: Token,
     pub data: T,

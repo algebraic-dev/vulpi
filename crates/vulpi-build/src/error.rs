@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 
 use vulpi_location::Span;
 use vulpi_report::IntoDiagnostic;
@@ -15,7 +14,7 @@ pub struct BuildError {
 impl IntoDiagnostic for BuildError {
     fn message(&self) -> vulpi_report::Text {
         match &self.kind {
-            BuildErrorKind::NotFound => format!("module not found").into(),
+            BuildErrorKind::NotFound => "module not found".to_string().into(),
         }
     }
 

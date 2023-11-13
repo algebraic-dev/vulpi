@@ -1,0 +1,10 @@
+use Yal.Prelude
+
+pub type Result ok err =
+    | Ok ok
+    | Err err
+
+let ata (b: Int) = 
+    when b is
+        e => e
+        f => f

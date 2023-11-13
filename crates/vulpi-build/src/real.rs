@@ -1,21 +1,27 @@
 use std::{collections::HashMap, fs, path::PathBuf};
 
 use filetime::FileTime;
+use vulpi_intern::Symbol;
 use vulpi_location::FileId;
+use vulpi_vfs::{Error, path::Path};
 
-use super::{Error, FileSystem};
+use super::FileSystem;
 
 pub struct RealFileSystem {
-    root: PathBuf,
+    project_root: PathBuf,
+    build_root: PathBuf,
+    root: Symbol,
     file_map: HashMap<FileId, (PathBuf, String)>,
     path_map: HashMap<PathBuf, FileId>,
     counter: usize,
 }
 
 impl RealFileSystem {
-    pub fn new(root: PathBuf) -> Self {
+    pub fn new(root: Symbol, project_root: PathBuf, build: PathBuf) -> Self {
         Self {
             root,
+            project_root,
+            build_root: build,
             file_map: HashMap::new(),
             path_map: HashMap::new(),
             counter: 0,
@@ -23,7 +29,7 @@ impl RealFileSystem {
     }
 
     pub fn get_path(&self, path: PathBuf) -> Result<PathBuf, Error> {
-        let path = &self.root.clone().join(path);
+        let path = &self.project_root.clone().join(path);
         path.canonicalize()
             .map_err(|_| Error::NotFound(path.clone()))
     }
@@ -58,10 +64,8 @@ impl FileSystem for RealFileSystem {
         Ok(())
     }
 
-    fn store(&mut self, id: FileId, content: String) -> Result<(), Error> {
-        let file = self.file_map.get_mut(&id).ok_or(Error::NotFoundId)?;
-        *file = (file.0.clone(), content);
-        Ok(())
+    fn store(&mut self, _id: FileId, _content: String) -> Result<(), Error> {
+        todo!()
     }
 
     fn read(&self, id: FileId) -> Result<String, Error> {
@@ -112,5 +116,17 @@ impl FileSystem for RealFileSystem {
         let metadata = fs::metadata(path.clone()).map_err(|_| Error::NotFound(path.clone()))?;
 
         Ok(FileTime::from_last_modification_time(&metadata))
+    }
+
+    fn from_cached_path(&self, path: Path) -> Self::Path {
+        path.to_pathbuf(self.build_root.clone())
+    }
+
+    fn from_src_path(&self, path: Path) -> Self::Path {
+        if self.root == path.segments[0] {
+            path.shift().to_pathbuf(self.project_root.clone())
+        } else {
+            todo!()
+        }
     }
 }

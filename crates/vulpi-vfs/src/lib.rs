@@ -3,11 +3,12 @@
 
 use std::path::PathBuf;
 
+pub use path::Path;
 use filetime::FileTime;
 use vulpi_location::FileId;
 
-pub mod real;
 pub mod path;
+
 
 #[derive(Debug)]
 pub enum Error {
@@ -33,4 +34,7 @@ pub trait FileSystem {
     fn delete(&mut self, id: FileId) -> Result<(), Error>;
 
     fn modification_time(&self, id: Self::Path) -> Result<FileTime, Error>;
+
+    fn from_cached_path(&self, path: Path) -> Self::Path;
+    fn from_src_path(&self, path: Path) -> Self::Path;
 }

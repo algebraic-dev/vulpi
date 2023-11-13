@@ -3,6 +3,6 @@
 
 use vulpi_tests::test;
 
-test!("/suite", |file_name| {
+test!("/suite", |_file_name| {
     todo!()
 });

@@ -1,0 +1,13 @@
+pub type Int
+pub type String
+
+pub type Unit =
+    | Unit
+
+pub type Bool =
+    | True
+    | False
+
+pub type Result ok err =
+    | Ok ok
+    | Err err

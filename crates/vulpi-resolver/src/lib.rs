@@ -1,24 +1,24 @@
 //! The resolver is responsible for taking a single concrete tree and turn it into an abstract
 //! syntax tree with all the names resolved.
 
-use std::cell::Ref;
+use std::cell::{Ref, RefMut};
 use std::{cell::RefCell, rc::Rc};
 
 use im_rc::HashMap;
-use petgraph::data::Build;
-use petgraph::prelude::{DiGraph, UnGraph};
+use petgraph::prelude::DiGraph;
 use petgraph::stable_graph::NodeIndex;
-use petgraph::{algo, visit};
+
 use vulpi_intern::Symbol;
 
-use vulpi_location::Spanned;
+use vulpi_location::{Span, Spanned};
 use vulpi_report::{Diagnostic, Report};
 use vulpi_syntax::concrete::tree::LetMode;
 use vulpi_syntax::concrete::{self, tree};
 use vulpi_syntax::r#abstract as abs;
 use vulpi_syntax::r#abstract::Visibility;
-use vulpi_vfs::path::{Qualified, Path};
+use vulpi_vfs::path::{Path, Qualified};
 
+pub mod dependencies;
 mod error;
 
 pub enum Either<L, R> {
@@ -30,23 +30,19 @@ pub struct Crate {
     pub name: Symbol,
 }
 
+/// Definition kind is the kind of a definition. It is used to store the definitions in the
+/// namespace.
 #[derive(Clone, Copy)]
 pub enum DefinitionKind {
     Type,
     Value,
-    Module,
 }
 
-pub enum ScopeKind {
-    Module,
-    Local,
-}
-
+/// Definition bag is a bag of definitions. It is used to store the definitions of a module.
 #[derive(Default, Clone)]
 pub struct Bag<V> {
     pub types: V,
     pub values: V,
-    pub modules: V,
 }
 
 impl<V> Bag<V> {
@@ -54,183 +50,102 @@ impl<V> Bag<V> {
         match definition {
             DefinitionKind::Type => f(&self.types),
             DefinitionKind::Value => f(&self.values),
-            DefinitionKind::Module => f(&self.modules),
         }
     }
 }
 
+pub type Alias = (Qualified, abs::Visibility);
+
+/// Namespace of a module.
 pub struct Namespace {
     name: Path,
-
     declared: Bag<HashMap<Symbol, abs::Visibility>>,
-    aliases: Bag<HashMap<Symbol, (Qualified, abs::Visibility)>>,
-
+    aliases: Bag<HashMap<Symbol, Alias>>,
+    modules: HashMap<Symbol, (Path, abs::Visibility)>,
     submodules: HashMap<Symbol, Module>,
-
-    pub available: HashMap<Path, Module>,
-    pub opened: Vec<Module>,
+    available: HashMap<Path, Module>,
+    opened: HashMap<Path, Visibility>,
 }
 
+pub fn from_upper_path(path: &concrete::Path<concrete::Upper>) -> Path {
+    let mut path_result = Path { segments: vec![] };
+
+    for segment in &path.segments {
+        path_result.segments.push(segment.0.symbol());
+    }
+
+    path_result.segments.push(path.last.symbol());
+
+    path_result
+}
+
+pub fn from_lower_path(path: &concrete::Path<concrete::Lower>) -> Qualified {
+    let mut path_result = Path { segments: vec![] };
+
+    for segment in &path.segments {
+        path_result.segments.push(segment.0.symbol());
+    }
+
+    Qualified {
+        path: path_result,
+        name: path.last.symbol(),
+    }
+}
+
+pub fn from_constructor_upper_path(path: &concrete::Path<concrete::Upper>) -> Qualified {
+    let mut path_result = Path { segments: vec![] };
+
+    for segment in &path.segments {
+        path_result.segments.push(segment.0.symbol());
+    }
+
+    Qualified {
+        path: path_result,
+        name: path.last.symbol(),
+    }
+}
+
+/// Module is a wrapper around the namespace. It is used to make the namespace mutable, and to
+/// be easy to clone.
 #[derive(Clone)]
 pub struct Module(Rc<RefCell<Namespace>>);
 
+/// Getters for the namespace.
 impl Module {
-    fn search_declared(&self, kind: DefinitionKind, name: Symbol) -> Option<abs::Visibility> {
-        self.borrow()
-            .declared
-            .apply(kind, |declared| declared.get(&name).cloned())
+    pub fn add_available(&self, path: Path, module: Module) {
+        self.borrow_mut().available.insert(path, module);
     }
 
-    fn search_aliases(
-        &self,
-        kind: DefinitionKind,
-        name: Symbol,
-    ) -> Option<(Qualified, abs::Visibility)> {
-        self.borrow()
-            .aliases
-            .apply(kind, |aliases| aliases.get(&name).cloned())
+    pub fn modules(&self) -> RefMut<'_, HashMap<Symbol, (Path, abs::Visibility)>> {
+        std::cell::RefMut::map(self.borrow_mut(), |this| &mut this.modules)
     }
 
-    fn search_recursively(
-        &self,
-        kind: DefinitionKind,
-        name: Symbol,
-        last: NodeIndex<u32>,
-        breadcrumbs: &mut DiGraph<Qualified, ()>,
-    ) -> Result<Option<Path>, Diagnostic> {
-        let actual = breadcrumbs.add_node(Qualified {
-            path: self.borrow().name.clone(),
-            name: name.clone(),
-        });
-
-        breadcrumbs.add_edge(last, actual, ());
-
-        if petgraph::algo::is_cyclic_undirected(&*breadcrumbs) {
-            return Err(Diagnostic::new(error::ResolverError {
-                span: Default::default(),
-                kind: error::ResolverErrorKind::CyclicImport,
-            }));
-        }
-
-        if let Some(visibility) = self.search_declared(kind, name.clone()) {
-            if let abs::Visibility::Private = visibility {
-                return Err(Diagnostic::new(error::ResolverError {
-                    span: Default::default(),
-                    kind: error::ResolverErrorKind::PrivateDefinition,
-                }));
-            }
-
-            return Ok(Some(self.borrow().name.clone()));
-        }
-
-        if let Some((qualified, visibility)) = self.search_aliases(kind, name.clone()) {
-            if let abs::Visibility::Private = visibility {
-                return Err(Diagnostic::new(error::ResolverError {
-                    span: Default::default(),
-                    kind: error::ResolverErrorKind::PrivateDefinition,
-                }));
-            }
-
-            let path = if let Some(path) = { self.borrow().available.get(&qualified.path) } {
-                path.clone()
-            } else {
-                return Err(Diagnostic::new(error::ResolverError {
-                    span: Default::default(),
-                    kind: error::ResolverErrorKind::InvalidPath(qualified.path.segments.clone()),
-                }));
-            };
-
-            return path.search_recursively(kind, qualified.name.clone(), last, breadcrumbs);
-        }
-
-        for module in &self.borrow().opened {
-            if let Some(path) = module.search_recursively(kind, name.clone(), last, breadcrumbs)? {
-                return Ok(Some(path));
-            }
-        }
-
-        Ok(None)
+    pub fn name(&self) -> Ref<'_, Path> {
+        std::cell::Ref::map(self.borrow(), |this| &this.name)
     }
 
-    pub fn search(&self, kind: DefinitionKind, name: Symbol) -> Result<Option<Path>, Diagnostic> {
-        let mut graph = DiGraph::new();
-        
-        let fst = graph.add_node(Qualified {
-            path: self.borrow().name.clone(),
-            name: name.clone(),
-        });
-
-        if self.search_declared(kind, name.clone()).is_some() {
-            return Ok(Some(self.borrow().name.clone()));
-        }
-
-        if let Some((qualified, _)) = self.search_aliases(kind, name.clone()) {
-            let borrow = self.borrow();
-            
-            let path = if let Some(path) = borrow.available.get(&qualified.path) {
-                path
-            } else {
-                return Err(Diagnostic::new(error::ResolverError {
-                    span: Default::default(),
-                    kind: error::ResolverErrorKind::InvalidPath(qualified.path.segments.clone()),
-                }));
-            };
-
-            return path.search_recursively(kind, qualified.name, fst, &mut graph);
-        }
-
-        for module in &self.borrow().opened {
-            if let Some(path) = module.search_recursively(kind, name.clone(), fst, &mut graph)? {
-                return Ok(Some(path));
-            }
-        }
-
-        Ok(None)
-    }
-}
-#[derive(Clone)]
-pub struct Context {
-    module: Module,
-    scope: RefCell<Bag<im_rc::HashSet<Symbol>>>,
-    report: Report,
-}
-
-impl Context {
-    pub fn fork(&self, name: Symbol) -> Context {
-        let module = self.module.fork(name);
-        let scope = Default::default();
-
-        Context {
-            module,
-            scope,
-            report: self.report.clone(),
-        }
+    fn declared(&self) -> Ref<'_, Bag<HashMap<Symbol, abs::Visibility>>> {
+        std::cell::Ref::map(self.borrow(), |this| &this.declared)
     }
 
-    pub fn scoped<T>(&self, fun: impl FnOnce(&mut Context) -> T) -> T {
-        let mut ctx = self.clone();
-        fun(&mut ctx)
+    fn aliases(&self) -> Ref<'_, Bag<HashMap<Symbol, Alias>>> {
+        std::cell::Ref::map(self.borrow(), |this| &this.aliases)
     }
 
-    pub fn with(&self, kind: DefinitionKind, name: Symbol) {
-        match kind {
-            DefinitionKind::Type => self.scope.borrow_mut().types.insert(name),
-            DefinitionKind::Value => self.scope.borrow_mut().values.insert(name),
-            DefinitionKind::Module => self.scope.borrow_mut().modules.insert(name),
-        };
+    fn available(&self) -> Ref<'_, HashMap<Path, Module>> {
+        std::cell::Ref::map(self.borrow(), |this| &this.available)
     }
 
-    pub fn declared(&self, kind: DefinitionKind, name: Symbol) -> Option<abs::Visibility> {
-        let bag = &self.module.borrow().declared;
+    fn opened(&self) -> Ref<'_, HashMap<Path, abs::Visibility>> {
+        std::cell::Ref::map(self.borrow(), |this| &this.opened)
+    }
 
-        match kind {
-            DefinitionKind::Type => bag.types.get(&name).cloned(),
-            DefinitionKind::Value => bag.values.get(&name).cloned(),
-            DefinitionKind::Module => bag.modules.get(&name).cloned(),
-        }
+    fn opened_mut(&self) -> RefMut<'_, HashMap<Path, abs::Visibility>> {
+        std::cell::RefMut::map(self.borrow_mut(), |this| &mut this.opened)
     }
 }
 
+/// Utility functions for the namespace.
 impl Module {
     pub fn new(name: Path) -> Module {
         Module(Rc::new(RefCell::new(Namespace {
@@ -240,11 +155,10 @@ impl Module {
             submodules: Default::default(),
             available: Default::default(),
             opened: Default::default(),
+            modules: Default::default(),
         })))
     }
-}
 
-impl Module {
     pub fn borrow(&self) -> Ref<Namespace> {
         self.0.borrow()
     }
@@ -261,7 +175,6 @@ impl Module {
         match kind {
             DefinitionKind::Type => bag.types.insert(name, vis.into()),
             DefinitionKind::Value => bag.values.insert(name, vis.into()),
-            DefinitionKind::Module => bag.modules.insert(name, vis.into()),
         };
     }
 
@@ -273,6 +186,275 @@ impl Module {
             .entry(name.clone())
             .or_insert_with(|| Module::new(path.with(name)))
             .clone()
+    }
+}
+
+impl Module {
+    fn search_declared(&self, kind: DefinitionKind, name: Symbol) -> Option<abs::Visibility> {
+        self.declared()
+            .apply(kind, |declared| declared.get(&name).cloned())
+    }
+
+    fn search_aliases(&self, kind: DefinitionKind, name: Symbol) -> Option<Alias> {
+        self.aliases()
+            .apply(kind, |aliases| aliases.get(&name).cloned())
+    }
+
+    /// Search recursively for a definition in the module. It will return the path of the
+    /// definition if it is found.
+    ///
+    /// The `last` parameter is the exclude list, it is used to avoid cyclic imports.
+    fn search_recursively(
+        &self,
+        kind: DefinitionKind,
+        name: Symbol,
+        last: NodeIndex<u32>,
+        nodes: &mut HashMap<Qualified, NodeIndex<u32>>,
+        graph: &mut DiGraph<Qualified, ()>,
+    ) -> Result<Option<Qualified>, Diagnostic> {
+        let qualified = Qualified {
+            path: self.name().clone(),
+            name: name.clone(),
+        };
+
+        let actual = nodes
+            .entry(qualified.clone())
+            .or_insert_with(|| graph.add_node(qualified.clone()));
+
+        graph.add_edge(last, *actual, ());
+
+        if petgraph::algo::is_cyclic_undirected(&*graph) {
+            return Ok(None);
+        }
+
+        if let Some(visibility) = self.search_declared(kind, name.clone()) {
+            if let abs::Visibility::Private = visibility {
+                return Err(Diagnostic::new(error::ResolverError {
+                    span: Default::default(),
+                    kind: error::ResolverErrorKind::PrivateDefinition,
+                }));
+            }
+
+            return Ok(Some(qualified.clone()));
+        }
+
+        if let Some((qualified, visibility)) = self.search_aliases(kind, name.clone()) {
+            if let abs::Visibility::Private = visibility {
+                return Err(Diagnostic::new(error::ResolverError {
+                    span: Default::default(),
+                    kind: error::ResolverErrorKind::PrivateDefinition,
+                }));
+            }
+
+            let available = self.available();
+            let path = available.get(&qualified.path).cloned().ok_or_else(|| {
+                Diagnostic::new(error::ResolverError {
+                    span: Default::default(),
+                    kind: error::ResolverErrorKind::InvalidPath(qualified.path.segments.clone()),
+                })
+            })?;
+
+            return path.search_recursively(kind, qualified.name.clone(), last, nodes, graph);
+        }
+
+        for (path, visibility) in self.opened().iter() {
+            let module = self.available().get(path).cloned();
+
+            if module.is_none() || visibility == &abs::Visibility::Private {
+                continue;
+            }
+
+            if let Some(path) = module.unwrap().search_recursively(
+                kind,
+                name.clone(),
+                last,
+                &mut nodes.clone(),
+                &mut graph.clone(),
+            )? {
+                return Ok(Some(path));
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn search(
+        &self,
+        kind: DefinitionKind,
+        name: Symbol,
+    ) -> Result<Option<Qualified>, Diagnostic> {
+        let mut graph = DiGraph::new();
+        let mut map = HashMap::default();
+
+        let qualified = Qualified {
+            path: self.borrow().name.clone(),
+            name: name.clone(),
+        };
+
+        let fst = graph.add_node(qualified.clone());
+        map.insert(qualified.clone(), fst);
+
+        if self.search_declared(kind, name.clone()).is_some() {
+            return Ok(Some(qualified));
+        }
+
+        if let Some((qualified, _)) = self.search_aliases(kind, name.clone()) {
+            let available = self.available();
+            let path = available.get(&qualified.path).ok_or_else(|| {
+                Diagnostic::new(error::ResolverError {
+                    span: Default::default(),
+                    kind: error::ResolverErrorKind::InvalidPath(qualified.path.segments.clone()),
+                })
+            })?;
+
+            return path.search_recursively(kind, qualified.name, fst, &mut map, &mut graph);
+        }
+
+        for (path, _) in self.opened().iter() {
+            let module = self.available().get(path).cloned();
+
+            if module.is_none() {
+                continue;
+            }
+
+            if let Some(path) = module.unwrap().search_recursively(
+                kind,
+                name.clone(),
+                fst,
+                &mut map.clone(),
+                &mut graph.clone(),
+            )? {
+                return Ok(Some(path));
+            }
+        }
+
+        Ok(None)
+    }
+}
+
+/// The local context of the resolver. It contains the current module, the current scope, and the
+/// report.
+#[derive(Clone)]
+pub struct Context {
+    pub module: Module,
+    scope: RefCell<Bag<im_rc::HashSet<Symbol>>>,
+    reporter: Report,
+}
+
+impl Context {
+    pub fn new(name: Path, report: Report) -> Context {
+        Context {
+            module: Module::new(name),
+            scope: Default::default(),
+            reporter: report,
+        }
+    }
+
+    pub fn search(&self, kind: DefinitionKind, span: Span, name: Symbol) -> Option<abs::Qualified> {
+        let searched = self.module.search(kind, name.clone());
+
+        match searched {
+            Ok(Some(res)) => Some(abs::Qualified {
+                path: res.path.symbol(),
+                name: res.name,
+            }),
+            Ok(None) => {
+                self.reporter.report(Diagnostic::new(error::ResolverError {
+                    span: span.clone(),
+                    kind: error::ResolverErrorKind::NotFound(name),
+                }));
+                None
+            }
+            Err(err) => {
+                self.reporter.report(err);
+                None
+            }
+        }
+    }
+
+    pub fn resolve(
+        &self,
+        kind: DefinitionKind,
+        span: Span,
+        mut path: Qualified,
+    ) -> Option<abs::Qualified> {
+        if let Some((alias, _)) = self.module.modules().get(&path.path.symbol()) {
+            path.path = alias.clone();
+        }
+
+        let module = if path.path.is_empty() {
+            self.module.clone()        
+        } else if let Some(module) = self.module.available().get(&path.path).cloned() {
+            module
+        } else {
+            self.reporter.report(Diagnostic::new(error::ResolverError {
+                span: span.clone(),
+                kind: error::ResolverErrorKind::InvalidPath(path.path.segments.clone()),
+            }));
+            return None;
+        };
+
+        let searched = module.search(kind, path.name.clone());
+
+        match searched {
+            Ok(Some(res)) => Some(abs::Qualified {
+                path: res.path.symbol(),
+                name: res.name,
+            }),
+            Ok(None) => {
+                self.reporter.report(Diagnostic::new(error::ResolverError {
+                    span: span.clone(),
+                    kind: error::ResolverErrorKind::NotFound(path.name),
+                }));
+                None
+            }
+            Err(err) => {
+                self.reporter.report(err);
+                None
+            }
+        }
+    }
+
+    /// Creates a nested context.
+    pub fn fork(&self, name: Symbol) -> Context {
+        let module = self.module.fork(name);
+        let scope = Default::default();
+
+        Context {
+            module,
+            scope,
+            reporter: self.reporter.clone(),
+        }
+    }
+
+    pub fn scoped<T>(&self, fun: impl FnOnce(&mut Context) -> T) -> T {
+        let mut ctx = self.clone();
+        fun(&mut ctx)
+    }
+
+    pub fn with(&self, kind: DefinitionKind, name: Symbol) {
+        match kind {
+            DefinitionKind::Type => self.scope.borrow_mut().types.insert(name),
+            DefinitionKind::Value => self.scope.borrow_mut().values.insert(name),
+        };
+    }
+
+    pub fn in_scope(&self, kind: DefinitionKind, name: Symbol) -> bool {
+        let bag = &self.scope.borrow_mut();
+
+        match kind {
+            DefinitionKind::Type => bag.types.contains(&name),
+            DefinitionKind::Value => bag.values.contains(&name),
+        }
+    }
+
+    pub fn declared(&self, kind: DefinitionKind, name: Symbol) -> Option<abs::Visibility> {
+        let bag = &self.module.borrow().declared;
+
+        match kind {
+            DefinitionKind::Type => bag.types.get(&name).cloned(),
+            DefinitionKind::Value => bag.values.get(&name).cloned(),
+        }
     }
 }
 
@@ -326,19 +508,24 @@ pub mod top_level {
         ctx.module
             .define(DefinitionKind::Value, decl.visibility.clone(), name.clone());
 
-        Solver::new(move |module| abs::LetDecl {
-            span,
-            name,
-            visibility: decl.visibility.into(),
-            body: pattern::transform_let_mode(&module, decl.body),
-            ret: decl
-                .ret
-                .map(|(_, type_kind)| transform_type(&module, *type_kind)),
-            binders: decl
-                .binders
-                .into_iter()
-                .map(|x| transform_binder(&module, x))
-                .collect(),
+        Solver::new(move |ctx| {
+            ctx.scoped(|ctx| {
+                let binders = decl
+                    .binders
+                    .into_iter()
+                    .map(|x| transform_binder(ctx, x))
+                    .collect();
+                abs::LetDecl {
+                    span,
+                    name,
+                    visibility: decl.visibility.into(),
+                    body: pattern::transform_let_mode(ctx, decl.body),
+                    ret: decl
+                        .ret
+                        .map(|(_, type_kind)| transform_type(ctx, *type_kind)),
+                    binders,
+                }
+            })
         })
     }
 
@@ -365,69 +552,101 @@ pub mod top_level {
                     submodule.define(DefinitionKind::Value, Visibility::Public, name);
                 }
             }
-            Some((_, tree::TypeDef::Synonym(synonym))) => todo!(),
+            Some((_, tree::TypeDef::Synonym(_synonym))) => todo!(),
         }
 
-        Solver::new(move |module| {
-            let def = match decl.def {
-                None => abs::TypeDef::Abstract,
-                Some((_, tree::TypeDef::Record(record))) => {
-                    let fields = record
-                        .fields
-                        .into_iter()
-                        .map(|(field, _)| {
-                            let symbol = field.name.symbol();
-                            let transform_type = transform_type(&module, *field.ty);
-                            let into = field.visibility.into();
-                            (symbol, transform_type, into)
-                        })
-                        .collect();
+        let namespace = submodule.name().clone();
 
-                    abs::TypeDef::Record(abs::RecordDecl { fields })
-                }
-                Some((_, tree::TypeDef::Sum(sum))) => {
-                    let constructors = sum
-                        .constructors
-                        .into_iter()
-                        .map(|cons| {
-                            let name = cons.name.symbol();
-                            let args = cons
-                                .args
-                                .into_iter()
-                                .map(|x| transform_type(&module, *x))
-                                .collect();
-                            let typ = cons.typ.map(|x| transform_type(&module, *x.1));
-                            abs::Constructor { name, args, typ }
-                        })
-                        .collect();
-
-                    abs::TypeDef::Sum(abs::SumDecl { constructors })
-                }
-                Some((_, tree::TypeDef::Synonym(synonym))) => todo!(),
-            };
-
-            abs::TypeDecl {
-                name,
-                visibility: decl.visibility.into(),
-                binders: decl
+        Solver::new(move |ctx| {
+            ctx.scoped(|ctx| {
+                let binders = decl
                     .binders
                     .into_iter()
-                    .map(|x| transform_type_binder(&module, x))
-                    .collect(),
-                def,
-            }
+                    .map(|x| transform_type_binder(ctx, x))
+                    .collect::<Vec<_>>();
+
+                for binder in &binders {
+                    match binder {
+                        abs::TypeBinder::Implicit(x) => ctx.with(DefinitionKind::Type, x.clone()),
+                        abs::TypeBinder::Explicit(x, _) => {
+                            ctx.with(DefinitionKind::Type, x.clone())
+                        }
+                    }
+                }
+
+                let def = match decl.def {
+                    None => abs::TypeDef::Abstract,
+                    Some((_, tree::TypeDef::Record(record))) => {
+                        let fields = record
+                            .fields
+                            .into_iter()
+                            .map(|(field, _)| {
+                                let symbol = field.name.symbol();
+                                let transform_type = transform_type(ctx, *field.ty);
+                                let into = field.visibility.into();
+                                (abs::Qualified {
+                                    path: namespace.clone().symbol(),
+                                    name: symbol,
+                                }, transform_type, into)
+                            })
+                            .collect();
+
+                        abs::TypeDef::Record(abs::RecordDecl { fields })
+                    }
+                    Some((_, tree::TypeDef::Sum(sum))) => {
+                        let constructors = sum
+                            .constructors
+                            .into_iter()
+                            .map(|cons| {
+                                let name = cons.name.symbol();
+                                let args = cons
+                                    .args
+                                    .into_iter()
+                                    .map(|x| transform_type(ctx, *x))
+                                    .collect();
+                                let typ = cons.typ.map(|x| transform_type(ctx, *x.1));
+                                abs::Constructor { name: abs::Qualified {
+                                    path: namespace.clone().symbol(),
+                                    name,
+                                }, args, typ }
+                            })
+                            .collect();
+
+                        abs::TypeDef::Sum(abs::SumDecl { constructors })
+                    }
+                    Some((_, tree::TypeDef::Synonym(_synonym))) => todo!(),
+                };
+
+                abs::TypeDecl {
+                    name: abs::Qualified {
+                        path: ctx.module.name().symbol(),
+                        name,
+                    },
+                    namespace: namespace.symbol(),
+                    visibility: decl.visibility.into(),
+                    binders,
+                    def,
+                }
+            })
         })
     }
 
     /// Resolve an external declaration and returns the solver for it.
     pub fn resolve_external(ctx: Context, decl: tree::ExtDecl) -> Solver<abs::ExtDecl> {
         let name = decl.name.symbol();
+        let visibility = decl.visibility.clone();
 
         ctx.module
-            .define(DefinitionKind::Value, decl.visibility.clone(), name.clone());
+            .define(DefinitionKind::Value, visibility, name.clone());
+
+        let namespace = ctx.module.name().clone();
 
         Solver::new(move |module| abs::ExtDecl {
-            name,
+            name: abs::Qualified {
+                path: namespace.clone().symbol(),
+                name,
+            },
+            namespace: namespace.symbol(),
             visibility: decl.visibility.into(),
             ty: transform_type(&module, *decl.typ),
             ret: decl.str.symbol(),
@@ -464,12 +683,6 @@ pub mod top_level {
             })
         }
 
-        ctx.module.define(
-            DefinitionKind::Module,
-            decl.visibility.clone(),
-            decl.name.symbol(),
-        );
-
         let new_context = ctx.fork(decl.name.symbol());
         let solver = decl
             .part
@@ -482,11 +695,22 @@ pub mod top_level {
         })
     }
 
-    pub fn declare_use(module: Context, _decl: tree::UseDecl) {}
+    pub fn declare_use(ctx: Context, decl: tree::UseDecl) {
+        if let Some(alias) = decl.alias {
+            ctx.module.modules().insert(
+                alias.alias.symbol(),
+                (from_upper_path(&decl.path), decl.visibility.clone().into()),
+            );
+        } else {
+            ctx.module
+                .opened_mut()
+                .insert(from_upper_path(&decl.path), decl.visibility.clone().into());
+        }
+    }
 }
 
-pub fn transform_literal(lit: tree::Literal) -> abs::Literal {
-    let data = match lit.data {
+pub fn transform_literal(literal: tree::Literal) -> abs::Literal {
+    let data = match literal.data {
         tree::LiteralKind::String(x) => abs::LiteralKind::String(x.symbol()),
         tree::LiteralKind::Char(x) => abs::LiteralKind::Char(x.symbol()),
         tree::LiteralKind::Integer(x) => abs::LiteralKind::Integer(x.symbol()),
@@ -496,7 +720,7 @@ pub fn transform_literal(lit: tree::Literal) -> abs::Literal {
 
     Box::new(Spanned {
         data,
-        span: lit.span.clone(),
+        span: literal.span.clone(),
     })
 }
 
@@ -514,10 +738,23 @@ pub mod pattern {
     ) -> abs::Pattern {
         let data = match pattern.data {
             tree::PatternKind::Wildcard(_) => abs::PatternKind::Wildcard,
-            tree::PatternKind::Constructor(_) => todo!(),
+            tree::PatternKind::Constructor(x) => {
+                let func = ctx.resolve(
+                    DefinitionKind::Value,
+                    pattern.span.clone(),
+                    from_constructor_upper_path(&x),
+                );
+                match func {
+                    Some(res) => abs::PatternKind::Application(abs::PatApplication {
+                        func: res,
+                        args: vec![],
+                    }),
+                    None => abs::PatternKind::Error,
+                }
+            }
             tree::PatternKind::Variable(x) => {
                 if vars.contains(&x.symbol()) {
-                    ctx.report.report(Diagnostic::new(error::ResolverError {
+                    ctx.reporter.report(Diagnostic::new(error::ResolverError {
                         span: pattern.span.clone(),
                         kind: error::ResolverErrorKind::DuplicatePattern(x.symbol()),
                     }));
@@ -546,7 +783,11 @@ pub mod pattern {
                 abs::PatternKind::Tuple(tuple)
             }
             tree::PatternKind::Application(app) => {
-                let func = todo!();
+                let func = ctx.resolve(
+                    DefinitionKind::Value,
+                    pattern.span.clone(),
+                    from_constructor_upper_path(&app.func),
+                );
 
                 let args = app
                     .args
@@ -554,7 +795,10 @@ pub mod pattern {
                     .map(|x| transform_pat(ctx, *x, vars))
                     .collect();
 
-                abs::PatternKind::Application(abs::PatApplication { func, args })
+                match func {
+                    Some(func) => abs::PatternKind::Application(abs::PatApplication { func, args }),
+                    None => abs::PatternKind::Error,
+                }
             }
             tree::PatternKind::Parenthesis(x) => {
                 return transform_pat(ctx, *x.data, vars);
@@ -597,7 +841,7 @@ pub mod pattern {
 
     /// Transform a pattern into an abstract pattern.
     pub fn transform_pattern_arm(ctx: &Context, arm: tree::PatternArm) -> abs::PatternArm {
-        abs::PatternArm {
+        ctx.scoped(|ctx| abs::PatternArm {
             patterns: arm
                 .patterns
                 .into_iter()
@@ -605,7 +849,7 @@ pub mod pattern {
                 .collect(),
             expr: expr::transform(ctx, *arm.expr),
             guard: arm.guard.map(|x| expr::transform(ctx, *x.1)),
-        }
+        })
     }
 
     /// Transform a let mode into a list of pattern arms.
@@ -630,87 +874,135 @@ pub mod pattern {
 pub mod expr {
     use super::*;
 
+    /// Transforms an expression into an abstract expression.
     pub fn transform(ctx: &Context, expr: concrete::tree::Expr) -> abs::Expr {
+        use tree::ExprKind::*;
+
         let data = match expr.data {
-            tree::ExprKind::Lambda(lam) => {
-                let pats: Vec<_> = pattern::transform_row(ctx, lam.patterns);
+            Lambda(lam) => {
+                return ctx.scoped(|ctx| {
+                    let pats: Vec<_> = pattern::transform_row(ctx, lam.patterns);
 
-                let body = transform(ctx, *lam.expr);
+                    let body = transform(ctx, *lam.expr);
 
-                return pats.into_iter().rev().fold(body, |body, param| {
-                    Box::new(Spanned {
-                        data: abs::ExprKind::Lambda(abs::LambdaExpr { param, body }),
-                        span: expr.span.clone(),
+                    pats.into_iter().rev().fold(body, |body, param| {
+                        Box::new(Spanned {
+                            data: abs::ExprKind::Lambda(abs::LambdaExpr { param, body }),
+                            span: expr.span.clone(),
+                        })
                     })
                 });
             }
-            tree::ExprKind::Application(app) => {
-                let func = transform(ctx, *app.func);
-                let args = app.args.into_iter().map(|x| transform(ctx, *x)).collect();
+            Application(app) => abs::ExprKind::Application(abs::ApplicationExpr {
+                app: abs::AppKind::Normal,
+                func: expr::transform(ctx, *app.func),
+                args: app
+                    .args
+                    .into_iter()
+                    .map(|expr| transform(ctx, *expr))
+                    .collect(),
+            }),
 
-                abs::ExprKind::Application(abs::ApplicationExpr {
-                    app: abs::AppKind::Normal,
-                    func,
-                    args,
+            Variable(x) => {
+                if ctx.in_scope(DefinitionKind::Value, x.symbol()) {
+                    abs::ExprKind::Variable(x.symbol())
+                } else {
+                    let searched = ctx.search(DefinitionKind::Value, expr.span.clone(), x.symbol());
+                    match searched {
+                        Some(res) => abs::ExprKind::Function(res),
+                        None => abs::ExprKind::Error,
+                    }
+                }
+            }
+            Constructor(x) => {
+                match ctx.resolve(
+                    DefinitionKind::Value,
+                    expr.span.clone(),
+                    from_constructor_upper_path(&x),
+                ) {
+                    Some(res) => abs::ExprKind::Constructor(res),
+                    None => abs::ExprKind::Error,
+                }
+            }
+            Function(path) => {
+                let qualified = from_lower_path(&path);
+                let searched = ctx.resolve(DefinitionKind::Value, expr.span.clone(), qualified);
+                match searched {
+                    Some(res) => abs::ExprKind::Function(res),
+                    None => abs::ExprKind::Error,
+                }
+            }
+
+            Projection(projection) => abs::ExprKind::Projection(abs::ProjectionExpr {
+                expr: transform(ctx, *projection.expr),
+                field: projection.field.symbol(),
+            }),
+            Binary(_) => todo!(),
+            Let(let_expr) => {
+                let body = expr::transform(ctx, *let_expr.body);
+                ctx.scoped(|ctx| {
+                    abs::ExprKind::Let(abs::LetExpr {
+                        pattern: pattern::transform(ctx, *let_expr.pattern),
+                        body,
+                        value: expr::transform(ctx, *let_expr.value),
+                    })
                 })
             }
-
-            tree::ExprKind::Variable(_) => todo!(),
-            tree::ExprKind::Constructor(_) => todo!(),
-            tree::ExprKind::Function(_) => todo!(),
-
-            tree::ExprKind::Projection(proj) => {
-                let expr = transform(ctx, *proj.expr);
-                let field = proj.field.symbol();
-
-                abs::ExprKind::Projection(abs::ProjectionExpr { expr, field })
-            }
-            tree::ExprKind::Binary(_) => todo!(),
-            tree::ExprKind::Let(let_) => {
-                let pattern = pattern::transform(ctx, *let_.pattern);
-                let body = transform(ctx, *let_.body);
-                let value = transform(ctx, *let_.value);
-
-                abs::ExprKind::Let(abs::LetExpr {
-                    pattern,
-                    body,
-                    value,
-                })
-            }
-            tree::ExprKind::When(when) => {
-                let arms = when
+            When(when) => abs::ExprKind::When(abs::WhenExpr {
+                scrutinee: when
+                    .scrutinee
+                    .into_iter()
+                    .map(|(scrutinee, _)| transform(ctx, *scrutinee))
+                    .collect(),
+                arms: when
                     .arms
                     .into_iter()
                     .map(|x| pattern::transform_pattern_arm(ctx, x))
-                    .collect();
-
-                let scrutinee = when
-                    .scrutinee
-                    .into_iter()
-                    .map(|x| transform(ctx, *x.0))
-                    .collect();
-
-                abs::ExprKind::When(abs::WhenExpr { scrutinee, arms })
-            }
-            tree::ExprKind::Do(do_) => {
-                let sttms = do_
-                    .block
-                    .statements
-                    .into_iter()
-                    .map(|x| transform_sttm(ctx, x))
-                    .collect();
-
-                abs::ExprKind::Do(abs::Block { sttms })
-            }
-            tree::ExprKind::Literal(x) => abs::ExprKind::Literal(transform_literal(x)),
-            tree::ExprKind::Annotation(x) => {
+                    .collect(),
+            }),
+            Do(do_expr) => ctx.scoped(|ctx| {
+                abs::ExprKind::Do(abs::Block {
+                    sttms: do_expr
+                        .block
+                        .statements
+                        .into_iter()
+                        .map(|x| transform_sttm(ctx, x))
+                        .collect(),
+                })
+            }),
+            Literal(x) => abs::ExprKind::Literal(transform_literal(x)),
+            Annotation(x) => {
                 let expr = transform(ctx, *x.expr);
                 let ty = transform_type(ctx, *x.ty);
 
                 abs::ExprKind::Annotation(abs::AnnotationExpr { expr, ty })
             }
-            tree::ExprKind::RecordInstance(u) => {
-                let fields = u
+            RecordInstance(record_instance) => {
+                let path = ctx.resolve(
+                    DefinitionKind::Value,
+                    expr.span.clone(),
+                    from_constructor_upper_path(&record_instance.name),
+                );
+
+                match path {
+                    Some(name) => abs::ExprKind::RecordInstance(abs::RecordInstance {
+                        name,
+                        fields: record_instance
+                            .fields
+                            .into_iter()
+                            .map(|(field, _)| {
+                                let name = field.name.symbol();
+                                let expr = transform(ctx, *field.expr);
+                                (field.name.0.value.span, name, expr)
+                            })
+                            .collect(),
+                    }),
+                    None => abs::ExprKind::Error,
+                }
+            }
+            RecordUpdate(record_update) => abs::ExprKind::RecordUpdate(abs::RecordUpdate {
+                expr: transform(ctx, *record_update.expr),
+                fields: record_update
                     .fields
                     .into_iter()
                     .map(|(field, _)| {
@@ -718,34 +1010,16 @@ pub mod expr {
                         let expr = transform(ctx, *field.expr);
                         (field.name.0.value.span, name, expr)
                     })
-                    .collect();
-
-                abs::ExprKind::RecordInstance(abs::RecordInstance {
-                    name: todo!(),
-                    fields,
-                })
-            }
-            tree::ExprKind::RecordUpdate(u) => {
-                let expr = transform(ctx, *u.expr);
-
-                let fields = u
-                    .fields
+                    .collect(),
+            }),
+            Tuple(tuple) => abs::ExprKind::Tuple(abs::Tuple {
+                exprs: tuple
+                    .data
                     .into_iter()
-                    .map(|(field, _)| {
-                        let name = field.name.symbol();
-                        let expr = transform(ctx, *field.expr);
-                        (field.name.0.value.span, name, expr)
-                    })
-                    .collect();
-
-                abs::ExprKind::RecordUpdate(abs::RecordUpdate { expr, fields })
-            }
-            tree::ExprKind::Tuple(x) => {
-                let exprs = x.data.into_iter().map(|x| transform(ctx, *x.0)).collect();
-
-                abs::ExprKind::Tuple(abs::Tuple { exprs })
-            }
-            tree::ExprKind::Parenthesis(x) => return transform(ctx, *x.data.0),
+                    .map(|(item, _)| transform(ctx, *item))
+                    .collect(),
+            }),
+            Parenthesis(parenthesis) => return transform(ctx, *parenthesis.data.0),
         };
 
         Box::new(Spanned {
@@ -785,7 +1059,7 @@ pub fn transform_kind(kind: tree::Kind) -> abs::Kind {
     })
 }
 
-pub fn transform_type_binder(ctx: &Context, binder: tree::TypeBinder) -> abs::TypeBinder {
+pub fn transform_type_binder(_ctx: &Context, binder: tree::TypeBinder) -> abs::TypeBinder {
     match binder {
         tree::TypeBinder::Implicit(x) => abs::TypeBinder::Implicit(x.symbol()),
         tree::TypeBinder::Explicit(t) => {
@@ -803,8 +1077,28 @@ pub fn transform_type(ctx: &Context, concrete_type: tree::Type) -> abs::Type {
                 .map(|x| transform_type(ctx, *x.0))
                 .collect(),
         ),
-        tree::TypeKind::Type(_) => todo!(),
-        tree::TypeKind::TypeVariable(_) => todo!(),
+        tree::TypeKind::Type(typ) => {
+            let path = ctx.resolve(
+                DefinitionKind::Type,
+                concrete_type.span.clone(),
+                from_constructor_upper_path(&typ),
+            );
+            match path {
+                Some(res) => abs::TypeKind::Type(res),
+                None => abs::TypeKind::Error,
+            }
+        }
+        tree::TypeKind::TypeVariable(e) => {
+            if ctx.in_scope(DefinitionKind::Type, e.symbol()) {
+                abs::TypeKind::TypeVariable(e.symbol())
+            } else {
+                ctx.reporter.report(Diagnostic::new(error::ResolverError {
+                    span: concrete_type.span.clone(),
+                    kind: error::ResolverErrorKind::NotFound(e.symbol()),
+                }));
+                abs::TypeKind::Error
+            }
+        }
         tree::TypeKind::Arrow(x) => abs::TypeKind::Arrow(abs::PiType {
             left: transform_type(ctx, *x.left),
             right: transform_type(ctx, *x.right),
@@ -865,6 +1159,32 @@ pub fn transform_sttm(ctx: &Context, sttm: concrete::tree::Sttm) -> abs::Sttm {
         data,
         span: sttm.span.clone(),
     }
+}
+
+/// Resolve all the top level declarations of a program.
+pub fn resolve(ctx: &Context, program: tree::Program) -> Solver<abs::Program> {
+    let mut solvers = vec![];
+
+    for top_level in program.top_levels {
+        if let Some(res) = top_level::resolve(ctx.clone(), top_level) {
+            solvers.push(res);
+        }
+    }
+
+    Solver::new(|ctx| {
+        let mut program = abs::Program::default();
+
+        for solver in solvers {
+            match solver.eval(ctx.clone()) {
+                abs::TopLevel::Let(x) => program.lets.push(x),
+                abs::TopLevel::Type(x) => program.types.push(x),
+                abs::TopLevel::Module(x) => program.modules.push(x),
+                abs::TopLevel::External(x) => program.externals.push(x),
+            }
+        }
+
+        program
+    })
 }
 
 #[cfg(test)]
