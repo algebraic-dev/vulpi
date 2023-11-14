@@ -483,9 +483,8 @@ pub mod real {
     impl Formattable for Hole<Virtual> {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self.0.borrow().clone() {
-                HoleInner::Empty(s, _, l) => write!(f, "{}", s.get()),
+                HoleInner::Empty(s, _, _) => write!(f, "{}", s.get()),
                 HoleInner::Filled(forall) => {
-                    write!(f, "!")?;
                     forall.quote(Level(env.0.len())).format(env, f)
                 }
             }

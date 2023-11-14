@@ -11,3 +11,8 @@ pub type Bool =
 pub type Result ok err =
     | Ok ok
     | Err err
+
+pub external add : Int -> Int -> Int = "($0 + $1)"
+
+pub external pipe : forall a b. a -> (a -> b) -> b = "($0 + $1)"
+

@@ -1,10 +1,19 @@
-use Yal.Prelude
+use Prelude
+use Yal.B
 
 pub type Result ok err =
     | Ok ok
     | Err err
 
-let ata (b: Int) = 
-    when b is
-        e => e
-        f => f
+pub type User data = {
+    name: String,
+    age: Int,
+    data: data
+}
+
+let addTwo (x: Int) : Int = add x 2
+
+let ata (b: Int) (a: Int) : Int = 
+       a 
+    |> addTwo 
+    |> addTwo

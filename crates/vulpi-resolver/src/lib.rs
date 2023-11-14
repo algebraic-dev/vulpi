@@ -200,10 +200,7 @@ impl Module {
     }
 
     fn search_submodules(&self, name: Symbol) -> Option<Module> {
-        self.borrow()
-            .submodules
-            .get(&name)
-            .cloned()
+        self.borrow().submodules.get(&name).cloned()
     }
 
     fn search_aliases(&self, kind: DefinitionKind, name: Symbol) -> Option<Alias> {
@@ -394,11 +391,11 @@ impl Context {
         }
 
         let module = if path.path.is_empty() {
-            self.module.clone()        
+            self.module.clone()
         } else if let Some(module) = self.module.available().get(&path.path).cloned() {
             module
         } else if let Some(module) = self.module.search_submodules(path.path.symbol()) {
-            module  
+            module
         } else {
             self.reporter.report(Diagnostic::new(error::ResolverError {
                 span: span.clone(),
@@ -491,6 +488,7 @@ impl<T: 'static> Solver<T> {
 
 /// Top level declarations are the ones that can be declared at the top level of a module.
 pub mod top_level {
+
     use super::*;
 
     /// Resolve a top level declaration and returns the solver for it.
@@ -600,10 +598,14 @@ pub mod top_level {
                                 let symbol = field.name.symbol();
                                 let transform_type = transform_type(ctx, *field.ty);
                                 let into = field.visibility.into();
-                                (abs::Qualified {
-                                    path: namespace.clone().symbol(),
-                                    name: symbol,
-                                }, transform_type, into)
+                                (
+                                    abs::Qualified {
+                                        path: namespace.clone().symbol(),
+                                        name: symbol,
+                                    },
+                                    transform_type,
+                                    into,
+                                )
                             })
                             .collect();
 
@@ -621,10 +623,14 @@ pub mod top_level {
                                     .map(|x| transform_type(ctx, *x))
                                     .collect();
                                 let typ = cons.typ.map(|x| transform_type(ctx, *x.1));
-                                abs::Constructor { name: abs::Qualified {
-                                    path: namespace.clone().symbol(),
-                                    name,
-                                }, args, typ }
+                                abs::Constructor {
+                                    name: abs::Qualified {
+                                        path: namespace.clone().symbol(),
+                                        name,
+                                    },
+                                    args,
+                                    typ,
+                                }
                             })
                             .collect();
 
@@ -650,10 +656,9 @@ pub mod top_level {
     /// Resolve an external declaration and returns the solver for it.
     pub fn resolve_external(ctx: Context, decl: tree::ExtDecl) -> Solver<abs::ExtDecl> {
         let name = decl.name.symbol();
-        let visibility = decl.visibility.clone();
 
         ctx.module
-            .define(DefinitionKind::Value, visibility, name.clone());
+            .define(DefinitionKind::Value, decl.visibility.clone(), name.clone());
 
         let namespace = ctx.module.name().clone();
 
@@ -953,7 +958,55 @@ pub mod expr {
                 expr: transform(ctx, *projection.expr),
                 field: projection.field.symbol(),
             }),
-            Binary(_) => todo!(),
+            Binary(bin) => {
+                let left = transform(ctx, *bin.left);
+                let right = transform(ctx, *bin.right);
+
+                let name = match bin.op {
+                    tree::Operator::Add(_) => "add",
+                    tree::Operator::Sub(_) => "sub",
+                    tree::Operator::Mul(_) => "mul",
+                    tree::Operator::Div(_) => "div",
+                    tree::Operator::Rem(_) => "rem",
+                    tree::Operator::And(_) => "and",
+                    tree::Operator::Or(_) => "or",
+                    tree::Operator::Xor(_) => "xor",
+                    tree::Operator::Not(_) => "not",
+                    tree::Operator::Eq(_) => "eq",
+                    tree::Operator::Neq(_) => "neq",
+                    tree::Operator::Lt(_) => "lt",
+                    tree::Operator::Gt(_) => "gt",
+                    tree::Operator::Le(_) => "le",
+                    tree::Operator::Ge(_) => "ge",
+                    tree::Operator::Shl(_) => "shl",
+                    tree::Operator::Shr(_) => "shr",
+                    tree::Operator::Pipe(_) => "pipe",
+                };
+
+                let path = ctx.resolve(
+                    DefinitionKind::Value,
+                    expr.span.clone(),
+                    Qualified {
+                        path: Path {
+                            segments: vec![Symbol::intern("Prelude")],
+                        },
+                        name: Symbol::intern(name),
+                    },
+                );
+
+                if let Some(path) = path {
+                    abs::ExprKind::Application(abs::ApplicationExpr {
+                        app: abs::AppKind::Infix,
+                        func: Box::new(Spanned::new(
+                            abs::ExprKind::Function(path),
+                            bin.op.get_span(),
+                        )),
+                        args: vec![left, right],
+                    })
+                } else {
+                    abs::ExprKind::Error
+                }
+            }
             Let(let_expr) => {
                 let body = expr::transform(ctx, *let_expr.body);
                 ctx.scoped(|ctx| {
@@ -995,7 +1048,7 @@ pub mod expr {
             }
             RecordInstance(record_instance) => {
                 let path = ctx.resolve(
-                    DefinitionKind::Value,
+                    DefinitionKind::Type,
                     expr.span.clone(),
                     from_constructor_upper_path(&record_instance.name),
                 );
@@ -1129,17 +1182,24 @@ pub fn transform_type(ctx: &Context, concrete_type: tree::Type) -> abs::Type {
 
             abs::TypeKind::Application(abs::TypeApplication { func, args })
         }
-        tree::TypeKind::Forall(forall) => {
+        tree::TypeKind::Forall(forall) => ctx.scoped(|ctx| {
             let params = forall
                 .params
                 .into_iter()
                 .map(|x| transform_type_binder(ctx, x))
-                .collect();
+                .collect::<Vec<_>>();
+
+            for binder in &params {
+                match binder {
+                    abs::TypeBinder::Implicit(x) => ctx.with(DefinitionKind::Type, x.clone()),
+                    abs::TypeBinder::Explicit(x, _) => ctx.with(DefinitionKind::Type, x.clone()),
+                }
+            }
 
             let body = transform_type(ctx, *forall.body);
 
             abs::TypeKind::Forall(abs::TypeForall { params, body })
-        }
+        }),
         tree::TypeKind::Unit(_) => abs::TypeKind::Unit,
     };
 

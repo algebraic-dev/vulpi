@@ -209,6 +209,7 @@ dependencies = [
  "vulpi-resolver",
  "vulpi-show",
  "vulpi-syntax",
+ "vulpi-typer",
  "vulpi-vfs",
 ]
 

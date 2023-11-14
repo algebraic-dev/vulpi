@@ -332,6 +332,22 @@ impl<'a> Parser<'a> {
     }
 
     pub fn expr(&mut self) -> Result<Box<Expr>> {
-        self.expr_part()
+        let mut left = self.expr_part()?;
+
+        while self.at(TokenData::PipeRight) {
+            let pipe_right = self.bump();
+            let right = self.expr_part()?;
+            let range = self.with_span(left.span.clone());
+            left = Box::new(Spanned {
+                span: range,
+                data: ExprKind::Binary(BinaryExpr {
+                    left,
+                    op: Operator::Pipe(pipe_right),
+                    right,
+                }),
+            })
+        }
+
+        Ok(left)
     }
 }

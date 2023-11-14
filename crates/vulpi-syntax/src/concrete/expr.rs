@@ -29,6 +29,31 @@ pub enum Operator {
     Pipe(Token),
 }
 
+impl Operator {
+    pub fn get_span(&self) -> Span {
+        match self {
+            Operator::Add(t) => t.value.span.clone(),
+            Operator::Sub(t) => t.value.span.clone(),
+            Operator::Mul(t) => t.value.span.clone(),
+            Operator::Div(t) => t.value.span.clone(),
+            Operator::Rem(t) => t.value.span.clone(),
+            Operator::And(t) => t.value.span.clone(),
+            Operator::Or(t) => t.value.span.clone(),
+            Operator::Xor(t) => t.value.span.clone(),
+            Operator::Not(t) => t.value.span.clone(),
+            Operator::Eq(t) => t.value.span.clone(),
+            Operator::Neq(t) => t.value.span.clone(),
+            Operator::Lt(t) => t.value.span.clone(),
+            Operator::Gt(t) => t.value.span.clone(),
+            Operator::Le(t) => t.value.span.clone(),
+            Operator::Ge(t) => t.value.span.clone(),
+            Operator::Shl(t) => t.value.span.clone(),
+            Operator::Shr(t) => t.value.span.clone(),
+            Operator::Pipe(t) => t.value.span.clone(),
+        }
+    }
+}
+
 #[derive(Show, Clone)]
 pub struct LambdaExpr {
     pub lambda: Token,

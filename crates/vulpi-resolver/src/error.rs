@@ -17,7 +17,7 @@ pub struct ResolverError {
 impl IntoDiagnostic for ResolverError {
     fn message(&self) -> vulpi_report::Text {
         match &self.kind {
-            ResolverErrorKind::NotFound(name) => format!("name not found: {}", name.get()).into(),
+            ResolverErrorKind::NotFound(name) => format!("cannot find '{}'", name.get()).into(),
             ResolverErrorKind::InvalidPath(name) => format!(
                 "the path '{}' cannot be found",
                 name.iter().map(|s| s.get()).collect::<Vec<_>>().join(".")
