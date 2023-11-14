@@ -15,5 +15,8 @@ vulpi-vfs = { path = "../vulpi-vfs" }
 vulpi-resolver = { path = "../vulpi-resolver" }
 vulpi-syntax = { path = "../vulpi-syntax" }
 vulpi-intern = { path = "../vulpi-intern" }
+vulpi-typer = { path = "../vulpi-typer" }
+
+
 filetime = "0.2.22"
 petgraph = "0.6.4"

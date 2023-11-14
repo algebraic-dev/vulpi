@@ -9,7 +9,6 @@ use vulpi_intern::Symbol;
 use vulpi_location::{FileId, Span};
 use vulpi_report::{Diagnostic, Report};
 use vulpi_resolver::{dependencies::{Dependencies, self}, Module, Context};
-use vulpi_show::Show;
 use vulpi_syntax::concrete::tree::Program;
 use vulpi_vfs::{FileSystem, path::Path};
 
@@ -94,13 +93,20 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
             }   
         } 
 
+        let mut tc = vulpi_typer::Context::new(self.reporter.clone());
+        let mut programs = vec![];
+
         for (_, ctx, _) in modules.into_values() {
             if let Some((ctx, resolver)) = ctx {
                 let program = resolver.eval(ctx.clone());
-                println!("{}", program.show())
+                programs.push(program);
             }
         }
 
+        let programs = vulpi_typer::Programs(programs);
+
+        tc.declare(&programs);
+        tc.define(&programs);
     }
 
 }

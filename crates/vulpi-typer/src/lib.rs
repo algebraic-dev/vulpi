@@ -370,6 +370,46 @@ impl Declare for ModuleDecl {
     }
 }
 
+pub struct Programs(pub Vec<Program>);
+
+impl Declare for Programs {
+    fn declare(&self, (ctx, env): (&mut Context, Env)) {
+        for program in self.0.iter() {
+            program.modules.declare((ctx, env.clone()));
+        }
+
+        for program in self.0.iter() {
+            program.types.declare((ctx, env.clone()));
+        }
+
+        for program in self.0.iter() {
+            program.lets.declare((ctx, env.clone()));
+        }
+
+        for program in self.0.iter() {
+            program.externals.declare((ctx, env.clone()));
+        }
+    }
+
+    fn define(&self, (ctx, env): (&mut Context, Env)) {
+        for program in self.0.iter() {
+            program.types.define((ctx, env.clone()));
+        }
+
+        for program in self.0.iter() {
+            program.lets.define((ctx, env.clone()));
+        }
+
+        for program in self.0.iter() {
+            program.externals.define((ctx, env.clone()));
+        }
+
+        for program in self.0.iter() {
+            program.modules.define((ctx, env.clone()));
+        }
+    }
+}
+
 impl Declare for Program {
     fn declare(&self, (ctx, env): (&mut Context, Env)) {
         self.modules.declare((ctx, env.clone()));

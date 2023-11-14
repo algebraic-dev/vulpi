@@ -7,7 +7,6 @@ pub mod unify;
 
 use std::{cell::RefCell, hash::Hash, rc::Rc};
 
-
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 
@@ -75,9 +74,6 @@ pub enum TypeKind<S: State> {
     /// The forall type is used for polymorphic functions.
     Forall(S::Forall),
 
-    /// The forall type is used for polymorphic functions.
-    Exists(S::Forall),
-
     /// The type of holes.
     Hole(Hole<Virtual>),
 
@@ -111,10 +107,6 @@ impl<S: State> Type<S> {
 
     pub(crate) fn forall(forall: S::Forall) -> Self {
         Self::new(TypeKind::Forall(forall))
-    }
-
-    pub(crate) fn exists(forall: S::Forall) -> Self {
-        Self::new(TypeKind::Exists(forall))
     }
 
     pub(crate) fn typ() -> Type<S> {
@@ -192,7 +184,7 @@ impl<S: State> Hole<S> {
 }
 
 pub mod r#virtual {
-    use std::{cell::RefCell};
+    use std::cell::RefCell;
 
     
     use vulpi_intern::Symbol;
@@ -454,18 +446,6 @@ pub mod real {
             (spine, current)
         }
 
-        pub(crate) fn exists_spine(&self) -> (Vec<(Symbol, Self)>, Self) {
-            let mut spine = Vec::new();
-            let mut current = self.clone();
-
-            while let TypeKind::Exists(Forall { name, kind, body }) = current.as_ref() {
-                spine.push((name.clone(), kind.clone()));
-                current = body.clone();
-            }
-
-            (spine, current)
-        }
-
         pub fn arrow_spine(&self) -> Vec<Self> {
             let mut spine = Vec::new();
             let mut current = self.clone();
@@ -503,7 +483,7 @@ pub mod real {
     impl Formattable for Hole<Virtual> {
         fn format(&self, env: &NameEnv, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self.0.borrow().clone() {
-                HoleInner::Empty(s, _, l) => write!(f, "^{}~{}", s.get(), l.0),
+                HoleInner::Empty(s, _, l) => write!(f, "{}", s.get()),
                 HoleInner::Filled(forall) => {
                     write!(f, "!")?;
                     forall.quote(Level(env.0.len())).format(env, f)
@@ -528,28 +508,6 @@ pub mod real {
                     write!(f, "(forall ")?;
 
                     let (binder, rest) = self.forall_spine();
-
-                    for (i, (name, kind)) in binder.iter().enumerate() {
-                        write!(f, "({}: ", name.get())?;
-                        kind.format(&env, f)?;
-                        write!(f, ")")?;
-                        if i != binder.len() - 1 {
-                            write!(f, " ")?;
-                        }
-                        env.0.push_front(Some(name.clone()))
-                    }
-
-                    write!(f, ". ")?;
-
-                    rest.format(&env, f)?;
-
-                    write!(f, ")")
-                }
-                TypeKind::Exists(_) => {
-                    let mut env = env.clone();
-                    write!(f, "(exists ")?;
-
-                    let (binder, rest) = self.exists_spine();
 
                     for (i, (name, kind)) in binder.iter().enumerate() {
                         write!(f, "({}: ", name.get())?;

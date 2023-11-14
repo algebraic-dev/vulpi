@@ -116,8 +116,12 @@ impl Module {
         self.borrow_mut().available.insert(path, module);
     }
 
-    pub fn modules(&self) -> RefMut<'_, HashMap<Symbol, (Path, abs::Visibility)>> {
+    pub fn modules_mut(&self) -> RefMut<'_, HashMap<Symbol, (Path, abs::Visibility)>> {
         std::cell::RefMut::map(self.borrow_mut(), |this| &mut this.modules)
+    }
+
+    pub fn modules(&self) -> Ref<'_, HashMap<Symbol, (Path, abs::Visibility)>> {
+        std::cell::Ref::map(self.borrow(), |this| &this.modules)
     }
 
     pub fn name(&self) -> Ref<'_, Path> {
@@ -193,6 +197,13 @@ impl Module {
     fn search_declared(&self, kind: DefinitionKind, name: Symbol) -> Option<abs::Visibility> {
         self.declared()
             .apply(kind, |declared| declared.get(&name).cloned())
+    }
+
+    fn search_submodules(&self, name: Symbol) -> Option<Module> {
+        self.borrow()
+            .submodules
+            .get(&name)
+            .cloned()
     }
 
     fn search_aliases(&self, kind: DefinitionKind, name: Symbol) -> Option<Alias> {
@@ -386,6 +397,8 @@ impl Context {
             self.module.clone()        
         } else if let Some(module) = self.module.available().get(&path.path).cloned() {
             module
+        } else if let Some(module) = self.module.search_submodules(path.path.symbol()) {
+            module  
         } else {
             self.reporter.report(Diagnostic::new(error::ResolverError {
                 span: span.clone(),
@@ -700,7 +713,7 @@ pub mod top_level {
 
     pub fn declare_use(ctx: Context, decl: tree::UseDecl) {
         if let Some(alias) = decl.alias {
-            ctx.module.modules().insert(
+            ctx.module.modules_mut().insert(
                 alias.alias.symbol(),
                 (from_upper_path(&decl.path), decl.visibility.clone().into()),
             );

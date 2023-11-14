@@ -152,22 +152,6 @@ impl Context {
             (_, TypeKind::Hole(m)) => self.unify_hole(env, m.clone(), l),
             (TypeKind::Bound(x), TypeKind::Bound(y)) if x == y => Ok(()),
             (TypeKind::Variable(x), TypeKind::Variable(y)) if x == y => Ok(()),
-            (TypeKind::Exists(ex), _) => {
-                let lvl_ty = Type::new(TypeKind::Bound(env.level));
-                self.unify(
-                    env.add(Some(ex.name.clone()), lvl_ty.clone()),
-                    ex.body.apply_local(None, lvl_ty),
-                    right,
-                )
-            }
-            (_, TypeKind::Exists(ex)) => {
-                let lvl_ty = Type::new(TypeKind::Bound(env.level));
-                self.unify(
-                    env.add(Some(ex.name.clone()), lvl_ty.clone()),
-                    left,
-                    ex.body.apply_local(None, lvl_ty),
-                )
-            }
             (TypeKind::Type, TypeKind::Type) => Ok(()),
             (TypeKind::Error, _) | (_, TypeKind::Error) => Ok(()),
             (_, _) => Err(TypeErrorKind::TypeMismatch(

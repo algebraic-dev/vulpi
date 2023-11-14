@@ -126,7 +126,7 @@ impl FileSystem for RealFileSystem {
         if self.root == path.segments[0] {
             path.shift().to_pathbuf(self.project_root.clone())
         } else {
-            todo!()
+            path.to_pathbuf(self.project_root.clone())
         }
     }
 }

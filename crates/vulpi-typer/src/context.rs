@@ -1,11 +1,9 @@
 //! This file declares a mutable environment that is useful to keep track of information that does
 //! not need to be immutable like the Env.
 
-use std::collections::HashMap;
-
 use crate::{
     module::Modules,
-    r#type::{eval::Eval, r#virtual::Pi, Hole, State},
+    r#type::{r#virtual::Pi, State}, Declare,
 };
 use vulpi_intern::Symbol;
 use vulpi_report::{Diagnostic, Report};
@@ -14,11 +12,10 @@ use vulpi_syntax::{elaborated, r#abstract::Qualified};
 use crate::{
     errors::{TypeError, TypeErrorKind},
     r#type::{
-        eval::Quote,
         r#virtual::Env,
         r#virtual::Virtual,
-        real::{self, Real},
-        HoleInner, Level, Type, TypeKind,
+        real::Real,
+        HoleInner, Type, TypeKind,
     },
 };
 
@@ -154,106 +151,11 @@ impl Context {
         }
     }
 
-    fn accumulate_variables(
-        env: Env,
-        level: Level,
-        ty: Type<Real>,
-        new_vars: &mut HashMap<Hole<Virtual>, (Symbol, Level, Type<Real>)>,
-        turn: bool,
-    ) -> Type<Real> {
-        match ty.as_ref() {
-            TypeKind::Arrow(p) => {
-                let ty =
-                    Context::accumulate_variables(env.clone(), level, p.ty.clone(), new_vars, turn);
-                let body =
-                    Context::accumulate_variables(env, level, p.body.clone(), new_vars, turn);
-                Type::new(TypeKind::Arrow(real::Arrow { ty, body }))
-            }
-            TypeKind::Forall(forall) => {
-                let kind = Context::accumulate_variables(
-                    env.clone(),
-                    level,
-                    forall.kind.clone(),
-                    new_vars,
-                    turn,
-                );
-                let body =
-                    Context::accumulate_variables(env, level, forall.body.clone(), new_vars, turn);
-                Type::new(TypeKind::Forall(real::Forall {
-                    name: forall.name.clone(),
-                    kind,
-                    body,
-                }))
-            }
-            TypeKind::Hole(hole) => {
-                if new_vars.contains_key(hole) {
-                    return ty.clone();
-                }
-
-                let l = Level(level.0 + new_vars.len());
-
-                let borrow = hole.0.borrow().clone();
-                match borrow {
-                    HoleInner::Empty(n, k, _) => {
-                        new_vars.insert(hole.clone(), (n, l, k.quote(env.level)));
-                        ty.clone()
-                    }
-                    HoleInner::Filled(e) => {
-                        let e = e.quote(env.level);
-
-                        Context::accumulate_variables(env, level, e, new_vars, turn)
-                    }
-                }
-            }
-            TypeKind::Tuple(t) => {
-                let t = t
-                    .iter()
-                    .map(|t| {
-                        Context::accumulate_variables(env.clone(), level, t.clone(), new_vars, turn)
-                    })
-                    .collect();
-                Type::new(TypeKind::Tuple(t))
-            }
-            TypeKind::Application(f, a) => {
-                let f =
-                    Context::accumulate_variables(env.clone(), level, f.clone(), new_vars, turn);
-                let a = Context::accumulate_variables(env, level, a.clone(), new_vars, turn);
-                Type::new(TypeKind::Application(f, a))
-            }
-            TypeKind::Bound(n) if turn => {
-                let new = (*n).shift(Level(level.0 + new_vars.len()));
-                Type::new(TypeKind::Bound(new))
-            }
-            _ => ty,
-        }
+    pub fn declare<T: Declare>(&mut self, t: &T) {
+        T::declare(t, (self, Env::default()))
     }
 
-    pub fn skolemize(&mut self, env: Env, ty: &Type<Virtual>) -> Type<Virtual> {
-        let mut vars = Default::default();
-
-        let real = ty.clone().quote(env.level);
-
-        let real = Context::accumulate_variables(env.clone(), Level(0), real, &mut vars, false);
-
-        let vars = vars.into_iter().collect::<Vec<_>>();
-
-        #[allow(clippy::redundant_clone)]
-        let mut new_env = env.clone();
-
-        for (hole, (n, lvl, _)) in vars.iter() {
-            let bound = Type::bound(*lvl);
-            new_env = new_env.add(Some(n.clone()), bound.clone());
-            hole.0.replace(HoleInner::Filled(bound));
-        }
-
-        let real = vars.iter().fold(real, |rest, (_, (name, _, kind))| {
-            Type::exists(real::Forall {
-                name: name.clone(),
-                kind: kind.clone(),
-                body: rest,
-            })
-        });
-
-        real.eval(&env)
+    pub fn define<T: Declare>(&mut self, t: &T) {
+        T::define(t, (self, Env::default()))
     }
 }
