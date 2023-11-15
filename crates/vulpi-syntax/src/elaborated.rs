@@ -52,7 +52,6 @@ pub enum PatternKind {
     Literal(Literal),
     Application(PatApplication),
     Tuple(Vec<Pattern>),
-
     Error,
 }
 

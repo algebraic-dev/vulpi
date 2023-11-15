@@ -2,3 +2,4 @@
 //! a form that is easier to work with for code generation.
 
 pub mod transform;
+pub mod pattern;

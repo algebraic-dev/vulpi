@@ -158,7 +158,7 @@ impl Infer for Expr {
 
                 ctx.subsumes(env.clone(), ret_type.clone(), ret);
 
-                if perform {
+                if false {
                     let problem = Problem::exhaustiveness(&elab_arms, arms);
 
                     if let Witness::NonExhaustive(case) = problem.exaustive(ctx, env.clone()) {

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use error::BuildError;
 use vulpi_intern::Symbol;
+use vulpi_ir::transform;
 use vulpi_location::{FileId, Span};
 use vulpi_report::{Diagnostic, Report};
 use vulpi_resolver::{dependencies::{Dependencies, self}, Module, Context};
@@ -107,6 +108,14 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
 
         tc.declare(&programs);
         tc.define(&programs);
+
+        let program = tc.elaborated;
+        
+        if !self.reporter.has_errors() {
+            let transformed = transform::Transform::transform(program);
+        }
+
+
     }
 
 }

@@ -4,8 +4,11 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
+use vulpi_show::Show;
 use vulpi_syntax::{elaborated, lambda, r#abstract::Qualified};
 use vulpi_typer::{Type, Real};
+
+use crate::pattern;
 
 pub trait Transform {
     type Out;
@@ -70,7 +73,7 @@ impl Transform for elaborated::PatternKind {
             elaborated::PatternKind::Wildcard => Wildcard,
             elaborated::PatternKind::Variable(x) => Variable(x),
             elaborated::PatternKind::Literal(x) => Literal(x.transform()),
-            elaborated::PatternKind::Application(x) => Application(x.func, x.args.transform()),
+            elaborated::PatternKind::Application(x) => Constructor(x.func, x.args.transform()),
             elaborated::PatternKind::Tuple(x) => Tuple(x.transform()),
             elaborated::PatternKind::Error => unreachable!(),
         }
@@ -126,7 +129,17 @@ impl Transform for elaborated::ExprKind<Type<Real>> {
             elaborated::ExprKind::Function(x, _) => Function(x),
             elaborated::ExprKind::Projection(x) => Projection(x.field, x.expr.transform()),
             elaborated::ExprKind::Let(x) => Let(x.pattern.transform(), x.body.transform(), x.value.transform()),
-            elaborated::ExprKind::When(x) => When(x.scrutinee.transform(), x.arms.transform()),
+            elaborated::ExprKind::When(x) => {
+                let patterns = x.arms.transform();
+                
+                let problem = pattern::Problem::new(patterns.into_iter().map(|x| x.patterns).collect());
+
+                let tree = problem.compile();
+
+                println!("{}", tree.show());
+
+                todo!()
+            },
             elaborated::ExprKind::Do(x) => Do(x.transform()),
             elaborated::ExprKind::Literal(x) => Literal(x.transform()),
             elaborated::ExprKind::RecordInstance(x) => RecordInstance(x.name, x.fields.transform()),

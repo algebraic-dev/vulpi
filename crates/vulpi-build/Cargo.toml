@@ -16,6 +16,7 @@ vulpi-resolver = { path = "../vulpi-resolver" }
 vulpi-syntax = { path = "../vulpi-syntax" }
 vulpi-intern = { path = "../vulpi-intern" }
 vulpi-typer = { path = "../vulpi-typer" }
+vulpi-ir = { path = "../vulpi-ir" }
 
 
 filetime = "0.2.22"

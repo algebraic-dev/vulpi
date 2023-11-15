@@ -16,7 +16,7 @@ pub enum LiteralKind {
 
 pub type Literal = Box<LiteralKind>;
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum Statement {
     Let(Pattern, Expr),
     Expr(Expr),
@@ -29,7 +29,7 @@ pub enum PatternKind {
     Wildcard,
     Variable(Symbol),
     Literal(Literal),
-    Application(Qualified, Vec<Pattern>),
+    Constructor(Qualified, Vec<Pattern>),
     Tuple(Vec<Pattern>),
 
     Error,
@@ -37,14 +37,14 @@ pub enum PatternKind {
 
 pub type Pattern = Box<PatternKind>;
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct PatternArm {
     pub patterns: Vec<Pattern>,
     pub expr: Expr,
     pub guard: Option<Expr>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum ExprKind {
     Lambda(Pattern, Expr),
     Application(Expr, Vec<Expr>),
@@ -61,6 +61,8 @@ pub enum ExprKind {
 
     RecordInstance(Qualified, Vec<(Symbol, Expr)>),
     RecordUpdate(Qualified, Expr, Vec<(Symbol, Expr)>),
+
+    Access(Expr, usize),
     Tuple(Vec<Expr>),
 }
 
