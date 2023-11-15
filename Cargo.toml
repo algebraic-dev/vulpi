@@ -14,6 +14,7 @@ members = [
     "crates/vulpi-resolver",
     "crates/vulpi-typer",
     "crates/vulpi-cli",
+    "crates/vulpi-ir",
 ]
 
 resolver = "1"

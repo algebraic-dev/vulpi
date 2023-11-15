@@ -232,6 +232,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vulpi-ir"
+version = "0.1.0"
+dependencies = [
+ "vulpi-intern",
+ "vulpi-syntax",
+ "vulpi-typer",
+]
+
+[[package]]
 name = "vulpi-lexer"
 version = "0.1.0"
 dependencies = [

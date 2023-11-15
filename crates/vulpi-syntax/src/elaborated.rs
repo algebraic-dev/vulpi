@@ -16,13 +16,13 @@ pub enum LiteralKind {
 
 pub type Literal = Box<LiteralKind>;
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct LetStatement<T> {
     pub pattern: Pattern,
     pub expr: Expr<T>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum SttmKind<T> {
     Let(LetStatement<T>),
     Expr(Expr<T>),
@@ -58,80 +58,70 @@ pub enum PatternKind {
 
 pub type Pattern = Box<PatternKind>;
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct LambdaExpr<T> {
     pub param: Pattern,
     pub body: Expr<T>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum AppKind {
     Infix,
     Normal,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct ApplicationExpr<T> {
     pub typ: T,
     pub func: Expr<T>,
     pub args: Vec<Expr<T>>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct ProjectionExpr<T> {
     pub field: Qualified,
     pub expr: Expr<T>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct PatternArm<T> {
     pub patterns: Vec<Pattern>,
     pub expr: Expr<T>,
     pub guard: Option<Expr<T>>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct WhenExpr<T> {
     pub scrutinee: Vec<Expr<T>>,
     pub arms: Vec<PatternArm<T>>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct LetExpr<T> {
     pub pattern: Pattern,
     pub body: Expr<T>,
     pub value: Expr<T>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct RecordInstance<T> {
     pub name: Qualified,
     pub fields: Vec<(Symbol, Expr<T>)>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct RecordUpdate<T> {
+    pub qualified: Qualified,
     pub expr: Expr<T>,
     pub fields: Vec<(Symbol, Expr<T>)>,
 }
 
-#[derive(Show)]
-pub struct HandlerExpr<T> {
-    pub expr: Expr<T>,
-    pub with: Expr<T>,
-}
-
-#[derive(Show)]
-pub struct CasesExpr<T> {
-    pub arms: Vec<PatternArm<T>>,
-}
-
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Tuple<T> {
     pub exprs: Vec<Expr<T>>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum ExprKind<T> {
     Lambda(LambdaExpr<T>),
     Application(ApplicationExpr<T>),
@@ -148,8 +138,6 @@ pub enum ExprKind<T> {
 
     RecordInstance(RecordInstance<T>),
     RecordUpdate(RecordUpdate<T>),
-    Handler(HandlerExpr<T>),
-    Cases(CasesExpr<T>),
     Tuple(Tuple<T>),
 
     Error,
@@ -157,27 +145,28 @@ pub enum ExprKind<T> {
 
 pub type Expr<T> = Box<ExprKind<T>>;
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct LetDecl<T> {
     pub binders: Vec<(Pattern, T)>,
     pub body: Vec<PatternArm<T>>,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub enum TypeDecl {
     Abstract,
     Enum(Vec<(Qualified, usize)>),
     Record(Vec<Qualified>),
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct ExternalDecl<T> {
     pub typ: T,
     pub binding: Symbol,
 }
 
-#[derive(Show)]
+#[derive(Show, Clone)]
 pub struct Program<T> {
+    pub modules: HashMap<Symbol, Program<T>>,
     pub lets: HashMap<Qualified, LetDecl<T>>,
     pub types: HashMap<Qualified, TypeDecl>,
     pub externals: HashMap<Qualified, ExternalDecl<T>>,
@@ -186,6 +175,7 @@ pub struct Program<T> {
 impl<T> Default for Program<T> {
     fn default() -> Self {
         Self {
+            modules: HashMap::new(),
             lets: HashMap::new(),
             types: HashMap::new(),
             externals: HashMap::new(),

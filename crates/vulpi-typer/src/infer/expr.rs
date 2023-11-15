@@ -382,6 +382,7 @@ impl Infer for Expr {
                     ret_type,
                     Box::new(elaborated::ExprKind::RecordUpdate(
                         elaborated::RecordUpdate {
+                            qualified: name.clone(),
                             expr: elab_expr,
                             fields: elab_fields,
                         },
