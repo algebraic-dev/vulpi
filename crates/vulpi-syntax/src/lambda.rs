@@ -1,77 +1,113 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use vulpi_intern::Symbol;
 use vulpi_macros::Show;
 
-use crate::r#abstract::Qualified;
+use crate::{r#abstract::Qualified, elaborated::Literal};
 
-#[derive(Show, PartialEq, Eq, Hash, Clone, Debug)]
-pub enum LiteralKind {
-    String(Symbol),
-    Integer(Symbol),
-    Float(Symbol),
-    Char(Symbol),
-    Unit,
+#[derive(Clone, Show)]
+pub enum Index {
+    Cons(usize),
+    Tuple(usize),
 }
 
-pub type Literal = Box<LiteralKind>;
+impl Display for Index {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Index::Cons(s) => write!(f, "c{s}"),
+            Index::Tuple(s) => write!(f, "t{s}"),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Occurrence(pub Expr, pub Vec<Index>);
+
+impl vulpi_show::Show for Occurrence {
+    fn show(&self) -> vulpi_show::TreeDisplay {
+        let f = self.1.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(".");
+        vulpi_show::TreeDisplay::label(&format!("Occurrence(v.{f})"))
+    }
+}
+
+impl Occurrence {
+    pub fn with(&self, index: Index) -> Occurrence {
+        let mut indices = self.1.clone();
+        indices.push(index);
+        Occurrence(self.0.clone(), indices)
+    }
+}
+
+#[derive(Clone)]
+pub enum Tree {
+    Fail,
+    Leaf(usize, Vec<Occurrence>),
+    Switch(Occurrence, Vec<(Case, Tree)>),
+}
+
+impl vulpi_show::Show for Tree {
+    fn show(&self) -> vulpi_show::TreeDisplay {
+        match self {
+            Tree::Fail => vulpi_show::TreeDisplay::label("Fail"),
+            Tree::Leaf(action, _) => vulpi_show::TreeDisplay::label(&format!("Leaf({})", action)),
+            Tree::Switch(_, cases) => {
+                let mut tree = vulpi_show::TreeDisplay::label("Switch");
+                
+                for (case, rest) in cases {
+                    tree = tree.with(vulpi_show::TreeDisplay::label(&format!("case {:?}:", case)).with(rest.show()));
+                }
+
+                tree
+            }
+        }
+    }
+}
+
+#[derive(Clone, Show, Debug, PartialEq, Eq, Hash)]
+pub enum Case {
+    Tuple(usize),
+    Constructor(Qualified, usize),
+    Literal(Literal),
+}
 
 #[derive(Show, Clone)]
 pub enum Statement {
-    Let(Pattern, Expr),
+    Let(Symbol, Expr),
     Expr(Expr),
     Error,
 }
 
-
-#[derive(Show, Clone, Debug)]
-pub enum PatternKind {
-    Wildcard,
-    Variable(Symbol),
-    Literal(Literal),
-    Constructor(Qualified, Vec<Pattern>),
-    Tuple(Vec<Pattern>),
-
-    Error,
-}
-
-pub type Pattern = Box<PatternKind>;
-
-#[derive(Show, Clone)]
-pub struct PatternArm {
-    pub patterns: Vec<Pattern>,
-    pub expr: Expr,
-    pub guard: Option<Expr>,
-}
-
 #[derive(Show, Clone)]
 pub enum ExprKind {
-    Lambda(Pattern, Expr),
+    Lambda(Symbol, Expr),
     Application(Expr, Vec<Expr>),
 
     Variable(Symbol),
-    Constructor(Qualified, Qualified),
+    Constructor(Qualified, Qualified, Vec<Expr>),
     Function(Qualified),
 
     Projection(Qualified, Expr),
-    Let(Pattern, Expr, Expr),
-    When(Vec<Expr>, Vec<PatternArm>),
-    Do(Vec<Statement>),
+    Let(Symbol, Expr, Expr),
+    Seq(Expr, Expr),
     Literal(Literal),
 
     RecordInstance(Qualified, Vec<(Symbol, Expr)>),
     RecordUpdate(Qualified, Expr, Vec<(Symbol, Expr)>),
 
-    Access(Expr, usize),
+    Access(Occurrence),
     Tuple(Vec<Expr>),
+
+    Switch(Vec<Expr>, Tree, Vec<Expr>),
+    
 }
 
 pub type Expr = Box<ExprKind>;
 
 #[derive(Show)]
 pub struct LetDecl {
-    pub binders: Vec<Pattern>,
-    pub body: Vec<PatternArm>,
+    pub name: Qualified,
+    pub binders: Vec<Symbol>,
+    pub body: Expr,
 }
 
 #[derive(Show)]
@@ -83,6 +119,7 @@ pub enum TypeDecl {
 
 #[derive(Show)]
 pub struct ExternalDecl {
+    pub name: Qualified,
     pub binding: Symbol,
 }
 

@@ -1,25 +1,13 @@
 //! Pattern match compilation out of a transformed AST.
 
+use std::collections::HashSet;
+
+use vulpi_intern::Symbol;
 use vulpi_macros::Show;
 use vulpi_syntax::{
-    lambda::{Literal, Pattern, PatternKind},
-    r#abstract::Qualified,
+    elaborated::{PatApplication, Pattern, PatternKind},
+    lambda::{Case, Index, Occurrence, Tree, Expr},
 };
-use vulpi_show::Show;
-
-#[derive(Show)]
-pub enum Tree {
-    Fail,
-    Leaf(usize),
-    Switch(Vec<(Case, Tree)>),
-}
-
-#[derive(Clone, Show)]
-pub enum Case {
-    Tuple(usize),
-    Constructor(Qualified, usize),
-    Literal(Literal),
-}
 
 #[derive(Default, Show)]
 pub struct Problem {
@@ -28,28 +16,11 @@ pub struct Problem {
     actions: Vec<usize>,
 }
 
-#[derive(Clone, Show)]
-pub enum Index {
-    Cons(usize),
-    Tuple(usize),
-}
-
-#[derive(Clone, Show)]
-pub struct Occurrence(Vec<Index>);
-
-impl Occurrence {
-    pub fn with(&self, index: Index) -> Occurrence {
-        let mut indices = self.0.clone();
-        indices.push(index);
-        Occurrence(indices)
-    }
-
-    pub fn specialize(&self, case: Case) -> Vec<Occurrence> {
-        match case {
-            Case::Literal(_) => vec![],
-            Case::Tuple(size) => (0..size).map(|x| self.with(Index::Tuple(x))).collect(),
-            Case::Constructor(_, size) => (0..size).map(|x| self.with(Index::Cons(x))).collect(),
-        }
+pub fn specialize(ocur: &Occurrence, case: Case) -> Vec<Occurrence> {
+    match case {
+        Case::Literal(_) => vec![],
+        Case::Tuple(size) => (0..size).map(|x| ocur.with(Index::Tuple(x))).collect(),
+        Case::Constructor(_, size) => (0..size).map(|x| ocur.with(Index::Cons(x))).collect(),
     }
 }
 
@@ -76,7 +47,9 @@ impl Row {
             (_, Variable(_)) => Some(self.shift()),
 
             (Case::Literal(l), Literal(r)) if l == r => Some(self.shift()),
-            (Case::Constructor(l, _), Constructor(r, a)) if l == r => Some(self.join(Row(a))),
+            (Case::Constructor(l, _), Application(PatApplication { func, args })) if l == func => {
+                Some(self.join(Row(args)))
+            }
             (Case::Tuple(x), Tuple(y)) if x == y.len() => Some(self.join(Row(y))),
 
             _ => None,
@@ -107,8 +80,12 @@ impl Row {
 }
 
 impl Problem {
-    pub fn new(patterns: Vec<Vec<Pattern>>) -> Self {
-        let occurrences = vec![Occurrence(vec![]); patterns[0].len()];
+    pub fn new(scrutinee: Vec<Expr>, patterns: Vec<Vec<Pattern>>) -> Self {
+        let occurrences = scrutinee
+            .into_iter()
+            .map(|x| Occurrence(x, vec![]))
+            .collect::<Vec<_>>();
+
         let actions = (0..patterns.len()).collect();
 
         Self {
@@ -128,7 +105,7 @@ impl Problem {
             }
         }
 
-        let mut occurrences = self.occurrences[0].specialize(case);
+        let mut occurrences = specialize(&self.occurrences[0], case);
         occurrences.extend(self.occurrences.iter().skip(1).cloned());
 
         problem.occurrences = occurrences;
@@ -169,19 +146,25 @@ impl Problem {
         self.matrix.iter().any(|x| {
             matches!(
                 &*x.0[column],
-                PatternKind::Literal(_) | PatternKind::Constructor(_, _) | PatternKind::Tuple(_)
+                PatternKind::Literal(_) | PatternKind::Application(_) | PatternKind::Tuple(_)
             )
         })
     }
 
-    pub fn head_patterns(&self, column: usize) -> Vec<Case> {
-        let mut heads = vec![];
+    pub fn head_patterns(&self, column: usize) -> HashSet<Case> {
+        let mut heads = HashSet::default();
 
         for row in &self.matrix {
             match &*row.0[column] {
-                PatternKind::Literal(l) => heads.push(Case::Literal(l.clone())),
-                PatternKind::Constructor(x, a) => heads.push(Case::Constructor(x.clone(), a.len())),
-                PatternKind::Tuple(x) => heads.push(Case::Tuple(x.len())),
+                PatternKind::Literal(l) => {
+                    heads.insert(Case::Literal(l.clone()));
+                }
+                PatternKind::Application(PatApplication { func, args }) => {
+                    heads.insert(Case::Constructor(func.clone(), args.len()));
+                }
+                PatternKind::Tuple(x) => {
+                    heads.insert(Case::Tuple(x.len()));
+                }
                 _ => (),
             }
         }
@@ -202,30 +185,54 @@ impl Problem {
     }
 
     pub fn compile(&self) -> Tree {
-
-        println!("{}", self.show());
-
         if self.matrix.is_empty() {
             Tree::Fail
         } else if self.matrix[0].is_irrefutable() {
-            Tree::Leaf(self.actions[0])
+            Tree::Leaf(self.actions[0], self.occurrences.clone())
         } else {
             let refutable = self.find_refutable();
             let problem = self.swap(0, refutable);
             let heads = problem.head_patterns(0);
 
-
-            println!("{}", problem.show());
-
             let mut branches = vec![];
-        
+
             for head in heads {
                 let problem = problem.specialize(head.clone());
                 let branch = problem.compile();
                 branches.push((head, branch));
             }
 
-            Tree::Switch(branches)
+            Tree::Switch(self.occurrences[0].clone(), branches)
         }
     }
+}
+
+pub fn compile(scrutinee: Vec<Expr>, patterns: Vec<Vec<Pattern>>) -> Tree {
+    let problem = Problem::new(scrutinee, patterns);
+    problem.compile()
+}
+
+pub fn pattern_binders(expr: Expr, pat: &Pattern) -> Vec<(Occurrence, Symbol)> {
+    pub fn bind(pattern: &Pattern, ocur: Occurrence, binders: &mut Vec<(Occurrence, Symbol)>) {
+        match &**pattern {
+            PatternKind::Variable(x) => {
+                binders.push((ocur, x.clone()));
+            }
+            PatternKind::Application(func) => {
+                for (i, arg) in func.args.iter().enumerate() {
+                    bind(&arg, ocur.with(Index::Cons(i + 1)), binders);
+                }
+            }
+            PatternKind::Tuple(parts) => {
+                for (i, part) in parts.into_iter().enumerate() {
+                    bind(part, ocur.with(Index::Tuple(i)), binders);
+                }
+            }
+            _ => (),
+        }
+    }
+
+    let mut binders = vec![];
+    bind(pat, Occurrence(expr, vec![]), &mut binders);
+    binders
 }

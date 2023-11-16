@@ -17,7 +17,9 @@ vulpi-syntax = { path = "../vulpi-syntax" }
 vulpi-intern = { path = "../vulpi-intern" }
 vulpi-typer = { path = "../vulpi-typer" }
 vulpi-ir = { path = "../vulpi-ir" }
-
+vulpi-js = { path = "../vulpi-js" }
 
 filetime = "0.2.22"
 petgraph = "0.6.4"
+resw = "0.6.0-alpha.2"
+

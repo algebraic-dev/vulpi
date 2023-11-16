@@ -108,7 +108,7 @@ impl Infer for Expr {
                     ty,
                     Box::new(elaborated::ExprKind::Let(elaborated::LetExpr {
                         pattern: pat_elab,
-                        value: value_elab,
+                        next: value_elab,
                         body: body_elab,
                     })),
                 )
@@ -152,13 +152,17 @@ impl Infer for Expr {
                 let mut elab_scrutinee = Vec::new();
 
                 for (arm, scrutinee) in arms.iter().cloned().zip(when.scrutinee.iter()) {
-                    let elab = scrutinee.check(arm, (ctx, env.clone()));
+                    let (ty, elab) = scrutinee.infer((ctx, env.clone()));
+                    ctx.subsumes(env.clone(), arm, ty);
                     elab_scrutinee.push(elab);
                 }
 
                 ctx.subsumes(env.clone(), ret_type.clone(), ret);
 
-                if false {
+                if perform {
+
+                    let arms = arms.iter().map(|x| ctx.instantiate(&env, x)).collect();
+                    
                     let problem = Problem::exhaustiveness(&elab_arms, arms);
 
                     if let Witness::NonExhaustive(case) = problem.exaustive(ctx, env.clone()) {

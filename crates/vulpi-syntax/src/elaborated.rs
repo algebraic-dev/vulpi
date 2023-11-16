@@ -99,7 +99,7 @@ pub struct WhenExpr<T> {
 pub struct LetExpr<T> {
     pub pattern: Pattern,
     pub body: Expr<T>,
-    pub value: Expr<T>,
+    pub next: Expr<T>,
 }
 
 #[derive(Show, Clone)]
@@ -146,6 +146,7 @@ pub type Expr<T> = Box<ExprKind<T>>;
 
 #[derive(Show, Clone)]
 pub struct LetDecl<T> {
+    pub name: Qualified,
     pub binders: Vec<(Pattern, T)>,
     pub body: Vec<PatternArm<T>>,
 }
@@ -159,6 +160,7 @@ pub enum TypeDecl {
 
 #[derive(Show, Clone)]
 pub struct ExternalDecl<T> {
+    pub name: Qualified,
     pub typ: T,
     pub binding: Symbol,
 }

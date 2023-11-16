@@ -12,6 +12,12 @@ pub struct Qualified {
     pub name: Symbol,
 }
 
+impl Qualified {
+    pub fn to_string(&self) -> String {
+        format!("{}__{}", self.path.get(), self.name.get()).replace(".", "__")
+    }
+}
+
 impl Show for Qualified {
     fn show(&self) -> TreeDisplay {
         TreeDisplay::label("Qualified")
@@ -397,6 +403,7 @@ pub enum TopLevel {
     Type(TypeDecl),
     Module(ModuleDecl),
     External(ExtDecl),
+    Use
 }
 
 #[derive(Show, Default)]

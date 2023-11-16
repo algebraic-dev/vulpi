@@ -201,7 +201,8 @@ impl Infer for Pattern {
                     let Some((param_ty, rest)) = ctx.as_function(&env, typ) else { unreachable!() };
 
                     typ = rest;
-                    ctx.subsumes(env.clone(), param_ty, arg_ty);
+
+                    ctx.subsumes(env.clone(), arg_ty, param_ty);
                 }
 
                 (

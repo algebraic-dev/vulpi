@@ -226,6 +226,7 @@ impl Declare for ExtDecl {
         ctx.elaborated.externals.insert(
             self.name.clone(),
             elaborated::ExternalDecl {
+                name: self.name.clone(),
                 typ: typ.quote(env.level),
                 binding: self.ret.clone(),
             },
@@ -353,6 +354,7 @@ impl Declare for LetDecl {
         ctx.elaborated.lets.insert(
             self.name.clone(),
             elaborated::LetDecl {
+                name: self.name.clone(),
                 binders,
                 body,
             },

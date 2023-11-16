@@ -1,19 +1,26 @@
 use Prelude
-use Yal.B
 
-pub type Result ok err =
-    | Ok ok
-    | Err err
+pub type B =
+    | T
+    | F
 
-pub type User data = {
-    name: String,
-    age: Int,
-    data: data
-}
+use Yal.Main.B
 
-let addTwo (x: Int) : Int = add x 2
+let and (x: B) (y: B) : B = 
+    when x, y is
+        T, T => T
+        T, F => F
+        F, T => F
+        F, F => F
 
-let ata (b: Int) (a: Int) : Int = 
-       a 
-    |> addTwo 
-    |> addTwo
+let toString (x: B) : String =
+    when x is
+        T => "T"
+        F => "F"
+
+let main : Int = do
+    log (toString (and T T))
+    log (toString (and T F))
+    log (toString (and F T))
+    log (toString (and F F))
+    

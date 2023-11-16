@@ -185,10 +185,16 @@ impl Module {
     pub fn fork(&self, name: Symbol) -> Module {
         let path = { self.borrow().name.clone() };
 
-        self.borrow_mut()
+        let module = self.borrow_mut()
             .submodules
             .entry(name.clone())
-            .or_insert_with(|| Module::new(path.with(name)))
+            .or_insert_with(|| Module::new(path.with(name.clone())))
+            .clone();
+        
+        self.borrow_mut()
+            .available
+            .entry(path.with(name))
+            .or_insert_with(|| module.clone())
             .clone()
     }
 }
@@ -489,6 +495,8 @@ impl<T: 'static> Solver<T> {
 /// Top level declarations are the ones that can be declared at the top level of a module.
 pub mod top_level {
 
+    use crate::error::ResolverError;
+
     use super::*;
 
     /// Resolve a top level declaration and returns the solver for it.
@@ -500,10 +508,7 @@ pub mod top_level {
             Type(type_decl) => Some(resolve_type_decl(ctx, *type_decl).map(abs::TopLevel::Type)),
             Module(mod_decl) => Some(resolve_module(ctx, *mod_decl).map(abs::TopLevel::Module)),
             External(ext) => Some(resolve_external(ctx, *ext).map(abs::TopLevel::External)),
-            Use(use_decl) => {
-                declare_use(ctx, *use_decl);
-                None
-            }
+            Use(use_decl) => Some(resolve_use(ctx, *use_decl).map(|_| abs::TopLevel::Use)),
             Error(_) => None,
         }
     }
@@ -697,6 +702,7 @@ pub mod top_level {
                         abs::TopLevel::Type(x) => program.types.push(x),
                         abs::TopLevel::Module(x) => program.modules.push(x),
                         abs::TopLevel::External(x) => program.externals.push(x),
+                        abs::TopLevel::Use => (),
                     }
                 }
 
@@ -716,7 +722,7 @@ pub mod top_level {
         })
     }
 
-    pub fn declare_use(ctx: Context, decl: tree::UseDecl) {
+    pub fn resolve_use(ctx: Context, decl: tree::UseDecl) -> Solver<()> {
         if let Some(alias) = decl.alias {
             ctx.module.modules_mut().insert(
                 alias.alias.symbol(),
@@ -727,6 +733,17 @@ pub mod top_level {
                 .opened_mut()
                 .insert(from_upper_path(&decl.path), decl.visibility.clone().into());
         }
+
+        Solver::new(move |ctx| {
+            let path = from_upper_path(&decl.path);
+            
+            if !ctx.module.available().contains_key(&path) {
+                ctx.reporter.report(Diagnostic::new(ResolverError {
+                    span: decl.path.span.clone(),
+                    kind: error::ResolverErrorKind::InvalidPath(path.segments)
+                }));
+            }
+        })
     }
 }
 
@@ -1256,6 +1273,7 @@ pub fn resolve(ctx: &Context, program: tree::Program) -> Solver<abs::Program> {
                 abs::TopLevel::Type(x) => program.types.push(x),
                 abs::TopLevel::Module(x) => program.modules.push(x),
                 abs::TopLevel::External(x) => program.externals.push(x),
+                abs::TopLevel::Use => (),
             }
         }
 

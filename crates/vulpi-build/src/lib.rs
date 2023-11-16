@@ -2,14 +2,16 @@
 //! crate from the source files and resolving the modules.
 
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fs::File};
 
-use error::BuildError;
+
+use resw::Writer;
 use vulpi_intern::Symbol;
 use vulpi_ir::transform;
 use vulpi_location::{FileId, Span};
-use vulpi_report::{Diagnostic, Report};
+use vulpi_report::Report;
 use vulpi_resolver::{dependencies::{Dependencies, self}, Module, Context};
+use vulpi_show::Show;
 use vulpi_syntax::concrete::tree::Program;
 use vulpi_vfs::{FileSystem, path::Path};
 
@@ -32,10 +34,6 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         if let Ok(id) = self.fs.load(path) {
             Some(id)
         } else {
-            self.reporter.report(Diagnostic::new(BuildError {
-                span,
-                kind: error::BuildErrorKind::NotFound,
-            }));
             None
         }
     }
@@ -112,10 +110,16 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         let program = tc.elaborated;
         
         if !self.reporter.has_errors() {
-            let transformed = transform::Transform::transform(program);
+            let res = transform::Transform::transform(program, &mut Default::default());
+
+            println!("{}", res.show());
+
+            let js = vulpi_js::Transform::transform(&res, &mut Default::default());
+            let f = File::create("example.out.js").unwrap();
+            let mut w = Writer::new(f);
+
+            w.write_program(&js);
         }
-
-
     }
 
 }
