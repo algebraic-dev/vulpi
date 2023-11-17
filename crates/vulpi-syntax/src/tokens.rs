@@ -22,6 +22,8 @@ pub enum TokenData {
     Pub,      // 'pub' keyword
     Do,       // 'do' keyword
     In,       // 'in' keyword
+    Impl,     // 'impl' keyword
+    Trait,    // 'trait' keyword
     Forall,   // 'forall' keyword
     Where,    // 'where' keyword
     Mod,      // 'mod' keyword
@@ -177,6 +179,8 @@ impl ToString for Token {
             As => "as".to_string(),
             Type => "type".to_string(),
             Pub => "pub".to_string(),
+            Trait => "trait".to_string(),
+            Impl => "impl".to_string(),
             Do => "do".to_string(),
             Where => "where".to_string(),
             Forall => "forall".to_string(),

@@ -41,6 +41,24 @@ impl<'a> Parser<'a> {
         let arm = self.pattern_arm()?;
         Ok(LetCase { pipe, arm })
     }
+    
+   pub fn trait_decl(&mut self, visibility: Visibility) -> Result<TraitDecl> {
+       let trait_ = self.expect(TokenData::Trait)?;
+       let name = self.upper()?;
+       let type_binders = self.many(Self::type_binder)?;
+       let where_ = self.expect(TokenData::Where)?;
+       let block = self.block(|ctx| ctx.let_decl(Visibility::Private))?;
+       
+       Ok(
+           TraitDecl {
+              visibility,
+              trait_,
+              name, 
+              type_binders, 
+              where_,
+              block 
+           })
+   }
 
     pub fn let_decl(&mut self, visibility: Visibility) -> Result<LetDecl> {
         let let_ = self.expect(TokenData::Let)?;
@@ -236,6 +254,7 @@ impl<'a> Parser<'a> {
         let vis = self.visibility()?;
         match self.token() {
             TokenData::Let => self.let_decl(vis).map(Box::new).map(TopLevel::Let),
+            TokenData::Trait => self.trait_decl(vis).map(Box::new).map(TopLevel::Trait),
             TokenData::Type => self.type_decl(vis).map(Box::new).map(TopLevel::Type),
             TokenData::Use => self.use_decl(vis).map(Box::new).map(TopLevel::Use),
             TokenData::Mod => self.mod_decl(vis).map(Box::new).map(TopLevel::Module),

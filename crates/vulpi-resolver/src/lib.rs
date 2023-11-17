@@ -505,6 +505,7 @@ pub mod top_level {
 
         match top_level {
             Let(let_decl) => Some(resolve_let(ctx, *let_decl).map(abs::TopLevel::Let)),
+            Trait(trait_decl) => todo!(),
             Type(type_decl) => Some(resolve_type_decl(ctx, *type_decl).map(abs::TopLevel::Type)),
             Module(mod_decl) => Some(resolve_module(ctx, *mod_decl).map(abs::TopLevel::Module)),
             External(ext) => Some(resolve_external(ctx, *ext).map(abs::TopLevel::External)),

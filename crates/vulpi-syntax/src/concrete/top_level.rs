@@ -39,6 +39,16 @@ pub enum LetMode {
 }
 
 #[derive(Show, Clone)]
+pub struct TraitDecl {
+    pub visibility: Visibility,
+    pub trait_: Token,
+    pub name: Upper,
+    pub type_binders: Vec<TypeBinder>,
+    pub where_ : Token,
+    pub block: Vec<LetDecl>,       
+}
+
+#[derive(Show, Clone)]
 pub struct LetDecl {
     pub visibility: Visibility,
     pub let_: Token,
@@ -186,6 +196,7 @@ pub struct ExtDecl {
 #[derive(Show, Clone)]
 pub enum TopLevel {
     Let(Box<LetDecl>),
+    Trait(Box<TraitDecl>),
     Type(Box<TypeDecl>),
     Use(Box<UseDecl>),
     Module(Box<ModuleDecl>),

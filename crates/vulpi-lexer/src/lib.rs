@@ -247,6 +247,8 @@ impl<'a> Lexer<'a> {
             "type" => TokenData::Type,
             "pub" => TokenData::Pub,
             "in" => TokenData::In,
+            "impl" => TokenData::Impl,
+            "trait" => TokenData::Trait,
             "forall" => TokenData::Forall,
             "_" => TokenData::Wildcard,
             "external" => TokenData::External,
