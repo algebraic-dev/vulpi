@@ -55,6 +55,9 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
     }
     
     pub fn compile(&mut self, module: Symbol, path: FS::Path) {
+        // TODO: Fix this error :( I can't now because it would require changes
+        // to the vulpi-report module. Good luck Sofia from the future!
+
         let root = self.fs.load(path).unwrap();
         let parsed = self.parse(root);
 
