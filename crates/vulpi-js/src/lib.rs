@@ -2,9 +2,9 @@ use std::{borrow::Cow, collections::HashMap};
 
 use resast::{
     decl::{Decl, VarDecl},
-    expr::{BinaryExpr, CallExpr, Expr},
+    expr::{BinaryExpr, CallExpr, Expr, Lit, ObjProp, Prop},
     stmt::Stmt,
-    FuncArg, Ident, ProgramPart, Func, FuncBody,
+    Func, FuncArg, FuncBody, Ident, ProgramPart,
 };
 use vulpi_intern::Symbol;
 use vulpi_syntax::{
@@ -190,8 +190,44 @@ impl Transform for lambda::ExprKind {
                     resast::expr::StringLit::Single(Cow::Owned("()".to_string())),
                 )),
             },
-            lambda::ExprKind::RecordInstance(_, _) => todo!(),
-            lambda::ExprKind::RecordUpdate(_, _, _) => todo!(),
+            lambda::ExprKind::RecordInstance(_, y) => resast::expr::Expr::Obj(
+                y.iter()
+                    .map(|(name, value)| {
+                        ObjProp::Prop(Prop {
+                            key: resast::expr::PropKey::Lit(Lit::String(
+                                resast::expr::StringLit::Double(Cow::Owned(name.get())),
+                            )),
+                            value: resast::expr::PropValue::Expr(value.transform(ctx)),
+                            kind: resast::PropKind::Init,
+                            method: false,
+                            computed: false,
+                            short_hand: false,
+                            is_static: false,
+                        })
+                    })
+                    .collect(),
+            ),
+            lambda::ExprKind::RecordUpdate(_, x, y) => {
+                let mut collect: Vec<_> = y
+                    .iter()
+                    .map(|(name, value)| {
+                        ObjProp::Prop(Prop {
+                            key: resast::expr::PropKey::Lit(Lit::String(
+                                resast::expr::StringLit::Double(Cow::Owned(name.get())),
+                            )),
+                            value: resast::expr::PropValue::Expr(value.transform(ctx)),
+                            kind: resast::PropKind::Init,
+                            method: false,
+                            computed: false,
+                            short_hand: false,
+                            is_static: false,
+                        })
+                    })
+                    .collect();
+                let mut fields = vec![ObjProp::Spread(x.transform(ctx))];
+                fields.extend(collect);
+                resast::expr::Expr::Obj(fields)
+            }
             lambda::ExprKind::Access(x) => x.transform(ctx),
             lambda::ExprKind::Tuple(_) => todo!(),
             lambda::ExprKind::Switch(_, tree, actions) => {
@@ -278,19 +314,20 @@ impl Transform for LetDecl {
         };
 
         if let Some((last, tail)) = self.binders.split_first() {
-
             let mut mem = body;
 
             for name in tail {
-                mem = vec![ProgramPart::Stmt(Stmt::Return(Some(resast::expr::Expr::Func(Func {
-                    id: None,
-                    params: vec![FuncArg::Pat(resast::pat::Pat::Ident(Ident::new(
-                        name.get(),
-                    )))],
-                    body: FuncBody(mem),
-                    generator: false,
-                    is_async: false,
-                }))))]
+                mem = vec![ProgramPart::Stmt(Stmt::Return(Some(
+                    resast::expr::Expr::Func(Func {
+                        id: None,
+                        params: vec![FuncArg::Pat(resast::pat::Pat::Ident(Ident::new(
+                            name.get(),
+                        )))],
+                        body: FuncBody(mem),
+                        generator: false,
+                        is_async: false,
+                    }),
+                )))]
             }
 
             resast::decl::Decl::Func(Func {
