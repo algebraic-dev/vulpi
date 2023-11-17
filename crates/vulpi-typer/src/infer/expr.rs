@@ -50,7 +50,7 @@ impl Infer for Expr {
                     elab_args.push(arg_elab);
 
                     if let Some((left, right)) = ctx.as_function(&env, ty.deref()) {
-                        ctx.subsumes(env.clone(), left, arg_ty);
+                        ctx.subsumes(env.clone(), arg_ty, left);
                         ty = right;
                     } else {
                         ctx.report(
@@ -334,7 +334,7 @@ impl Infer for Expr {
             ExprKind::RecordUpdate(update) => {
                 let (typ, elab_expr) = update.expr.infer((ctx, env.clone()));
 
-                let (head, binders) = typ.application_spine();
+                let (head, binders) = typ.deref().application_spine();
 
                 let TypeKind::Variable(name) = head.as_ref() else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
