@@ -2,7 +2,7 @@
 //! crate from the source files and resolving the modules.
 
 
-use std::{collections::HashMap, fs::File};
+use std::{collections::HashMap, fs::File, path::PathBuf};
 
 
 use resw::Writer;
@@ -54,7 +54,7 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         }
     }
     
-    pub fn compile(&mut self, module: Symbol, path: FS::Path) {
+    pub fn compile(&mut self, module: Symbol, path: FS::Path, output: PathBuf) {
         // TODO: Fix this error :( I can't now because it would require changes
         // to the vulpi-report module. Good luck Sofia from the future!
 
@@ -114,7 +114,7 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
             let res = transform::Transform::transform(program, &mut Default::default());
 
             let js = vulpi_js::Transform::transform(&res, &mut Default::default());
-            let f = File::create("example.out.js").unwrap();
+            let f = File::create(output).unwrap();
             let mut w = Writer::new(f);
 
             w.write_program(&js).unwrap();

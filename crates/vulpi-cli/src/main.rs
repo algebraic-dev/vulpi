@@ -12,8 +12,11 @@ use clap::Parser;
 #[derive(Parser)]
 enum Cli {
     Compile {
-        name: String,
-        package: String
+        package: String,
+        file_name: String,
+
+        #[clap(short, long)]
+        output: Option<String>
     }
 }
 
@@ -38,10 +41,12 @@ fn main() {
     let result = Cli::parse();
     
     match result {
-        Cli::Compile { name: file_name, package } => {
+        Cli::Compile { file_name, package , output } => {
             let cwd = env::current_dir().unwrap();
 
             let name = Symbol::intern(&package);
+
+            let output = output.unwrap_or_else(|| format!("{}.js", file_name.split(".").next().unwrap().to_string()));
         
             let mut compiler = vulpi_build::ProjectCompiler {
                 fs: RealFileSystem::new(name.clone(), cwd.clone(), cwd.clone().join("build")),
@@ -49,7 +54,7 @@ fn main() {
                 name: name.clone()
             };
         
-            compiler.compile(name.clone(), PathBuf::from(file_name));
+            compiler.compile(name.clone(), PathBuf::from(file_name), PathBuf::from(output));
             
             let ctx = Classic::new(&compiler.fs, cwd.clone());
             compiler.reporter.to_stderr(ctx)
