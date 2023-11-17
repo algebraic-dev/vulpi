@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap};
 
 use resast::{
     decl::{Decl, VarDecl},
-    expr::{BinaryExpr, CallExpr, Expr, Lit, ObjProp, Prop},
+    expr::{BinaryExpr, CallExpr, Expr, Lit, ObjProp, Prop, MemberExpr, StringLit},
     stmt::Stmt,
     Func, FuncArg, FuncBody, Ident, ProgramPart,
 };
@@ -161,7 +161,13 @@ impl Transform for lambda::ExprKind {
                     resast::expr::Expr::Ident(Ident::new(x.to_string()))
                 }
             }
-            lambda::ExprKind::Projection(_, _) => todo!(),
+            lambda::ExprKind::Projection(field, object) => {
+                resast::expr::Expr::Member(MemberExpr{
+                    object: Box::new(object.transform(ctx)),
+                    property: Box::new(resast::expr::Expr::Lit(Lit::String(StringLit::Double(Cow::Owned(field.name.get()))))),
+                    computed: true,
+                })
+            },
             lambda::ExprKind::Let(name, value, next) => {
                 let transform = value.transform(ctx);
                 ctx.upwards.push((name.clone(), transform));
@@ -208,7 +214,7 @@ impl Transform for lambda::ExprKind {
                     .collect(),
             ),
             lambda::ExprKind::RecordUpdate(_, x, y) => {
-                let mut collect: Vec<_> = y
+                let collect: Vec<_> = y
                     .iter()
                     .map(|(name, value)| {
                         ObjProp::Prop(Prop {
