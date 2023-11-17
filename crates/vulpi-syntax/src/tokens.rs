@@ -58,6 +58,7 @@ pub enum TokenData {
     Equal,       // '='
     Bar,         // '|'
     PipeRight,   // '|>'
+    PlusPlus,    // '++'    
 
     Plus,      // '+'
     Minus,     // '-'
@@ -199,6 +200,7 @@ impl ToString for Token {
             Cases => "cases".to_string(),
             Effect => "effect".to_string(),
             External => "external".to_string(),
+            PlusPlus => "++".to_string(),
         }
     }
 }

@@ -312,7 +312,14 @@ impl<'a> Lexer<'a> {
                         TokenData::Minus
                     }
                 }
-                '+' => TokenData::Plus,
+                '+' => {
+                    if let Some('+') = self.peekable.peek() {
+                        self.advance();
+                        TokenData::PlusPlus
+                    } else {
+                        TokenData::Plus
+                    }                   
+                },
                 '*' => TokenData::Star,
                 '/' => TokenData::Slash,
                 '\\' => TokenData::BackSlash,

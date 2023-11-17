@@ -998,6 +998,7 @@ pub mod expr {
                     tree::Operator::Shl(_) => "shl",
                     tree::Operator::Shr(_) => "shr",
                     tree::Operator::Pipe(_) => "pipe",
+                    tree::Operator::Concat(_) => "concat",
                 };
 
                 let path = ctx.resolve(

@@ -179,6 +179,7 @@ impl<'a> Parser<'a> {
             TokenData::GreaterEqual => Some((7, 8, Operator::Ge(self.peek().clone()))),
             TokenData::Or => Some((9, 1, Operator::Or(self.peek().clone()))),
             TokenData::And => Some((9, 1, Operator::And(self.peek().clone()))),
+            TokenData::PlusPlus => Some((9, 1, Operator::Concat(self.peek().clone()))),
             _ => None,
         }
     }

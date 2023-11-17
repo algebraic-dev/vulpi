@@ -27,6 +27,7 @@ pub enum Operator {
     Shl(Token),
     Shr(Token),
     Pipe(Token),
+    Concat(Token),
 }
 
 impl Operator {
@@ -50,6 +51,7 @@ impl Operator {
             Operator::Shl(t) => t.value.span.clone(),
             Operator::Shr(t) => t.value.span.clone(),
             Operator::Pipe(t) => t.value.span.clone(),
+            Operator::Concat(t) => t.value.span.clone(),
         }
     }
 }
