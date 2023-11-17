@@ -1175,15 +1175,7 @@ pub fn transform_type(ctx: &Context, concrete_type: tree::Type) -> abs::Type {
             }
         }
         tree::TypeKind::TypeVariable(e) => {
-            if ctx.in_scope(DefinitionKind::Type, e.symbol()) {
-                abs::TypeKind::TypeVariable(e.symbol())
-            } else {
-                ctx.reporter.report(Diagnostic::new(error::ResolverError {
-                    span: concrete_type.span.clone(),
-                    kind: error::ResolverErrorKind::NotFound(e.symbol()),
-                }));
-                abs::TypeKind::Error
-            }
+            abs::TypeKind::TypeVariable(e.symbol())
         }
         tree::TypeKind::Arrow(x) => abs::TypeKind::Arrow(abs::PiType {
             left: transform_type(ctx, *x.left),

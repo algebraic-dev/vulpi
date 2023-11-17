@@ -2,9 +2,9 @@ use std::{borrow::Cow, collections::HashMap};
 
 use resast::{
     decl::{Decl, VarDecl},
-    expr::{ArrayExpr, BinaryExpr, CallExpr, Expr},
-    stmt::{Stmt, SwitchStmt},
-    FuncArg, Ident, ProgramPart,
+    expr::{BinaryExpr, CallExpr, Expr},
+    stmt::Stmt,
+    FuncArg, Ident, ProgramPart, Func, FuncBody,
 };
 use vulpi_intern::Symbol;
 use vulpi_syntax::{
@@ -28,7 +28,7 @@ pub trait Transform {
 impl Transform for lambda::Case {
     type Out<'a> = Expr<'a>;
 
-    fn transform<'a>(&self, ctx: &mut Context<'a>) -> Self::Out<'a> {
+    fn transform<'a>(&self, _ctx: &mut Context<'a>) -> Self::Out<'a> {
         match self {
             lambda::Case::Tuple(x) => Expr::Lit(resast::expr::Lit::Number(
                 std::borrow::Cow::Owned(x.to_string()),
@@ -257,7 +257,7 @@ impl Transform for LetDecl {
         let upwards = std::mem::take(&mut ctx.upwards);
 
         let body = if upwards.is_empty() {
-            resast::expr::ArrowFuncBody::Expr(Box::new(x))
+            vec![ProgramPart::Stmt(Stmt::Return(Some(x.clone())))]
         } else {
             let mut collect: Vec<_> = upwards
                 .into_iter()
@@ -272,36 +272,45 @@ impl Transform for LetDecl {
                 })
                 .collect();
 
-            collect.push(ProgramPart::Stmt(Stmt::Return(Some(x))));
+            collect.push(ProgramPart::Stmt(Stmt::Return(Some(x.clone()))));
 
-            resast::expr::ArrowFuncBody::FuncBody(resast::FuncBody(collect))
+            collect
         };
 
-        let fun = self.binders.iter().fold(body, |body, name| {
-            resast::expr::ArrowFuncBody::Expr(Box::new(resast::expr::Expr::ArrowFunc(
-                resast::expr::ArrowFuncExpr {
+        if let Some((last, tail)) = self.binders.split_first() {
+
+            let mut mem = body;
+
+            for name in tail {
+                mem = vec![ProgramPart::Stmt(Stmt::Return(Some(resast::expr::Expr::Func(Func {
                     id: None,
                     params: vec![FuncArg::Pat(resast::pat::Pat::Ident(Ident::new(
                         name.get(),
                     )))],
-                    body,
-                    expression: false,
+                    body: FuncBody(mem),
                     generator: false,
                     is_async: false,
-                },
-            )))
-        });
+                }))))]
+            }
 
-        Decl::Var(
-            resast::VarKind::Let,
-            vec![VarDecl {
-                id: resast::pat::Pat::Ident(Ident::new(self.name.to_string())),
-                init: Some(match fun {
-                    resast::expr::ArrowFuncBody::Expr(x) => *x,
-                    _ => unreachable!(),
-                }),
-            }],
-        )
+            resast::decl::Decl::Func(Func {
+                id: Some(Ident::new(self.name.to_string())),
+                params: vec![FuncArg::Pat(resast::pat::Pat::Ident(Ident::new(
+                    last.get(),
+                )))],
+                body: FuncBody(mem),
+                generator: false,
+                is_async: false,
+            })
+        } else {
+            Decl::Var(
+                resast::VarKind::Let,
+                vec![VarDecl {
+                    id: resast::pat::Pat::Ident(Ident::new(self.name.to_string())),
+                    init: Some(x),
+                }],
+            )
+        }
     }
 }
 

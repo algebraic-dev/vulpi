@@ -99,7 +99,9 @@ impl Quote<Type<Real>> for Type<Virtual> {
             })),
             TypeKind::Hole(h) => h.quote(depth),
             TypeKind::Variable(v) => Type::new(TypeKind::Variable(v.clone())),
-            TypeKind::Bound(i) => Type::new(TypeKind::Bound(Level::to_index(depth, *i))),
+            TypeKind::Bound(i) => {
+                Type::new(TypeKind::Bound(Level::to_index(depth, *i)))
+            }
             TypeKind::Tuple(p) => Type::new(TypeKind::Tuple(p.quote(depth))),
             TypeKind::Application(func, arg) => {
                 let func = func.quote(depth);

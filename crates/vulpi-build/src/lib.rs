@@ -11,11 +11,9 @@ use vulpi_ir::transform;
 use vulpi_location::{FileId, Span};
 use vulpi_report::Report;
 use vulpi_resolver::{dependencies::{Dependencies, self}, Module, Context};
-use vulpi_show::Show;
 use vulpi_syntax::concrete::tree::Program;
 use vulpi_vfs::{FileSystem, path::Path};
 
-mod error;
 pub mod real;
 
 pub enum Interface {
@@ -30,7 +28,7 @@ pub struct ProjectCompiler<FS: FileSystem> {
 }
 
 impl<FS: FileSystem> ProjectCompiler<FS> {
-    fn load(&mut self, span: Span, path: FS::Path) -> Option<FileId> {
+    fn load(&mut self, _span: Span, path: FS::Path) -> Option<FileId> {
         if let Ok(id) = self.fs.load(path) {
             Some(id)
         } else {
@@ -112,13 +110,11 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         if !self.reporter.has_errors() {
             let res = transform::Transform::transform(program, &mut Default::default());
 
-            println!("{}", res.show());
-
             let js = vulpi_js::Transform::transform(&res, &mut Default::default());
             let f = File::create("example.out.js").unwrap();
             let mut w = Writer::new(f);
 
-            w.write_program(&js);
+            w.write_program(&js).unwrap();
         }
     }
 

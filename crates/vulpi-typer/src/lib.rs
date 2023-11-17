@@ -200,6 +200,8 @@ impl Declare for ExtDecl {
     fn declare(&self, (ctx, mut env): (&mut Context, Env)) {
         let fvs = self.ty.data.free_variables();
 
+        let start_env = env.clone();
+        
         let mut unbound = Vec::new();
 
         for fv in fvs {
@@ -211,7 +213,7 @@ impl Declare for ExtDecl {
         let (typ, k) = self.ty.infer((ctx, env.clone()));
         ctx.subsumes(env.clone(), k, Kind::typ());
 
-        let typ = typ.eval(&env);
+        let typ = typ.eval(&start_env);
 
         ctx.modules.get(&self.namespace).variables.insert(
             self.name.name.clone(),
@@ -236,6 +238,7 @@ impl Declare for ExtDecl {
 
 impl Declare for LetDecl {
     fn declare(&self, (ctx, mut env): (&mut Context, Env)) {
+        let start_env = env.clone();
         let mut fvs = self
             .ret
             .as_ref()
@@ -279,7 +282,7 @@ impl Declare for LetDecl {
 
         let mut typ = Type::<Real>::function(args.clone(), ret.clone());
         
-        for (name, kind) in unbound.clone() {
+        for (name, kind) in unbound.iter().rev().cloned() {
             typ = Type::forall(Forall {
                 name,
                 kind,
@@ -290,7 +293,7 @@ impl Declare for LetDecl {
         ctx.modules.get(&self.name.path.clone()).variables.insert(
             self.name.name.clone(),
             LetDef {
-                typ: typ.eval(&env),
+                typ: typ.eval(&start_env),
                 unbound,
                 ret: ret.eval(&env),
                 args: func_args,

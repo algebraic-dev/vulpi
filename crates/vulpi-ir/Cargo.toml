@@ -11,3 +11,4 @@ vulpi-syntax = { path = "../vulpi-syntax" }
 vulpi-typer = { path = "../vulpi-typer" }
 vulpi-macros = { path = "../vulpi-macros" }
 vulpi-show = { path = "../vulpi-show" }
+vulpi-location = { path = "../vulpi-location" }

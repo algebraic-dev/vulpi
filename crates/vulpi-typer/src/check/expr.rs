@@ -1,5 +1,7 @@
 //! Checking of expressions
 
+
+use vulpi_location::Spanned;
 use vulpi_syntax::{elaborated, r#abstract::Expr, r#abstract::ExprKind, r#abstract::Sttm};
 
 use crate::{
@@ -21,7 +23,8 @@ impl Check for Expr {
         (ctx, mut env): Self::Context<'_>,
     ) -> Self::Return {
         env.on(self.span.clone());
-        match (&self.data, ty.deref().as_ref()) {
+       
+        let elem = match (&self.data, ty.deref().as_ref()) {
             (ExprKind::Do(block), _) => {
                 let mut stmts = Vec::new();
 
@@ -48,14 +51,16 @@ impl Check for Expr {
                 self.check(
                     l.body.apply_local(Some(l.name.clone()), lvl_ty.clone()),
                     (ctx, env.add(Some(l.name.clone()), lvl_ty)),
-                )
+                ).data
             }
             _ => {
                 let (expr_ty, elab_expr) = self.infer((ctx, env.clone()));
                 ctx.subsumes(env, expr_ty, ty);
-                elab_expr
+                elab_expr.data
             }
-        }
+        };
+        
+        Spanned::new(elem, self.span.clone())
     }
 }
 

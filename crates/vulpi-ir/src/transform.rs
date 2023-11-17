@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
+use vulpi_location::Spanned;
 use vulpi_syntax::{
     elaborated,
     lambda::{self, ExprKind},
@@ -149,7 +150,7 @@ impl Transform for Vec<elaborated::Statement<Type<Real>>> {
                     compile_match(ctx, scrutinee, pats, next)
                 }
                 elaborated::Statement::Expr(x) => {
-                    let expr_kind = Box::new(*x.transform(ctx));
+                    let expr_kind = Box::new(*x.data.transform(ctx));
                     if tail.is_empty() {
                         *expr_kind
                     } else {
@@ -164,11 +165,19 @@ impl Transform for Vec<elaborated::Statement<Type<Real>>> {
     }
 }
 
-impl Transform for (Symbol, Box<elaborated::ExprKind<Type<Real>>>) {
-    type Out = (Symbol, Box<lambda::ExprKind>);
+impl<T: Transform> Transform for (Symbol, T) {
+    type Out = (Symbol, T::Out);
 
     fn transform(self, ctx: &mut Ctx) -> Self::Out {
         (self.0, self.1.transform(ctx))
+    }
+}
+
+impl<T: Transform> Transform for Spanned<T> {
+    type Out = T::Out;
+
+    fn transform(self, ctx: &mut Ctx) -> Self::Out {
+        self.data.transform(ctx)
     }
 }
 
@@ -191,7 +200,7 @@ impl Transform for elaborated::ExprKind<Type<Real>> {
                 )
             }
             elaborated::ExprKind::Application(x) => {
-                if let elaborated::ExprKind::Constructor(z, y) = *x.func {
+                if let elaborated::ExprKind::Constructor(z, y) = *x.func.data {
                     Constructor(z, y, x.args.transform(ctx))
                 } else {
                     Application(x.func.transform(ctx), x.args.transform(ctx))

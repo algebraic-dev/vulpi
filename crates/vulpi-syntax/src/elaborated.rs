@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
+use vulpi_location::Spanned;
 use vulpi_macros::Show;
 
 use crate::r#abstract::Qualified;
@@ -142,7 +143,7 @@ pub enum ExprKind<T> {
     Error,
 }
 
-pub type Expr<T> = Box<ExprKind<T>>;
+pub type Expr<T> = Spanned<Box<ExprKind<T>>>;
 
 #[derive(Show, Clone)]
 pub struct LetDecl<T> {
