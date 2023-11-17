@@ -11,3 +11,4 @@ vulpi-build = { path = "../vulpi-build" }
 vulpi-report = { path = "../vulpi-report" }
 vulpi-vfs = { path = "../vulpi-vfs" }
 vulpi-intern = { path = "../vulpi-intern" }
+clap = { version = "4.4.8", features = ["derive"] }
