@@ -360,6 +360,7 @@ impl Declare for LetDecl {
                 name: self.name.clone(),
                 binders,
                 body,
+                constants: self.constant.clone()
             },
         );
     }

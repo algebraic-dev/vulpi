@@ -10,7 +10,7 @@ use vulpi_intern::Symbol;
 use vulpi_ir::transform;
 use vulpi_location::{FileId, Span};
 use vulpi_report::Report;
-use vulpi_resolver::{dependencies::{Dependencies, self}, Module, Context};
+use vulpi_resolver::{dependencies::{Dependencies, self}, Module, Context, cycle::DepHolder};
 use vulpi_syntax::concrete::tree::Program;
 use vulpi_vfs::{FileSystem, path::Path};
 
@@ -96,12 +96,17 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         let mut tc = vulpi_typer::Context::new(self.reporter.clone());
         let mut programs = vec![];
 
+        let mut dep = DepHolder::default();
+        
         for (_, ctx, _) in modules.into_values() {
             if let Some((ctx, resolver)) = ctx {
                 let program = resolver.eval(ctx.clone());
+                dep.register(&program);
                 programs.push(program);
             }
         }
+
+        dep.report_cycles(self.reporter.clone());
 
         let programs = vulpi_typer::Programs(programs);
 

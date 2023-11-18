@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use vulpi_intern::Symbol;
+use vulpi_location::Span;
 use vulpi_macros::Show;
 
 use crate::{r#abstract::Qualified, elaborated::Literal};
@@ -108,6 +109,7 @@ pub struct LetDecl {
     pub name: Qualified,
     pub binders: Vec<Symbol>,
     pub body: Expr,
+    pub constants: Option<HashMap<Qualified, Span>>
 }
 
 #[derive(Show)]

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use vulpi_intern::Symbol;
 use vulpi_location::{Span, Spanned};
@@ -13,8 +13,12 @@ pub struct Qualified {
 }
 
 impl Qualified {
+    pub fn mangle(&self) -> String {
+        format!("{}__{}", self.path.get(), self.name.get()).replace(".", "__").replace("?", "INT")
+    }
+    
     pub fn to_string(&self) -> String {
-        format!("{}__{}", self.path.get(), self.name.get()).replace(".", "__")
+        format!("{}.{}", self.path.get(), self.name.get())
     }
 }
 
@@ -345,6 +349,7 @@ pub struct LetDecl {
     pub binders: Vec<Binder>,
     pub ret: Option<Type>,
     pub body: Vec<PatternArm>,
+    pub constant: Option<HashMap<Qualified, Span>>
 }
 
 #[derive(Show)]

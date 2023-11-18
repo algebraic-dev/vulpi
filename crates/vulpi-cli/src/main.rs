@@ -20,7 +20,6 @@ enum Cli {
     }
 }
 
-
 fn main() {
     panic::set_hook(Box::new(|e| {
         eprintln!(

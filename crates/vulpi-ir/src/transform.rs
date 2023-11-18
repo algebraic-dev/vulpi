@@ -262,6 +262,7 @@ impl Transform for elaborated::LetDecl<Type<Real>> {
             name: self.name.clone(),
             binders: all_names,
             body: Box::new(result),
+            constants: self.constants.clone()
         }
     }
 }

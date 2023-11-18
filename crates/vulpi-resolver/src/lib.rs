@@ -2,9 +2,9 @@
 //! syntax tree with all the names resolved.
 
 use std::cell::{Ref, RefMut};
+use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 
-use im_rc::HashMap;
 use petgraph::prelude::DiGraph;
 use petgraph::stable_graph::NodeIndex;
 
@@ -19,6 +19,7 @@ use vulpi_syntax::r#abstract::Visibility;
 use vulpi_vfs::path::{Path, Qualified};
 
 pub mod dependencies;
+pub mod cycle;
 mod error;
 
 pub enum Either<L, R> {
@@ -60,6 +61,7 @@ pub type Alias = (Qualified, abs::Visibility);
 pub struct Namespace {
     name: Path,
     declared: Bag<HashMap<Symbol, abs::Visibility>>,
+    constants: HashMap<abs::Qualified, HashMap<abs::Qualified, Span>>,
     aliases: Bag<HashMap<Symbol, Alias>>,
     modules: HashMap<Symbol, (Path, abs::Visibility)>,
     submodules: HashMap<Symbol, Module>,
@@ -156,6 +158,7 @@ impl Module {
             name,
             declared: Default::default(),
             aliases: Default::default(),
+            constants: Default::default(),
             submodules: Default::default(),
             available: Default::default(),
             opened: Default::default(),
@@ -185,12 +188,13 @@ impl Module {
     pub fn fork(&self, name: Symbol) -> Module {
         let path = { self.borrow().name.clone() };
 
-        let module = self.borrow_mut()
+        let module = self
+            .borrow_mut()
             .submodules
             .entry(name.clone())
             .or_insert_with(|| Module::new(path.with(name.clone())))
             .clone();
-        
+
         self.borrow_mut()
             .available
             .entry(path.with(name))
@@ -353,14 +357,41 @@ pub struct Context {
     pub module: Module,
     scope: RefCell<Bag<im_rc::HashSet<Symbol>>>,
     reporter: Report,
+
+    in_head: bool,
+    constant: Option<abs::Qualified>,
 }
 
 impl Context {
+    pub fn insert_constant(&mut self, path: abs::Qualified, span: Span) {
+        if let Some(constant) = &self.constant {
+            self.module
+                .borrow_mut()
+                .constants
+                .entry(constant.clone())
+                .or_default()
+                .insert(path, span);
+        }
+    }
+
+    pub fn set_constant(&mut self, constant: abs::Qualified) {
+        self.constant = Some(constant);
+        self.in_head = true;
+    }
+
+    pub fn reset_constant(&mut self) {
+        self.constant = None;
+        self.in_head = false;
+    }
+
     pub fn new(name: Path, report: Report) -> Context {
         Context {
             module: Module::new(name),
             scope: Default::default(),
             reporter: report,
+
+            in_head: false,
+            constant: None,
         }
     }
 
@@ -440,6 +471,9 @@ impl Context {
             module,
             scope,
             reporter: self.reporter.clone(),
+
+            in_head: self.in_head,
+            constant: self.constant.clone(),
         }
     }
 
@@ -531,18 +565,41 @@ pub mod top_level {
                     .into_iter()
                     .map(|x| transform_binder(ctx, x))
                     .collect();
+
+                let name = abs::Qualified {
+                    path: ctx.module.name().symbol(),
+                    name,
+                };
+
+                ctx.set_constant(name.clone());
+                let body = pattern::transform_let_mode(ctx, decl.body);
+
+                let constant = if let Some(name) = &ctx.constant {
+                    Some(
+                        ctx.module
+                            .borrow_mut()
+                            .constants
+                            .entry(name.clone())
+                            .or_default()
+                            .clone(),
+                    )
+                } else {
+                    ctx.module.borrow_mut().constants.remove(&name.clone());
+                    None
+                };
+
+                ctx.reset_constant();
+
                 abs::LetDecl {
                     span,
-                    name: abs::Qualified {
-                        path: ctx.module.name().symbol(),
-                        name,
-                    },
+                    name,
                     visibility: decl.visibility.into(),
-                    body: pattern::transform_let_mode(ctx, decl.body),
+                    body,
                     ret: decl
                         .ret
                         .map(|(_, type_kind)| transform_type(ctx, *type_kind)),
                     binders,
+                    constant,
                 }
             })
         })
@@ -736,11 +793,11 @@ pub mod top_level {
 
         Solver::new(move |ctx| {
             let path = from_upper_path(&decl.path);
-            
+
             if !ctx.module.available().contains_key(&path) {
                 ctx.reporter.report(Diagnostic::new(ResolverError {
                     span: decl.path.span.clone(),
-                    kind: error::ResolverErrorKind::InvalidPath(path.segments)
+                    kind: error::ResolverErrorKind::InvalidPath(path.segments),
                 }));
             }
         })
@@ -878,7 +935,11 @@ pub mod pattern {
     }
 
     /// Transform a pattern into an abstract pattern.
-    pub fn transform_pattern_arm(ctx: &Context, arm: tree::PatternArm) -> abs::PatternArm {
+    pub fn transform_pattern_arm(ctx: &mut Context, arm: tree::PatternArm) -> abs::PatternArm {
+        if arm.patterns.len() > 0 {
+            ctx.reset_constant()
+        }
+
         ctx.scoped(|ctx| abs::PatternArm {
             patterns: arm
                 .patterns
@@ -891,7 +952,7 @@ pub mod pattern {
     }
 
     /// Transform a let mode into a list of pattern arms.
-    pub fn transform_let_mode(ctx: &Context, mode: LetMode) -> Vec<abs::PatternArm> {
+    pub fn transform_let_mode(ctx: &mut Context, mode: LetMode) -> Vec<abs::PatternArm> {
         match mode {
             LetMode::Body(_, expr) => {
                 vec![abs::PatternArm {
@@ -913,11 +974,15 @@ pub mod expr {
     use super::*;
 
     /// Transforms an expression into an abstract expression.
-    pub fn transform(ctx: &Context, expr: concrete::tree::Expr) -> abs::Expr {
+    pub fn transform(ctx: &mut Context, expr: concrete::tree::Expr) -> abs::Expr {
         use tree::ExprKind::*;
 
         let data = match expr.data {
             Lambda(lam) => {
+                if ctx.in_head {
+                    ctx.reset_constant()
+                }
+
                 return ctx.scoped(|ctx| {
                     let pats: Vec<_> = pattern::transform_row(ctx, lam.patterns);
 
@@ -931,23 +996,31 @@ pub mod expr {
                     })
                 });
             }
-            Application(app) => abs::ExprKind::Application(abs::ApplicationExpr {
-                app: abs::AppKind::Normal,
-                func: expr::transform(ctx, *app.func),
-                args: app
-                    .args
-                    .into_iter()
-                    .map(|expr| transform(ctx, *expr))
-                    .collect(),
-            }),
+            Application(app) => {
+                ctx.in_head = false;
+
+                abs::ExprKind::Application(abs::ApplicationExpr {
+                    app: abs::AppKind::Normal,
+                    func: expr::transform(ctx, *app.func),
+                    args: app
+                        .args
+                        .into_iter()
+                        .map(|expr| transform(ctx, *expr))
+                        .collect(),
+                })
+            }
 
             Variable(x) => {
                 if ctx.in_scope(DefinitionKind::Value, x.symbol()) {
                     abs::ExprKind::Variable(x.symbol())
                 } else {
                     let searched = ctx.search(DefinitionKind::Value, expr.span.clone(), x.symbol());
+
                     match searched {
-                        Some(res) => abs::ExprKind::Function(res),
+                        Some(res) => {
+                            ctx.insert_constant(res.clone(), expr.span.clone());
+                            abs::ExprKind::Function(res)
+                        }
                         None => abs::ExprKind::Error,
                     }
                 }
@@ -966,7 +1039,11 @@ pub mod expr {
                 let qualified = from_lower_path(&path);
                 let searched = ctx.resolve(DefinitionKind::Value, expr.span.clone(), qualified);
                 match searched {
-                    Some(res) => abs::ExprKind::Function(res),
+                    Some(res) => {
+                        ctx.insert_constant(res.clone(), expr.span.clone());
+
+                        abs::ExprKind::Function(res)
+                    }
                     None => abs::ExprKind::Error,
                 }
             }
@@ -976,6 +1053,8 @@ pub mod expr {
                 field: projection.field.symbol(),
             }),
             Binary(bin) => {
+                ctx.in_head = false;
+
                 let left = transform(ctx, *bin.left);
                 let right = transform(ctx, *bin.right);
 
@@ -1035,18 +1114,21 @@ pub mod expr {
                     })
                 })
             }
-            When(when) => abs::ExprKind::When(abs::WhenExpr {
-                scrutinee: when
-                    .scrutinee
-                    .into_iter()
-                    .map(|(scrutinee, _)| transform(ctx, *scrutinee))
-                    .collect(),
-                arms: when
-                    .arms
-                    .into_iter()
-                    .map(|x| pattern::transform_pattern_arm(ctx, x))
-                    .collect(),
-            }),
+            When(when) => {
+                ctx.in_head = false;
+                abs::ExprKind::When(abs::WhenExpr {
+                    scrutinee: when
+                        .scrutinee
+                        .into_iter()
+                        .map(|(scrutinee, _)| transform(ctx, *scrutinee))
+                        .collect(),
+                    arms: when
+                        .arms
+                        .into_iter()
+                        .map(|x| pattern::transform_pattern_arm(ctx, x))
+                        .collect(),
+                })
+            }
             Do(do_expr) => ctx.scoped(|ctx| {
                 abs::ExprKind::Do(abs::Block {
                     sttms: do_expr
@@ -1065,6 +1147,7 @@ pub mod expr {
                 abs::ExprKind::Annotation(abs::AnnotationExpr { expr, ty })
             }
             RecordInstance(record_instance) => {
+                ctx.in_head = false;
                 let path = ctx.resolve(
                     DefinitionKind::Type,
                     expr.span.clone(),
@@ -1087,25 +1170,31 @@ pub mod expr {
                     None => abs::ExprKind::Error,
                 }
             }
-            RecordUpdate(record_update) => abs::ExprKind::RecordUpdate(abs::RecordUpdate {
-                expr: transform(ctx, *record_update.expr),
-                fields: record_update
-                    .fields
-                    .into_iter()
-                    .map(|(field, _)| {
-                        let name = field.name.symbol();
-                        let expr = transform(ctx, *field.expr);
-                        (field.name.0.value.span, name, expr)
-                    })
-                    .collect(),
-            }),
-            Tuple(tuple) => abs::ExprKind::Tuple(abs::Tuple {
-                exprs: tuple
-                    .data
-                    .into_iter()
-                    .map(|(item, _)| transform(ctx, *item))
-                    .collect(),
-            }),
+            RecordUpdate(record_update) => {
+                ctx.in_head = false;
+                abs::ExprKind::RecordUpdate(abs::RecordUpdate {
+                    expr: transform(ctx, *record_update.expr),
+                    fields: record_update
+                        .fields
+                        .into_iter()
+                        .map(|(field, _)| {
+                            let name = field.name.symbol();
+                            let expr = transform(ctx, *field.expr);
+                            (field.name.0.value.span, name, expr)
+                        })
+                        .collect(),
+                })
+            }
+            Tuple(tuple) => {
+                ctx.in_head = false;
+                abs::ExprKind::Tuple(abs::Tuple {
+                    exprs: tuple
+                        .data
+                        .into_iter()
+                        .map(|(item, _)| transform(ctx, *item))
+                        .collect(),
+                })
+            }
             Parenthesis(parenthesis) => return transform(ctx, *parenthesis.data.0),
         };
 
@@ -1175,9 +1264,7 @@ pub fn transform_type(ctx: &Context, concrete_type: tree::Type) -> abs::Type {
                 None => abs::TypeKind::Error,
             }
         }
-        tree::TypeKind::TypeVariable(e) => {
-            abs::TypeKind::TypeVariable(e.symbol())
-        }
+        tree::TypeKind::TypeVariable(e) => abs::TypeKind::TypeVariable(e.symbol()),
         tree::TypeKind::Arrow(x) => abs::TypeKind::Arrow(abs::PiType {
             left: transform_type(ctx, *x.left),
             right: transform_type(ctx, *x.right),
@@ -1226,7 +1313,7 @@ pub fn transform_binder(ctx: &Context, binder: tree::Binder) -> abs::Binder {
     abs::Binder { pat, ty }
 }
 
-pub fn transform_sttm(ctx: &Context, sttm: concrete::tree::Sttm) -> abs::Sttm {
+pub fn transform_sttm(ctx: &mut Context, sttm: concrete::tree::Sttm) -> abs::Sttm {
     let data = match sttm.data {
         tree::StatementKind::Let(let_sttm) => {
             let pat = pattern::transform(ctx, *let_sttm.pattern);

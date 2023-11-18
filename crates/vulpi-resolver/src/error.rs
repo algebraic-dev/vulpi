@@ -1,12 +1,14 @@
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::IntoDiagnostic;
+use vulpi_syntax::r#abstract::Qualified;
 
 pub enum ResolverErrorKind {
     NotFound(Symbol),
     InvalidPath(Vec<Symbol>),
     DuplicatePattern(Symbol),
     PrivateDefinition,
+    CycleBetweenConstants(Vec<Qualified>)
 }
 
 pub struct ResolverError {
@@ -27,6 +29,13 @@ impl IntoDiagnostic for ResolverError {
                 format!("duplicate pattern: {}", name.get()).into()
             }
             ResolverErrorKind::PrivateDefinition => "private definition".into(),
+            ResolverErrorKind::CycleBetweenConstants(cycle) => {
+                let mut cycle = cycle.iter().map(|q| q.to_string()).collect::<Vec<_>>();
+                cycle.sort_by_key(|k| k.to_string());
+
+                format!("cycle between '{}'", cycle.join(" -> ")).into()
+            }
+
         }
     }
 

@@ -1,5 +1,6 @@
 use std::{borrow::Cow, collections::HashMap};
 
+use petgraph::graph::DiGraph;
 use resast::{
     decl::{Decl, VarDecl},
     expr::{BinaryExpr, CallExpr, Expr, Lit, ObjProp, Prop, MemberExpr, StringLit},
@@ -34,7 +35,7 @@ impl Transform for lambda::Case {
                 std::borrow::Cow::Owned(x.to_string()),
             )),
             lambda::Case::Constructor(name, _) => Expr::Lit(resast::expr::Lit::String(
-                resast::expr::StringLit::Single(Cow::Owned(name.to_string())),
+                resast::expr::StringLit::Single(Cow::Owned(name.mangle())),
             )),
             lambda::Case::Literal(l) => match &**l {
                 LiteralKind::String(x) => Expr::Lit(resast::expr::Lit::String(
@@ -145,7 +146,7 @@ impl Transform for lambda::ExprKind {
             lambda::ExprKind::Variable(x) => resast::expr::Expr::Ident(Ident::new(x.get())),
             lambda::ExprKind::Constructor(_, n, a) => {
                 let vec = vec![Some(Expr::Lit(resast::expr::Lit::String(
-                    resast::expr::StringLit::Single(Cow::Owned(n.to_string())),
+                    resast::expr::StringLit::Single(Cow::Owned(n.mangle())),
                 )))];
 
                 let args = a.iter().map(|x| Some(x.transform(ctx))).collect::<Vec<_>>();
@@ -158,7 +159,7 @@ impl Transform for lambda::ExprKind {
                 if let Some(x) = ctx.externals.get(x) {
                     resast::expr::Expr::Ident(Ident::new(x.get()))
                 } else {
-                    resast::expr::Expr::Ident(Ident::new(x.to_string()))
+                    resast::expr::Expr::Ident(Ident::new(x.mangle()))
                 }
             }
             lambda::ExprKind::Projection(field, object) => {
@@ -337,7 +338,7 @@ impl Transform for LetDecl {
             }
 
             resast::decl::Decl::Func(Func {
-                id: Some(Ident::new(self.name.to_string())),
+                id: Some(Ident::new(self.name.mangle())),
                 params: vec![FuncArg::Pat(resast::pat::Pat::Ident(Ident::new(
                     last.get(),
                 )))],
@@ -349,7 +350,7 @@ impl Transform for LetDecl {
             Decl::Var(
                 resast::VarKind::Let,
                 vec![VarDecl {
-                    id: resast::pat::Pat::Ident(Ident::new(self.name.to_string())),
+                    id: resast::pat::Pat::Ident(Ident::new(self.name.mangle())),
                     init: Some(x),
                 }],
             )
@@ -377,12 +378,40 @@ impl Transform for lambda::Program {
         let expr = self
             .lets
             .values()
-            .map(|x| x.transform(ctx))
+            .map(|x| (x.name.clone(), x.transform(ctx), x.constants.clone()))
             .collect::<Vec<_>>();
 
-        let part = expr
+        let mut petgraph = DiGraph::new();
+        let mut nodes = HashMap::new();
+
+        for (name, _, constants) in &expr {
+            let from = nodes.entry(name.clone()).or_insert_with(|| {
+                petgraph.add_node(())
+            }).clone();
+
+            if let Some(res) = constants {
+                for (to_, _) in res {
+                    let to = nodes.entry(to_.clone()).or_insert_with(|| {
+                        petgraph.add_node(())
+                    });
+
+                    petgraph.add_edge(from, *to, ());
+                }
+            }
+        }
+
+        let expr_map = expr.iter().map(|(k, v, _)| (k, v)).collect::<HashMap<_, _>>();
+
+        let top_ = petgraph::algo::toposort(&petgraph, None).unwrap();
+        let inv_map = nodes.iter().map(|(k, v)| (v, k)).collect::<HashMap<_, _>>();
+
+        let ordered_expr = top_.iter().filter_map(|x| {
+            expr_map.get(&inv_map[x].clone())
+        }).collect::<Vec<_>>();
+
+        let part = ordered_expr
             .into_iter()
-            .map(|x| resast::ProgramPart::Decl(x))
+            .map(|x| resast::ProgramPart::Decl((*x).clone()))
             .collect();
 
         resast::Program::Script(part)
