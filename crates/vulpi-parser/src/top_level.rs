@@ -43,17 +43,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn let_decl(&mut self, visibility: Visibility) -> Result<LetDecl> {
-        let let_ = self.expect(TokenData::Let)?;
-        let name = self.lower()?;
-        let binders = self.many(Self::binder)?;
-
-        let ret = if self.at(TokenData::Colon) {
-            let colon = self.bump();
-            let typ = self.typ()?;
-            Some((colon, typ))
-        } else {
-            None
-        };
+        let signature = self.let_signature(visibility)?;
 
         let body = if self.at(TokenData::Equal) {
             let eq = self.expect(TokenData::Equal)?;
@@ -65,12 +55,57 @@ impl<'a> Parser<'a> {
             self.unexpected()?
         };
 
-        Ok(LetDecl {
+        Ok(LetDecl { signature, body })
+    }
+
+    fn trait_decl(&mut self, visibility: Visibility) -> Result<TraitDecl> {
+        let trait_ = self.expect(TokenData::Trait)?;
+        let name = self.upper()?;
+        let binders = self.many(Self::type_binder)?;
+        let where_ = self.expect(TokenData::Where)?;
+        let body = self.block(|ctx| ctx.let_signature(Visibility::Private))?;
+        Ok(TraitDecl {
+            visibility,
+            trait_,
+            name,
+            binders,
+            where_,
+            body,
+        })
+    }
+
+    fn trait_impl(&mut self) -> Result<TraitImpl> {
+        let impl_ = self.expect(TokenData::Impl)?;
+        let name = self.upper()?;
+        let types = self.many(Self::type_atom)?;
+        let where_ = self.expect(TokenData::Where)?;
+        let body = self.block(|ctx| ctx.let_decl(Visibility::Private))?;
+        Ok(TraitImpl {
+            impl_,
+            name,
+            types,
+            where_,
+            body,
+        })
+    }
+
+    fn let_signature(&mut self, visibility: Visibility) -> Result<LetSignature> {
+        let let_ = self.expect(TokenData::Let)?;
+        let name = self.lower()?;
+        let binders = self.many(Self::binder)?;
+        let ret = if self.at(TokenData::Colon) {
+            let colon = self.bump();
+            let typ = self.typ()?;
+            Some((colon, typ))
+        } else {
+            None
+        };
+
+        Ok(LetSignature {
+            visibility,
             let_,
             name,
             binders,
-            body,
-            visibility,
             ret,
         })
     }
@@ -238,6 +273,8 @@ impl<'a> Parser<'a> {
             TokenData::Let => self.let_decl(vis).map(Box::new).map(TopLevel::Let),
             TokenData::Type => self.type_decl(vis).map(Box::new).map(TopLevel::Type),
             TokenData::Use => self.use_decl(vis).map(Box::new).map(TopLevel::Use),
+            TokenData::Impl => self.trait_impl().map(Box::new).map(TopLevel::Impl),
+            TokenData::Trait => self.trait_decl(vis).map(Box::new).map(TopLevel::Trait),
             TokenData::Mod => self.mod_decl(vis).map(Box::new).map(TopLevel::Module),
             TokenData::External => self
                 .external_decl(vis)

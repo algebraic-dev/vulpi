@@ -29,6 +29,8 @@ pub enum TokenData {
     Cases,    // 'request' keyword
     Effect,   // 'effect' keyword
     External, // 'external' keyword
+    Trait,    // 'trait' keyword
+    Impl,     // 'impl' keyword
 
     String, // String literal
     Int,    // Integer literal
@@ -180,6 +182,8 @@ impl ToString for Token {
             Do => "do".to_string(),
             Where => "where".to_string(),
             Forall => "forall".to_string(),
+            Trait => "trait".to_string(),
+            Impl => "impl".to_string(),
             In => "in".to_string(),
             LBrace => "{{".to_string(),
             RBrace => "}}".to_string(),

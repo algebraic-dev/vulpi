@@ -18,7 +18,7 @@ pub struct DepHolder {
 impl DepHolder {
     pub fn register(&mut self, program: &Program) {
         for let_ in &program.lets {
-            let from = self.nodes.entry(let_.name.clone()).or_insert_with(|| {
+            let from = self.nodes.entry(let_.signature.name.clone()).or_insert_with(|| {
                 self.graph.add_node(())
             }).clone();
 

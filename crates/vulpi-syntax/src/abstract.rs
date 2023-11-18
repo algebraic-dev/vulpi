@@ -342,12 +342,17 @@ pub struct Binder {
 }
 
 #[derive(Show)]
-pub struct LetDecl {
+pub struct LetSignature {
     pub span: Span,
     pub visibility: Visibility,
     pub name: Qualified,
     pub binders: Vec<Binder>,
     pub ret: Option<Type>,
+}
+
+#[derive(Show)]
+pub struct LetDecl {
+    pub signature: LetSignature,
     pub body: Vec<PatternArm>,
     pub constant: Option<HashMap<Qualified, Span>>
 }

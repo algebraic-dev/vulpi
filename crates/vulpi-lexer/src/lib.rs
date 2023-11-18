@@ -250,6 +250,8 @@ impl<'a> Lexer<'a> {
             "forall" => TokenData::Forall,
             "_" => TokenData::Wildcard,
             "external" => TokenData::External,
+            "trait" => TokenData::Trait,
+            "impl" => TokenData::Impl,
             _ => TokenData::LowerIdent,
         }
     }

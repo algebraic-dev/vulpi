@@ -240,12 +240,13 @@ impl Declare for LetDecl {
     fn declare(&self, (ctx, mut env): (&mut Context, Env)) {
         let start_env = env.clone();
         let mut fvs = self
+            .signature
             .ret
             .as_ref()
             .map(|x| x.data.free_variables())
             .unwrap_or_default();
 
-        for arg in &self.binders {
+        for arg in &self.signature.binders {
             fvs.extend(arg.ty.data.free_variables());
         }
 
@@ -259,7 +260,7 @@ impl Declare for LetDecl {
 
         let mut args = Vec::new();
 
-        for arg in &self.binders {
+        for arg in &self.signature.binders {
             let (ty, kind) = arg.ty.infer((ctx, env.clone()));
             env.on(arg.ty.span.clone());
 
@@ -268,7 +269,7 @@ impl Declare for LetDecl {
             args.push(ty);
         }
 
-        let ret = if let Some(ret) = &self.ret {
+        let ret = if let Some(ret) = &self.signature.ret {
             let (ty, kind) = ret.infer((ctx, env.clone()));
             env.on(ret.span.clone());
             ctx.subsumes(env.clone(), kind, Kind::typ());
@@ -290,8 +291,8 @@ impl Declare for LetDecl {
             });
         }
 
-        ctx.modules.get(&self.name.path.clone()).variables.insert(
-            self.name.name.clone(),
+        ctx.modules.get(&self.signature.name.path.clone()).variables.insert(
+            self.signature.name.name.clone(),
             LetDef {
                 typ: typ.eval(&start_env),
                 unbound,
@@ -302,9 +303,9 @@ impl Declare for LetDecl {
     }
 
     fn define(&self, (ctx, mut env): (&mut Context, Env)) {
-        env.on(self.span.clone());
+        env.on(self.signature.span.clone());
 
-        let let_decl = ctx.modules.let_decl(&self.name).clone();
+        let let_decl = ctx.modules.let_decl(&self.signature.name).clone();
 
         for (fv, ty) in &let_decl.unbound {
             env = env.add(Some(fv.clone()), ty.eval(&env).clone());
@@ -313,7 +314,7 @@ impl Declare for LetDecl {
         let mut binders = Default::default();
         let mut elab_binders = Vec::new();
 
-        for (binder, ty) in self.binders.iter().zip(let_decl.args.iter()) {
+        for (binder, ty) in self.signature.binders.iter().zip(let_decl.args.iter()) {
             let pat = binder
                 .pat
                 .check(ty.eval(&env), (ctx, &mut binders, env.clone()));
@@ -355,9 +356,9 @@ impl Declare for LetDecl {
         }
 
         ctx.elaborated.lets.insert(
-            self.name.clone(),
+            self.signature.name.clone(),
             elaborated::LetDecl {
-                name: self.name.clone(),
+                name: self.signature.name.clone(),
                 binders,
                 body,
                 constants: self.constant.clone()

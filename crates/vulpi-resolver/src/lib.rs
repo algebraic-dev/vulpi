@@ -37,6 +37,7 @@ pub struct Crate {
 pub enum DefinitionKind {
     Type,
     Value,
+    Trait,
 }
 
 /// Definition bag is a bag of definitions. It is used to store the definitions of a module.
@@ -44,6 +45,7 @@ pub enum DefinitionKind {
 pub struct Bag<V> {
     pub types: V,
     pub values: V,
+    pub traits: V
 }
 
 impl<V> Bag<V> {
@@ -51,6 +53,7 @@ impl<V> Bag<V> {
         match definition {
             DefinitionKind::Type => f(&self.types),
             DefinitionKind::Value => f(&self.values),
+            DefinitionKind::Trait => f(&self.values)
         }
     }
 }
@@ -182,6 +185,7 @@ impl Module {
         match kind {
             DefinitionKind::Type => bag.types.insert(name, vis.into()),
             DefinitionKind::Value => bag.values.insert(name, vis.into()),
+            DefinitionKind::Trait => bag.traits.insert(name, vis.into())
         };
     }
 
@@ -486,6 +490,7 @@ impl Context {
         match kind {
             DefinitionKind::Type => self.scope.borrow_mut().types.insert(name),
             DefinitionKind::Value => self.scope.borrow_mut().values.insert(name),
+            DefinitionKind::Trait => self.scope.borrow_mut().traits.insert(name),
         };
     }
 
@@ -495,6 +500,7 @@ impl Context {
         match kind {
             DefinitionKind::Type => bag.types.contains(&name),
             DefinitionKind::Value => bag.values.contains(&name),
+            DefinitionKind::Trait => bag.traits.contains(&name),
         }
     }
 
@@ -504,6 +510,7 @@ impl Context {
         match kind {
             DefinitionKind::Type => bag.types.get(&name).cloned(),
             DefinitionKind::Value => bag.values.get(&name).cloned(),
+            DefinitionKind::Trait => bag.traits.get(&name).cloned(),
         }
     }
 }
@@ -543,24 +550,27 @@ pub mod top_level {
             Module(mod_decl) => Some(resolve_module(ctx, *mod_decl).map(abs::TopLevel::Module)),
             External(ext) => Some(resolve_external(ctx, *ext).map(abs::TopLevel::External)),
             Use(use_decl) => Some(resolve_use(ctx, *use_decl).map(|_| abs::TopLevel::Use)),
+            Impl(_) => todo!(),
+            Trait(trait_) => todo!(),
             Error(_) => None,
         }
     }
 
     /// Resolve a let declaration and returns the solver for it.
     pub fn resolve_let(ctx: Context, decl: tree::LetDecl) -> Solver<abs::LetDecl> {
-        let name = decl.name.symbol();
+        let name = decl.signature.name.symbol();
 
         // Gets the location of the name, so we can present the errors in a less annoying way
         // in the IDE.
-        let span = decl.name.0.value.span.clone();
+        let span = decl.signature.name.0.value.span.clone();
 
         ctx.module
-            .define(DefinitionKind::Value, decl.visibility.clone(), name.clone());
+            .define(DefinitionKind::Value, decl.signature.visibility.clone(), name.clone());
 
         Solver::new(move |ctx| {
             ctx.scoped(|ctx| {
                 let binders = decl
+                    .signature
                     .binders
                     .into_iter()
                     .map(|x| transform_binder(ctx, x))
@@ -590,15 +600,20 @@ pub mod top_level {
 
                 ctx.reset_constant();
 
-                abs::LetDecl {
+                let signature = abs::LetSignature {
                     span,
                     name,
-                    visibility: decl.visibility.into(),
-                    body,
+                    visibility: decl.signature.visibility.into(),
                     ret: decl
-                        .ret
-                        .map(|(_, type_kind)| transform_type(ctx, *type_kind)),
+                    .signature
+                    .ret
+                    .map(|(_, type_kind)| transform_type(ctx, *type_kind)),
                     binders,
+                };
+
+                abs::LetDecl {
+                    signature,
+                    body,
                     constant,
                 }
             })

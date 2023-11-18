@@ -39,12 +39,36 @@ pub enum LetMode {
 }
 
 #[derive(Show, Clone)]
-pub struct LetDecl {
+pub struct LetSignature {
     pub visibility: Visibility,
     pub let_: Token,
     pub name: Lower,
     pub binders: Vec<Binder>,
     pub ret: Option<(Token, Box<Type>)>,
+}
+
+#[derive(Show, Clone)]
+pub struct TraitDecl {
+    pub visibility: Visibility,
+    pub trait_: Token,
+    pub name: Upper,
+    pub binders: Vec<TypeBinder>,
+    pub where_: Token,
+    pub body: Vec<LetSignature>,
+}
+
+#[derive(Show, Clone)]
+pub struct TraitImpl {
+    pub impl_: Token,
+    pub name: Upper,
+    pub types: Vec<Box<Type>>,
+    pub where_: Token,
+    pub body: Vec<LetDecl>,
+}
+
+#[derive(Show, Clone)]
+pub struct LetDecl {
+    pub signature: LetSignature,
     pub body: LetMode,
 }
 
@@ -188,6 +212,8 @@ pub enum TopLevel {
     Let(Box<LetDecl>),
     Type(Box<TypeDecl>),
     Use(Box<UseDecl>),
+    Impl(Box<TraitImpl>),
+    Trait(Box<TraitDecl>),
     Module(Box<ModuleDecl>),
     Error(Vec<Token>),
     External(Box<ExtDecl>),
