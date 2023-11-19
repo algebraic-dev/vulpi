@@ -60,7 +60,7 @@ pub struct TraitDecl {
 #[derive(Show, Clone)]
 pub struct TraitImpl {
     pub impl_: Token,
-    pub name: Upper,
+    pub name: Path<Upper>,
     pub types: Vec<Box<Type>>,
     pub where_: Token,
     pub body: Vec<LetDecl>,

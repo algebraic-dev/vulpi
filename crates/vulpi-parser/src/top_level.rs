@@ -76,7 +76,7 @@ impl<'a> Parser<'a> {
 
     fn trait_impl(&mut self) -> Result<TraitImpl> {
         let impl_ = self.expect(TokenData::Impl)?;
-        let name = self.upper()?;
+        let name = self.path_upper()?;
         let types = self.many(Self::type_atom)?;
         let where_ = self.expect(TokenData::Where)?;
         let body = self.block(|ctx| ctx.let_decl(Visibility::Private))?;

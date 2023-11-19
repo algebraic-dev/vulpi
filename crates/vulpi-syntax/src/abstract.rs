@@ -351,6 +351,20 @@ pub struct LetSignature {
 }
 
 #[derive(Show)]
+pub struct TraitDecl {
+    pub name: Qualified,
+    pub binders: Vec<TypeBinder>,
+    pub body: Vec<LetSignature>,
+}
+
+#[derive(Show)]
+pub struct TraitImpl {
+    pub name: Qualified,
+    pub binders: Vec<Type>,
+    pub body: Vec<LetDecl>,
+}
+
+#[derive(Show)]
 pub struct LetDecl {
     pub signature: LetSignature,
     pub body: Vec<PatternArm>,
@@ -413,6 +427,8 @@ pub enum TopLevel {
     Type(TypeDecl),
     Module(ModuleDecl),
     External(ExtDecl),
+    Trait(TraitDecl),
+    Impl(Option<TraitImpl>),
     Use
 }
 
@@ -421,5 +437,7 @@ pub struct Program {
     pub lets: Vec<LetDecl>,
     pub types: Vec<TypeDecl>,
     pub modules: Vec<ModuleDecl>,
+    pub traits: Vec<TraitDecl>,
+    pub impls: Vec<TraitImpl>,
     pub externals: Vec<ExtDecl>,
 }

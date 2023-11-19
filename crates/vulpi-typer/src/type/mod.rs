@@ -89,6 +89,9 @@ pub enum TypeKind<S: State> {
     /// The type for type applications
     Application(S::Type, S::Type),
 
+    /// Qualified types.
+    Qualified(S::Type, S::Type),
+
     /// A type error.
     Error,
 }
@@ -558,6 +561,13 @@ pub mod real {
                     write!(f, ")")
                 }
                 TypeKind::Error => write!(f, "<ERROR>"),
+                TypeKind::Qualified(from, to) => {
+                    write!(f, "(")?;
+                    from.format(env, f)?;
+                    write!(f, " => ")?;
+                    to.format(env, f)?;
+                    write!(f, ")")
+                }
             }
         }
     }

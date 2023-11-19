@@ -439,16 +439,6 @@ pub struct TypeEnv {
 }
 
 impl TypeEnv {
-    pub fn declare(&mut self, program: &Program) -> &mut Self {
-        program.declare((&mut self.context, self.env.clone()));
-        self
-    }
-
-    pub fn define(&mut self, program: &Program) -> &mut Self {
-        program.define((&mut self.context, self.env.clone()));
-        self
-    }
-
     pub fn output(&mut self) -> elaborated::Program<Type<Real>> {
         std::mem::take(&mut self.context.elaborated)
     }

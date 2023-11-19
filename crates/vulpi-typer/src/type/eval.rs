@@ -40,6 +40,11 @@ impl Eval<Type<Virtual>> for Type<Real> {
                 u.clone().eval(env),
             )),
             TypeKind::Error => Type::new(TypeKind::Error),
+            TypeKind::Qualified(from, to) => {
+                let from = from.clone().eval(env);
+                let to = to.clone().eval(env);
+                Type::new(TypeKind::Qualified(from, to))
+            }
         }
     }
 }
@@ -109,6 +114,11 @@ impl Quote<Type<Real>> for Type<Virtual> {
                 Type::new(TypeKind::Application(func, arg))
             }
             TypeKind::Error => Type::new(TypeKind::Error),
+            TypeKind::Qualified(from, to) => {
+                let from = from.clone().quote(depth);
+                let to = to.clone().quote(depth);
+                Type::new(TypeKind::Qualified(from, to))
+            }
         }
     }
 }

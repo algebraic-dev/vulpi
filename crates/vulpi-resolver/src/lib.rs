@@ -550,10 +550,108 @@ pub mod top_level {
             Module(mod_decl) => Some(resolve_module(ctx, *mod_decl).map(abs::TopLevel::Module)),
             External(ext) => Some(resolve_external(ctx, *ext).map(abs::TopLevel::External)),
             Use(use_decl) => Some(resolve_use(ctx, *use_decl).map(|_| abs::TopLevel::Use)),
-            Impl(_) => todo!(),
-            Trait(trait_) => todo!(),
+            Trait(trait_) => Some(resolve_trait(ctx, *trait_).map(abs::TopLevel::Trait)),
+            Impl(impl_) => Some(resolve_impl(ctx, *impl_).map(abs::TopLevel::Impl)),
             Error(_) => None,
         }
+    }
+
+    pub fn resolve_trait(ctx: Context, decl: tree::TraitDecl) -> Solver<abs::TraitDecl> {
+        let name = decl.name.symbol();
+        let submodule = ctx.fork(decl.name.symbol());
+
+        ctx.module
+            .define(DefinitionKind::Type, decl.visibility.clone(), name.clone());
+
+        let body = decl.body.into_iter().map(|x| resolve_let_signature(submodule.clone(), x)).collect::<Vec<_>>();
+
+        Solver::new(move |ctx| {
+            ctx.scoped(|ctx| {
+                let binders = decl
+                    .binders
+                    .into_iter()
+                    .map(|x| transform_type_binder(ctx, x))
+                    .collect::<Vec<_>>();
+
+                let name = abs::Qualified {
+                    path: ctx.module.name().symbol(),
+                    name,
+                };
+
+                let body = body.into_iter().map(|x| x.eval(ctx.clone())).collect();
+                
+                abs::TraitDecl {
+                    name,
+                    binders,
+                    body,
+                }
+            })
+        })
+    }
+
+    pub fn resolve_impl(ctx: Context, decl: tree::TraitImpl) -> Solver<Option<abs::TraitImpl>> {
+        let body = decl.body.into_iter().map(|x| resolve_let(ctx.clone(), x)).collect::<Vec<_>>();
+
+        Solver::new(move |ctx| {
+            let path = from_constructor_upper_path(&decl.name);
+            let searched = ctx.resolve(DefinitionKind::Type, decl.name.span.clone(), path);
+
+            ctx.scoped(|ctx| {
+                let binders = decl
+                    .types
+                    .into_iter()
+                    .map(|x| transform_type(ctx, *x))
+                    .collect::<Vec<_>>();
+
+                let body = body.into_iter().map(|x| x.eval(ctx.clone())).collect();
+                
+                if let Some(name) = searched {
+                    Some(abs::TraitImpl {
+                        name,
+                        binders,
+                        body,
+                    })
+                } else {
+                    None
+                }
+                
+            })
+        })
+    }
+
+    pub fn resolve_let_signature(ctx: Context, sig: tree::LetSignature) -> Solver<abs::LetSignature> {
+        let name = sig.name.symbol();
+
+        // Gets the location of the name, so we can present the errors in a less annoying way
+        // in the IDE.
+        let span = sig.name.0.value.span.clone();
+
+        ctx.module.define(DefinitionKind::Value, sig.visibility.clone(), name.clone());
+
+        Solver::new(move |ctx| {
+            ctx.scoped(|ctx| {
+                let binders = sig
+                    .binders
+                    .into_iter()
+                    .map(|x| transform_binder(ctx, x))
+                    .collect();
+
+                let name = abs::Qualified {
+                    path: ctx.module.name().symbol(),
+                    name,
+                };
+                
+                abs::LetSignature {
+                    span,
+                    name,
+                    visibility: sig.visibility.into(),
+                    ret: sig
+                    .ret
+                    .map(|(_, type_kind)| transform_type(ctx, *type_kind)),
+                    binders,
+                }
+            })
+        })
     }
 
     /// Resolve a let declaration and returns the solver for it.
@@ -774,6 +872,9 @@ pub mod top_level {
                         abs::TopLevel::Type(x) => program.types.push(x),
                         abs::TopLevel::Module(x) => program.modules.push(x),
                         abs::TopLevel::External(x) => program.externals.push(x),
+                        abs::TopLevel::Trait(t) => program.traits.push(t),
+                        abs::TopLevel::Impl(Some(t)) => program.impls.push(t),
+                        abs::TopLevel::Impl(None) => (),
                         abs::TopLevel::Use => (),
                     }
                 }
@@ -1368,6 +1469,9 @@ pub fn resolve(ctx: &Context, program: tree::Program) -> Solver<abs::Program> {
                 abs::TopLevel::Type(x) => program.types.push(x),
                 abs::TopLevel::Module(x) => program.modules.push(x),
                 abs::TopLevel::External(x) => program.externals.push(x),
+                abs::TopLevel::Trait(x) => program.traits.push(x),
+                abs::TopLevel::Impl(Some(t)) => program.impls.push(t),
+                abs::TopLevel::Impl(None) => (),
                 abs::TopLevel::Use => (),
             }
         }
