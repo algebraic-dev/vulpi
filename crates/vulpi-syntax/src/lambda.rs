@@ -4,7 +4,7 @@ use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_macros::Show;
 
-use crate::{r#abstract::Qualified, elaborated::Literal};
+use crate::{elaborated::Literal, r#abstract::Qualified};
 
 #[derive(Clone, Show)]
 pub enum Index {
@@ -26,7 +26,12 @@ pub struct Occurrence(pub Expr, pub Vec<Index>);
 
 impl vulpi_show::Show for Occurrence {
     fn show(&self) -> vulpi_show::TreeDisplay {
-        let f = self.1.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(".");
+        let f = self
+            .1
+            .iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join(".");
         vulpi_show::TreeDisplay::label(&format!("Occurrence(v.{f})"))
     }
 }
@@ -53,9 +58,12 @@ impl vulpi_show::Show for Tree {
             Tree::Leaf(action, _) => vulpi_show::TreeDisplay::label(&format!("Leaf({})", action)),
             Tree::Switch(_, cases) => {
                 let mut tree = vulpi_show::TreeDisplay::label("Switch");
-                
+
                 for (case, rest) in cases {
-                    tree = tree.with(vulpi_show::TreeDisplay::label(&format!("case {:?}:", case)).with(rest.show()));
+                    tree = tree.with(
+                        vulpi_show::TreeDisplay::label(&format!("case {:?}:", case))
+                            .with(rest.show()),
+                    );
                 }
 
                 tree
@@ -99,7 +107,6 @@ pub enum ExprKind {
     Tuple(Vec<Expr>),
 
     Switch(Vec<Expr>, Tree, Vec<Expr>),
-    
 }
 
 pub type Expr = Box<ExprKind>;
@@ -109,7 +116,7 @@ pub struct LetDecl {
     pub name: Qualified,
     pub binders: Vec<Symbol>,
     pub body: Expr,
-    pub constants: Option<HashMap<Qualified, Span>>
+    pub constants: Option<HashMap<Qualified, Span>>,
 }
 
 #[derive(Show)]
@@ -125,19 +132,9 @@ pub struct ExternalDecl {
     pub binding: Symbol,
 }
 
-#[derive(Show)]
+#[derive(Show, Default)]
 pub struct Program {
     pub lets: HashMap<Qualified, LetDecl>,
     pub types: HashMap<Qualified, TypeDecl>,
     pub externals: HashMap<Qualified, ExternalDecl>,
-}
-
-impl Default for Program {
-    fn default() -> Self {
-        Self {
-            lets: HashMap::new(),
-            types: HashMap::new(),
-            externals: HashMap::new(),
-        }
-    }
 }

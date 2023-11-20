@@ -1,4 +1,3 @@
-
 use vulpi_syntax::{
     concrete::{pattern::*, Either},
     tokens::TokenData,
@@ -54,5 +53,4 @@ impl<'a> Parser<'a> {
     pub fn pattern(&mut self) -> Result<Box<Pattern>> {
         self.pattern_application()
     }
-
 }

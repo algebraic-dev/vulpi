@@ -115,11 +115,7 @@ impl<'a> Parser<'a> {
 
             Ok(Box::new(Spanned {
                 span: left.span.clone().mix(right.span.clone()),
-                data: TypeKind::Arrow(TypeArrow {
-                    left,
-                    arrow,
-                    right,
-                }),
+                data: TypeKind::Arrow(TypeArrow { left, arrow, right }),
             }))
         } else {
             Ok(left)

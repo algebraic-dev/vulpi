@@ -1,3 +1,5 @@
+//! Module for definition of errors that can occur during type checking.
+
 use vulpi_intern::Symbol;
 use vulpi_location::Span;
 use vulpi_report::{IntoDiagnostic, Text};
@@ -5,7 +7,8 @@ use vulpi_syntax::r#abstract::Qualified;
 
 use crate::{
     coverage::{Pat, Row},
-    r#type::{r#virtual::Env, real::Real, Type},
+    real::Real,
+    Env, Type,
 };
 
 pub enum TypeErrorKind {
@@ -24,7 +27,6 @@ pub enum TypeErrorKind {
     MissingLabel(Qualified),
     InvalidLabels(Vec<Qualified>),
     PatternsNotAllowedHere,
-
     DuplicatedField,
     NotFoundField,
     NotARecord,

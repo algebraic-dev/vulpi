@@ -7,10 +7,7 @@ use std::collections::HashMap;
 use vulpi_intern::Symbol;
 use vulpi_syntax::r#abstract::Qualified;
 
-use crate::{
-    r#type::{r#virtual::Virtual, Type},
-    Real,
-};
+use crate::{r#virtual::Virtual, real::Real, Type};
 
 #[derive(Clone)]
 pub enum Def {
@@ -26,6 +23,12 @@ pub struct TypeData {
     pub binders: Vec<(Symbol, Type<Virtual>)>,
     pub module: Symbol,
     pub def: Def,
+}
+
+#[derive(Clone)]
+pub struct TraitData {
+    pub kind: Type<Virtual>,
+    pub binders: Vec<(Symbol, Type<Virtual>)>,
 }
 
 #[derive(Clone)]
@@ -50,8 +53,8 @@ pub struct Interface {
     /// The fields of the records.
     pub fields: HashMap<Symbol, Type<Real>>,
 
-    /// The effects of some symbols.
-    pub effects: HashMap<Symbol, (Type<Virtual>, Qualified, usize)>,
+    /// Traits.
+    pub traits: HashMap<Symbol, TraitData>,
 }
 
 #[derive(Default)]
@@ -75,11 +78,6 @@ impl Modules {
     pub fn constructor(&mut self, qualified: &Qualified) -> (Type<Real>, usize, Qualified) {
         let module = self.get(&qualified.path);
         module.constructors.get(&qualified.name).unwrap().clone()
-    }
-
-    pub fn effect(&mut self, qualified: &Qualified) -> (Type<Virtual>, Qualified, usize) {
-        let module = self.get(&qualified.path);
-        module.effects.get(&qualified.name).unwrap().clone()
     }
 
     pub fn let_decl(&mut self, qualified: &Qualified) -> &mut LetDef {

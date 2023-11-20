@@ -27,6 +27,13 @@ pub struct Binder {
 }
 
 #[derive(Show, Clone)]
+pub struct TraitBinder {
+    pub left_bracket: Token,
+    pub typ: Box<Type>,
+    pub right_bracket: Token,
+}
+
+#[derive(Show, Clone)]
 pub struct LetCase {
     pub pipe: Token,
     pub arm: PatternArm,
@@ -43,7 +50,7 @@ pub struct LetSignature {
     pub visibility: Visibility,
     pub let_: Token,
     pub name: Lower,
-    pub binders: Vec<Binder>,
+    pub binders: Vec<LetBinder>,
     pub ret: Option<(Token, Box<Type>)>,
 }
 
@@ -51,6 +58,7 @@ pub struct LetSignature {
 pub struct TraitDecl {
     pub visibility: Visibility,
     pub trait_: Token,
+    pub supers: Vec<TraitBinder>,
     pub name: Upper,
     pub binders: Vec<TypeBinder>,
     pub where_: Token,
@@ -60,6 +68,7 @@ pub struct TraitDecl {
 #[derive(Show, Clone)]
 pub struct TraitImpl {
     pub impl_: Token,
+    pub supers: Vec<TraitBinder>,
     pub name: Path<Upper>,
     pub types: Vec<Box<Type>>,
     pub where_: Token,
@@ -90,7 +99,7 @@ pub struct Field {
     pub visibility: Visibility,
     pub name: Lower,
     pub colon: Token,
-    pub ty: Box<Type>,
+    pub typ: Box<Type>,
 }
 
 #[derive(Show, Clone)]
@@ -110,7 +119,13 @@ pub struct ExplicitTypeBinder {
 #[derive(Show, Clone)]
 pub enum TypeBinder {
     Implicit(Lower),
-    Explicit(Parenthesis<ExplicitTypeBinder>),
+    Explicit(Parenthesis<ExplicitTypeBinder>)
+}
+
+#[derive(Show, Clone)]
+pub enum LetBinder {
+    Param(Binder),
+    Trait(TraitBinder),
 }
 
 #[derive(Show, Clone)]
@@ -187,7 +202,7 @@ impl ModuleDecl {
                 path.push(module.name.symbol());
                 paths.extend(module.declares(path.clone()));
             }
-            
+
             paths
         } else {
             path.push(self.name.symbol());

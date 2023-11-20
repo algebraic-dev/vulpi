@@ -3,14 +3,11 @@
 use crate::{
     context::Context,
     errors::TypeErrorKind,
-    r#type::{
-        self,
-        eval::{Eval, Quote},
-        r#virtual::Env,
-        r#virtual::Virtual,
-        real::{self, Real},
-        Index, Kind, Type,
-    },
+    eval::{Eval, Quote},
+    r#virtual::Env,
+    r#virtual::Virtual,
+    real::{self, Real},
+    Index, Kind, Type,
 };
 
 use super::Infer;
@@ -26,7 +23,7 @@ impl Infer for r#abstract::Type {
 
         match &self.data {
             TypeKind::Arrow(pi) => {
-                let (ty, kind) = pi.left.infer((ctx, env.clone()));
+                let (typ, kind) = pi.left.infer((ctx, env.clone()));
                 env.on(pi.left.span.clone());
                 ctx.subsumes(env.clone(), kind, Kind::typ());
 
@@ -34,7 +31,7 @@ impl Infer for r#abstract::Type {
                 env.on(pi.right.span.clone());
                 ctx.subsumes(env.clone(), kind, Kind::typ());
 
-                let typ = Type::new(r#type::TypeKind::Arrow(real::Arrow { ty, body }));
+                let typ = Type::new(crate::TypeKind::Arrow(real::Arrow { typ, body }));
                 (typ, Kind::typ())
             }
             TypeKind::Tuple(t) => {
@@ -95,7 +92,7 @@ impl Infer for r#abstract::Type {
             TypeKind::TypeVariable(name) => {
                 let Some((index, _, kind)) = env.find(name) else {
                     ctx.report(&env, TypeErrorKind::CannotFind(name.clone()));
-                    return (Type::error(), Type::error())
+                    return (Type::error(), Type::error());
                 };
 
                 (Type::bound(Index(index)), kind)

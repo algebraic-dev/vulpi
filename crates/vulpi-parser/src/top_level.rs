@@ -18,6 +18,17 @@ impl<'a> Parser<'a> {
         })
     }
 
+    pub fn trait_binder(&mut self) -> Result<TraitBinder> {
+        let left_bracket = self.expect(TokenData::LBracket)?;
+        let typ = self.typ()?;
+        let right_bracket = self.expect(TokenData::RBracket)?;
+        Ok(TraitBinder {
+            left_bracket,
+            typ,
+            right_bracket,
+        })
+    }
+
     pub fn explicit_type_binder(&mut self) -> Result<ExplicitTypeBinder> {
         let name = self.lower()?;
         let colon = self.expect(TokenData::Colon)?;
@@ -33,6 +44,16 @@ impl<'a> Parser<'a> {
             Ok(TypeBinder::Explicit(
                 self.parenthesis(Self::explicit_type_binder)?,
             ))
+        }
+    }
+
+    pub fn let_binder(&mut self) -> Result<LetBinder> {
+        if self.at(TokenData::LBracket) {
+            let binder = self.trait_binder()?;
+            Ok(LetBinder::Trait(binder))
+        } else {
+            let binder = self.binder()?;
+            Ok(LetBinder::Param(binder))
         }
     }
 
@@ -60,6 +81,7 @@ impl<'a> Parser<'a> {
 
     fn trait_decl(&mut self, visibility: Visibility) -> Result<TraitDecl> {
         let trait_ = self.expect(TokenData::Trait)?;
+        let supers = self.many(Self::trait_binder)?;
         let name = self.upper()?;
         let binders = self.many(Self::type_binder)?;
         let where_ = self.expect(TokenData::Where)?;
@@ -67,6 +89,7 @@ impl<'a> Parser<'a> {
         Ok(TraitDecl {
             visibility,
             trait_,
+            supers,
             name,
             binders,
             where_,
@@ -76,12 +99,14 @@ impl<'a> Parser<'a> {
 
     fn trait_impl(&mut self) -> Result<TraitImpl> {
         let impl_ = self.expect(TokenData::Impl)?;
+        let supers = self.many(Self::trait_binder)?;
         let name = self.path_upper()?;
         let types = self.many(Self::type_atom)?;
         let where_ = self.expect(TokenData::Where)?;
         let body = self.block(|ctx| ctx.let_decl(Visibility::Private))?;
         Ok(TraitImpl {
             impl_,
+            supers,
             name,
             types,
             where_,
@@ -92,7 +117,7 @@ impl<'a> Parser<'a> {
     fn let_signature(&mut self, visibility: Visibility) -> Result<LetSignature> {
         let let_ = self.expect(TokenData::Let)?;
         let name = self.lower()?;
-        let binders = self.many(Self::binder)?;
+        let binders = self.many(Self::let_binder)?;
         let ret = if self.at(TokenData::Colon) {
             let colon = self.bump();
             let typ = self.typ()?;
@@ -144,7 +169,7 @@ impl<'a> Parser<'a> {
         Ok(Field {
             name,
             colon,
-            ty: typ,
+            typ,
             visibility,
         })
     }

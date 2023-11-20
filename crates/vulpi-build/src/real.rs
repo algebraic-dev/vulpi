@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs, path::PathBuf};
 use filetime::FileTime;
 use vulpi_intern::Symbol;
 use vulpi_location::FileId;
-use vulpi_vfs::{Error, path::Path};
+use vulpi_vfs::{path::Path, Error};
 
 use super::FileSystem;
 

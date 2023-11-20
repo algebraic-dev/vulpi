@@ -1,18 +1,19 @@
 //! Facilities to build a entire crate of vulpi files. This module is responsible for building the
 //! crate from the source files and resolving the modules.
 
+use std::{collections::HashMap, path::PathBuf};
 
-use std::{collections::HashMap, fs::File, path::PathBuf};
-
-
-use resw::Writer;
 use vulpi_intern::Symbol;
-use vulpi_ir::transform;
 use vulpi_location::{FileId, Span};
 use vulpi_report::Report;
-use vulpi_resolver::{dependencies::{Dependencies, self}, Module, Context, cycle::DepHolder};
+use vulpi_resolver::{
+    cycle::DepHolder,
+    dependencies::{self, Dependencies},
+    Context, Module,
+};
+
 use vulpi_syntax::concrete::tree::Program;
-use vulpi_vfs::{FileSystem, path::Path};
+use vulpi_vfs::{path::Path, FileSystem};
 
 pub mod real;
 
@@ -41,7 +42,11 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         vulpi_parser::parse(self.reporter.clone(), id, &source)
     }
 
-    pub fn find_dependencies(&mut self, bag: &mut HashMap<Path, (Interface, Dependencies)>, deps: Dependencies) {
+    pub fn find_dependencies(
+        &mut self,
+        bag: &mut HashMap<Path, (Interface, Dependencies)>,
+        deps: Dependencies,
+    ) {
         for (path, span) in deps.imported {
             if !bag.contains_key(&path) {
                 if let Some(id) = self.load(span.clone(), self.fs.from_src_path(path.clone())) {
@@ -49,12 +54,12 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
                     let deps = dependencies::dependencies(self.name.clone(), &program);
                     bag.insert(path.clone(), (Interface::Uncompiled(program), deps.clone()));
                     self.find_dependencies(bag, deps);
-                } 
-            } 
+                }
+            }
         }
     }
-    
-    pub fn compile(&mut self, module: Symbol, path: FS::Path, output: PathBuf) {
+
+    pub fn compile(&mut self, module: Symbol, path: FS::Path, _output: PathBuf) {
         // TODO: Fix this error :( I can't now because it would require changes
         // to the vulpi-report module. Good luck Sofia from the future!
 
@@ -62,7 +67,7 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         let parsed = self.parse(root);
 
         let path = Path {
-            segments: vec![module.clone(), Symbol::intern("Main")]
+            segments: vec![module.clone(), Symbol::intern("Main")],
         };
 
         let mut bag = HashMap::new();
@@ -81,8 +86,11 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
                 Interface::Uncompiled(parsed) => {
                     let context = Context::new(path.clone(), self.reporter.clone());
                     let solved = vulpi_resolver::resolve(&context, parsed);
-                    modules.insert(path, (context.module.clone(), Some((context, solved)), deps));
-                },
+                    modules.insert(
+                        path,
+                        (context.module.clone(), Some((context, solved)), deps),
+                    );
+                }
             }
         }
 
@@ -90,14 +98,13 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
             for (module, _, _) in modules.values() {
                 let path = module.name().clone();
                 actual_module.add_available(path, module.clone())
-            }   
-        } 
+            }
+        }
 
-        let mut tc = vulpi_typer::Context::new(self.reporter.clone());
         let mut programs = vec![];
 
         let mut dep = DepHolder::default();
-        
+
         for (_, ctx, _) in modules.into_values() {
             if let Some((ctx, resolver)) = ctx {
                 let program = resolver.eval(ctx.clone());
@@ -107,23 +114,5 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         }
 
         dep.report_cycles(self.reporter.clone());
-
-        let programs = vulpi_typer::Programs(programs);
-
-        tc.declare(&programs);
-        tc.define(&programs);
-
-        let program = tc.elaborated;
-        
-        if !self.reporter.has_errors() {
-            let res = transform::Transform::transform(program, &mut Default::default());
-
-            let js = vulpi_js::Transform::transform(&res, &mut Default::default());
-            let f = File::create(output).unwrap();
-            let mut w = Writer::new(f);
-
-            w.write_program(&js).unwrap();
-        }
     }
-
 }

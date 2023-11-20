@@ -19,7 +19,7 @@ impl Eval<Type<Virtual>> for Type<Real> {
     fn eval(&self, env: &Env) -> Type<Virtual> {
         match self.as_ref() {
             TypeKind::Arrow(pi) => Type::new(TypeKind::Arrow(r#virtual::Pi {
-                ty: pi.ty.clone().eval(env),
+                typ: pi.typ.clone().eval(env),
                 body: pi.body.clone().eval(env),
             })),
             TypeKind::Forall(f) => Type::new(TypeKind::Forall(r#virtual::Forall {
@@ -45,6 +45,7 @@ impl Eval<Type<Virtual>> for Type<Real> {
                 let to = to.clone().eval(env);
                 Type::new(TypeKind::Qualified(from, to))
             }
+            TypeKind::Constraint => Type::new(TypeKind::Constraint),
         }
     }
 }
@@ -91,7 +92,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
         match self.as_ref() {
             TypeKind::Type => Type::new(TypeKind::Type),
             TypeKind::Arrow(pi) => Type::new(TypeKind::Arrow(real::Arrow {
-                ty: pi.ty.clone().quote(depth),
+                typ: pi.typ.clone().quote(depth),
                 body: pi.body.clone().quote(depth),
             })),
             TypeKind::Forall(f) => Type::new(TypeKind::Forall(real::Forall {
@@ -104,9 +105,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
             })),
             TypeKind::Hole(h) => h.quote(depth),
             TypeKind::Variable(v) => Type::new(TypeKind::Variable(v.clone())),
-            TypeKind::Bound(i) => {
-                Type::new(TypeKind::Bound(Level::to_index(depth, *i)))
-            }
+            TypeKind::Bound(i) => Type::new(TypeKind::Bound(Level::to_index(depth, *i))),
             TypeKind::Tuple(p) => Type::new(TypeKind::Tuple(p.quote(depth))),
             TypeKind::Application(func, arg) => {
                 let func = func.quote(depth);
@@ -119,6 +118,7 @@ impl Quote<Type<Real>> for Type<Virtual> {
                 let to = to.clone().quote(depth);
                 Type::new(TypeKind::Qualified(from, to))
             }
+            TypeKind::Constraint => Type::new(TypeKind::Constraint),
         }
     }
 }

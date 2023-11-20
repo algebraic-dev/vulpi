@@ -1,22 +1,18 @@
 //! This file declares a mutable environment that is useful to keep track of information that does
 //! not need to be immutable like the Env.
 
-use crate::{
-    module::Modules,
-    r#type::{r#virtual::Pi, State}, Declare,
-};
 use vulpi_intern::Symbol;
 use vulpi_report::{Diagnostic, Report};
 use vulpi_syntax::{elaborated, r#abstract::Qualified};
 
 use crate::{
     errors::{TypeError, TypeErrorKind},
-    r#type::{
-        r#virtual::Env,
-        r#virtual::Virtual,
-        real::Real,
-        HoleInner, Type, TypeKind,
-    },
+    module::Modules,
+    r#virtual::Env,
+    r#virtual::Pi,
+    r#virtual::Virtual,
+    real::Real,
+    HoleInner, State, Type, TypeKind,
 };
 
 /// A mutable context that is used differently from [Env]. It is used to keep data between every
@@ -80,7 +76,7 @@ impl Context {
         typ: Type<Virtual>,
     ) -> Option<(Type<Virtual>, Type<Virtual>)> {
         match typ.deref().as_ref() {
-            TypeKind::Arrow(pi) => Some((pi.ty.clone(), pi.body.clone())),
+            TypeKind::Arrow(pi) => Some((pi.typ.clone(), pi.body.clone())),
             TypeKind::Error => Some((typ.clone(), typ.clone())),
             TypeKind::Forall(_) => {
                 let typ = self.instantiate(env, &typ);
@@ -93,7 +89,7 @@ impl Context {
                     let hole_b = self.hole(env, kind);
 
                     empty.fill(Type::new(TypeKind::Arrow(Pi {
-                        ty: hole_a.clone(),
+                        typ: hole_a.clone(),
                         body: hole_b.clone(),
                     })));
 
@@ -107,55 +103,47 @@ impl Context {
     }
 
     /// Instantiates a poly type to a monotype.
-    pub fn instantiate(&mut self, env: &Env, ty: &Type<Virtual>) -> Type<Virtual> {
-        match ty.deref().as_ref() {
+    pub fn instantiate(&mut self, env: &Env, typ: &Type<Virtual>) -> Type<Virtual> {
+        match typ.deref().as_ref() {
             TypeKind::Forall(forall) => {
                 let arg = env.hole(forall.kind.clone(), forall.name.clone());
                 let kind = forall.kind.clone();
                 // Applies the body using the hole argument.
                 forall.body.apply(Some(forall.name.clone()), arg, kind)
             }
-            _ => ty.clone(),
+            _ => typ.clone(),
         }
     }
 
-    pub fn instantiate_with(&mut self, ty: &Type<Virtual>, arg: Type<Virtual>) -> Type<Virtual> {
-        match ty.deref().as_ref() {
+    pub fn instantiate_with(&mut self, typ: &Type<Virtual>, arg: Type<Virtual>) -> Type<Virtual> {
+        match typ.deref().as_ref() {
             TypeKind::Forall(forall) => {
                 let kind = forall.kind.clone();
                 forall.body.apply(Some(forall.name.clone()), arg, kind)
             }
-            _ => ty.clone(),
+            _ => typ.clone(),
         }
     }
 
-    pub fn instantiate_with_args(
+    pub fn instantiate_with_arguments(
         &mut self,
         ty: &Type<Virtual>,
         args: Vec<Type<Virtual>>,
     ) -> Type<Virtual> {
-        let mut ty = ty.clone();
+        let mut typ = ty.clone();
         for arg in args {
-            ty = self.instantiate_with(&ty, arg);
+            typ = self.instantiate_with(&typ, arg);
         }
-        ty
+        typ
     }
 
-    pub fn instantiate_all(&mut self, env: &Env, ty: &Type<Virtual>) -> Type<Virtual> {
-        match ty.deref().as_ref() {
+    pub fn instantiate_all(&mut self, env: &Env, typ: &Type<Virtual>) -> Type<Virtual> {
+        match typ.deref().as_ref() {
             TypeKind::Forall(_) => {
-                let res = self.instantiate(env, ty);
+                let res = self.instantiate(env, typ);
                 self.instantiate_all(env, &res)
             }
-            _ => ty.clone(),
+            _ => typ.clone(),
         }
-    }
-
-    pub fn declare<T: Declare>(&mut self, t: &T) {
-        T::declare(t, (self, Env::default()))
-    }
-
-    pub fn define<T: Declare>(&mut self, t: &T) {
-        T::define(t, (self, Env::default()))
     }
 }

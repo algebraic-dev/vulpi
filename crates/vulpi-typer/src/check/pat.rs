@@ -2,28 +2,22 @@ use std::collections::HashMap;
 
 use vulpi_intern::Symbol;
 use vulpi_syntax::{
-    elaborated, r#abstract::Pattern, r#abstract::PatternArm, r#abstract::PatternKind,
+    elaborated,
+    r#abstract::{Pattern, PatternArm, PatternKind},
 };
 
-use crate::{
-    errors::TypeErrorKind,
-    r#type::eval::Quote,
-    Context, Env, Real, Type, Virtual,
-};
+use crate::eval::Quote;
+use crate::infer::Infer;
+use crate::{context::Context, errors::TypeErrorKind, r#virtual::Virtual, real::Real, Env, Type};
 
 use super::Check;
-use crate::infer::Infer;
 
 impl Check for PatternArm {
     type Return = elaborated::PatternArm<Type<Real>>;
 
     type Context<'a> = (&'a mut Context, Env);
 
-    fn check(
-        &self,
-        mut ty: Type<Virtual>,
-        (ctx, mut env): Self::Context<'_>,
-    ) -> Self::Return {
+    fn check(&self, mut typ: Type<Virtual>, (ctx, mut env): Self::Context<'_>) -> Self::Return {
         let mut map = Default::default();
 
         let mut elaborated_patterns = Vec::new();
@@ -31,19 +25,19 @@ impl Check for PatternArm {
         for pat in &self.patterns {
             env.on(pat.span.clone());
 
-            if let Some((left, right)) = ctx.as_function(&env, ty.clone()) {
+            if let Some((left, right)) = ctx.as_function(&env, typ.clone()) {
                 let elab = pat.check(left, (ctx, &mut map, env.clone()));
                 elaborated_patterns.push(elab);
-                ty = right;
+                typ = right;
             } else {
                 ctx.report(
                     &env,
-                    TypeErrorKind::NotAFunction(env.clone(), ty.quote(env.level)),
+                    TypeErrorKind::NotAFunction(env.clone(), typ.quote(env.level)),
                 );
                 return elaborated::PatternArm {
                     patterns: Vec::new(),
                     guard: None,
-                    expr: self.expr.check(ty, (ctx, env.clone())),
+                    expr: self.expr.check(typ, (ctx, env.clone())),
                 };
             }
         }
@@ -52,12 +46,9 @@ impl Check for PatternArm {
             env.add_var(binding.0, binding.1);
         }
 
-        let elab_expr = self.expr.check(ty, (ctx, env.clone()));
+        let elab_expr = self.expr.check(typ, (ctx, env.clone()));
 
-        let guard = self
-            .guard
-            .as_ref()
-            .map(|g| g.infer((ctx, env.clone())));
+        let guard = self.guard.as_ref().map(|g| g.infer((ctx, env.clone())));
 
         let elab_guard = if let Some((typ, guard)) = guard {
             let bool = ctx.find_prelude_type("Bool", env.clone());
@@ -80,7 +71,7 @@ impl Check for Vec<PatternArm> {
 
     type Context<'a> = (&'a mut Context, Env);
 
-    fn check(&self, ty: Type<Virtual>, (ctx, env): Self::Context<'_>) -> Self::Return {
+    fn check(&self, typ: Type<Virtual>, (ctx, env): Self::Context<'_>) -> Self::Return {
         if self.is_empty() {
             ctx.report(&env, TypeErrorKind::EmptyCase);
             vec![]
@@ -88,7 +79,7 @@ impl Check for Vec<PatternArm> {
             let size = self[0].patterns.len();
 
             let mut elab_arms = Vec::new();
-            let elab_arm = self[0].check(ty.clone(), (ctx, env.clone()));
+            let elab_arm = self[0].check(typ.clone(), (ctx, env.clone()));
 
             elab_arms.push(elab_arm);
 
@@ -98,7 +89,7 @@ impl Check for Vec<PatternArm> {
                     return vec![];
                 }
 
-                let elab_arm = pat.check(ty.clone(), (ctx, env.clone()));
+                let elab_arm = pat.check(typ.clone(), (ctx, env.clone()));
                 elab_arms.push(elab_arm);
             }
 
@@ -112,18 +103,18 @@ impl Check for Pattern {
 
     type Context<'a> = (&'a mut Context, &'a mut HashMap<Symbol, Type<Virtual>>, Env);
 
-    fn check(&self, ty: Type<Virtual>, (ctx, map, env): Self::Context<'_>) -> Self::Return {
+    fn check(&self, ann_ty: Type<Virtual>, (ctx, map, env): Self::Context<'_>) -> Self::Return {
         env.on(self.span.clone());
         match &self.data {
             PatternKind::Wildcard => Box::new(elaborated::PatternKind::Wildcard),
             PatternKind::Variable(n) => {
-                map.insert(n.clone(), ty);
+                map.insert(n.clone(), ann_ty);
 
                 Box::new(elaborated::PatternKind::Variable(n.clone()))
             }
             _ => {
                 let (typ, elab_pat) = self.infer((ctx, map, env.clone()));
-                ctx.subsumes(env, typ, ty);
+                ctx.subsumes(env, typ, ann_ty);
                 elab_pat
             }
         }

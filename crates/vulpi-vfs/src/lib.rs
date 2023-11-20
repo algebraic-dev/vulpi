@@ -3,8 +3,8 @@
 
 use std::path::PathBuf;
 
-pub use path::Path;
 use filetime::FileTime;
+pub use path::Path;
 use vulpi_location::FileId;
 
 pub mod path;
@@ -19,7 +19,7 @@ pub enum Error {
 /// A virtual file system trait that can be implemented by the user. It's used to store the source
 /// code of the files that are being compiled and to store the compiled modules.
 pub trait FileSystem {
-    type Path : Clone;
+    type Path: Clone;
 
     fn load(&mut self, path: Self::Path) -> Result<FileId, Error>;
     fn unload(&mut self, id: FileId) -> Result<(), Error>;

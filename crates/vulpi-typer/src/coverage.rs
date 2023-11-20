@@ -1,17 +1,16 @@
-//! Coverage checking algorithm for pa(tt)erns.
+//! Coverage checking algorithm for patterns. Based on the one described in the paper
+//! "Warnings for pattern matching" by Luc Maranget.
 
 use std::fmt::Display;
 
 use im_rc::HashSet;
+
 use vulpi_syntax::{
     elaborated::{Literal, LiteralKind, Pattern, PatternArm, PatternKind},
     r#abstract::Qualified,
 };
 
-use crate::{
-    r#type::{eval::Eval, TypeKind},
-    Context, Env, Real, Type, Virtual,
-};
+use crate::{context::Context, eval::Eval, real::Real, Env, Type, TypeKind, Virtual};
 
 #[derive(Clone, Debug)]
 pub enum Pat {
@@ -19,7 +18,6 @@ pub enum Pat {
     Constructor(Qualified, Vec<Pat>),
     Wildcard,
     Literal(Literal),
-    Or(Box<Pat>, Box<Pat>),
 }
 
 impl Display for Pat {
@@ -54,9 +52,6 @@ impl Display for Pat {
                 LiteralKind::Char(c) => write!(f, "'{}'", c.get()),
                 LiteralKind::Unit => write!(f, "()"),
             },
-            Pat::Or(l, r) => {
-                write!(f, "{} | {}", l, r)
-            }
         }
     }
 }
@@ -166,11 +161,6 @@ impl Row<Pat> {
         let first = &self.0[0];
         match first {
             Pat::Wildcard => vec![self.pop_front()],
-            Pat::Or(l, r) => {
-                let mut l = self.preppend(*l.clone()).default_row();
-                l.extend(self.preppend(*r.clone()).default_row());
-                l
-            }
             _ => vec![],
         }
     }
@@ -227,7 +217,7 @@ impl Witness {
 
     pub fn expand(self, name: Option<Qualified>, size: usize) -> Self {
         let Witness::NonExhaustive(x) = self else {
-            return self
+            return self;
         };
 
         let (left, right) = x.split(size);
@@ -245,7 +235,7 @@ impl Witness {
 
     pub fn preppend(self, pat: Pat) -> Self {
         let Witness::NonExhaustive(row) = self else {
-            return self
+            return self;
         };
 
         Witness::NonExhaustive(row.preppend(pat))
@@ -383,7 +373,7 @@ impl Problem {
         args: Vec<Type<Virtual>>,
     ) -> Witness {
         let (signature, _, _) = ctx.modules.constructor(&name);
-        let signature = ctx.instantiate_with_args(&signature.eval(&env), args);
+        let signature = ctx.instantiate_with_arguments(&signature.eval(&env), args);
 
         let spine = signature.arrow_spine();
 
@@ -431,18 +421,11 @@ impl Problem {
             self.specialize_wildcard(ctx, env)
         } else {
             match self.is_complete_signature(ctx, type_name.clone()) {
-                Completeness::Complete(_) => {
-                    self.split(ctx, env, type_name, type_spine)
-                },
+                Completeness::Complete(_) => self.split(ctx, env, type_name, type_spine),
                 Completeness::Incomplete(Finitude::Finite(cons)) => {
                     let name = cons.into_iter().collect::<Vec<_>>()[0].clone();
-                    // let (ty, size) = ctx.modules.constructor(&name);
                     let pat = self.synthetize(ctx, name);
-                    // let args = ctx.instantiate_all(&env, &ty.eval(&env)).arrow_spine();
-                    // let witness = self.specialize_cons(ctx, env, name, wildcards(size), args);
-
                     let witness = self.default_matrix().exaustive(ctx, env);
-
                     witness.preppend(pat)
                 }
                 Completeness::Incomplete(Finitude::Infinite) => {
@@ -505,7 +488,7 @@ impl Problem {
     pub fn match_exhaustiveness(self, ctx: &mut Context, env: Env) -> Witness {
         let case = self.case.first();
         let current = self.types.first();
-        
+
         match (case, current.deref().as_ref()) {
             (Pat::Wildcard, TypeKind::Application(_, _))
             | (Pat::Wildcard, TypeKind::Variable(_)) => {

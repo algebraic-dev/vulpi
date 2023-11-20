@@ -23,7 +23,9 @@ pub struct Test {
 
 /// The main runner that receives tests and then runs them.
 pub fn test_runner(tests: &[&Test]) {
-    let Some(opts) = get_test_opts() else { return; };
+    let Some(opts) = get_test_opts() else {
+        return;
+    };
 
     let mut rendered = Vec::new();
 

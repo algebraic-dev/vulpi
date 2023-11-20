@@ -11,9 +11,11 @@ use vulpi_syntax::{
 };
 
 use crate::{
+    context::Context,
     errors::TypeErrorKind,
-    r#type::{eval::Eval, r#virtual::Virtual},
-    Context, Env, Kind, Real, Type,
+    real::Real,
+    Env, Kind, Type,
+    {eval::Eval, r#virtual::Virtual},
 };
 
 use super::Infer;
@@ -44,10 +46,7 @@ impl Infer for PatternArm {
 
         let (typ, elab_expr) = self.expr.infer((ctx, env.clone()));
 
-        let guard = self
-            .guard
-            .as_ref()
-            .map(|g| g.infer((ctx, env.clone())));
+        let guard = self.guard.as_ref().map(|g| g.infer((ctx, env.clone())));
 
         let elab_guard = if let Some((typ, guard)) = guard {
             let bool = ctx.find_prelude_type("Bool", env.clone());
@@ -93,8 +92,7 @@ impl Infer for Vec<PatternArm> {
             let mut elab_arms = vec![elab_arm];
 
             for pat in self.iter().skip(1) {
-                let (new_types, new_ret_type, elab_arm) =
-                    pat.infer((ctx, env.clone()));
+                let (new_types, new_ret_type, elab_arm) = pat.infer((ctx, env.clone()));
 
                 elab_arms.push(elab_arm);
 
@@ -198,7 +196,9 @@ impl Infer for Pattern {
                     types.push(arg_ty.clone());
                     args.push(elab_arg);
 
-                    let Some((param_ty, rest)) = ctx.as_function(&env, typ) else { unreachable!() };
+                    let Some((param_ty, rest)) = ctx.as_function(&env, typ) else {
+                        unreachable!()
+                    };
 
                     typ = rest;
 

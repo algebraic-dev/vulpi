@@ -18,8 +18,8 @@ use vulpi_syntax::r#abstract as abs;
 use vulpi_syntax::r#abstract::Visibility;
 use vulpi_vfs::path::{Path, Qualified};
 
-pub mod dependencies;
 pub mod cycle;
+pub mod dependencies;
 mod error;
 
 pub enum Either<L, R> {
@@ -45,7 +45,7 @@ pub enum DefinitionKind {
 pub struct Bag<V> {
     pub types: V,
     pub values: V,
-    pub traits: V
+    pub traits: V,
 }
 
 impl<V> Bag<V> {
@@ -53,7 +53,7 @@ impl<V> Bag<V> {
         match definition {
             DefinitionKind::Type => f(&self.types),
             DefinitionKind::Value => f(&self.values),
-            DefinitionKind::Trait => f(&self.values)
+            DefinitionKind::Trait => f(&self.values),
         }
     }
 }
@@ -65,6 +65,8 @@ pub struct Namespace {
     name: Path,
     declared: Bag<HashMap<Symbol, abs::Visibility>>,
     constants: HashMap<abs::Qualified, HashMap<abs::Qualified, Span>>,
+    traits: HashMap<Symbol, HashMap<Symbol, Span>>,
+
     aliases: Bag<HashMap<Symbol, Alias>>,
     modules: HashMap<Symbol, (Path, abs::Visibility)>,
     submodules: HashMap<Symbol, Module>,
@@ -149,6 +151,10 @@ impl Module {
         std::cell::Ref::map(self.borrow(), |this| &this.opened)
     }
 
+    fn traits(&self) -> RefMut<'_, HashMap<Symbol, HashMap<Symbol, Span>>> {
+        std::cell::RefMut::map(self.borrow_mut(), |this| &mut this.traits)
+    }
+
     fn opened_mut(&self) -> RefMut<'_, HashMap<Path, abs::Visibility>> {
         std::cell::RefMut::map(self.borrow_mut(), |this| &mut this.opened)
     }
@@ -161,6 +167,7 @@ impl Module {
             name,
             declared: Default::default(),
             aliases: Default::default(),
+            traits: Default::default(),
             constants: Default::default(),
             submodules: Default::default(),
             available: Default::default(),
@@ -185,7 +192,7 @@ impl Module {
         match kind {
             DefinitionKind::Type => bag.types.insert(name, vis.into()),
             DefinitionKind::Value => bag.values.insert(name, vis.into()),
-            DefinitionKind::Trait => bag.traits.insert(name, vis.into())
+            DefinitionKind::Trait => bag.traits.insert(name, vis.into()),
         };
     }
 
@@ -421,12 +428,12 @@ impl Context {
         }
     }
 
-    pub fn resolve(
+    pub fn get_path(
         &self,
         kind: DefinitionKind,
         span: Span,
         mut path: Qualified,
-    ) -> Option<abs::Qualified> {
+    ) -> Option<Qualified> {
         if let Some((alias, _)) = self.module.modules().get(&path.path.symbol()) {
             path.path = alias.clone();
         }
@@ -448,10 +455,7 @@ impl Context {
         let searched = module.search(kind, path.name.clone());
 
         match searched {
-            Ok(Some(res)) => Some(abs::Qualified {
-                path: res.path.symbol(),
-                name: res.name,
-            }),
+            Ok(Some(res)) => Some(res),
             Ok(None) => {
                 self.reporter.report(Diagnostic::new(error::ResolverError {
                     span: span.clone(),
@@ -464,6 +468,19 @@ impl Context {
                 None
             }
         }
+    }
+
+    pub fn resolve(
+        &self,
+        kind: DefinitionKind,
+        span: Span,
+        path: Qualified,
+    ) -> Option<abs::Qualified> {
+        let path = self.get_path(kind, span, path)?;
+        Some(abs::Qualified {
+            path: path.path.symbol(),
+            name: path.name,
+        })
     }
 
     /// Creates a nested context.
@@ -545,7 +562,7 @@ pub mod top_level {
         use concrete::tree::TopLevel::*;
 
         match top_level {
-            Let(let_decl) => Some(resolve_let(ctx, *let_decl).map(abs::TopLevel::Let)),
+            Let(let_decl) => Some(resolve_let(ctx, *let_decl, true).map(abs::TopLevel::Let)),
             Type(type_decl) => Some(resolve_type_decl(ctx, *type_decl).map(abs::TopLevel::Type)),
             Module(mod_decl) => Some(resolve_module(ctx, *mod_decl).map(abs::TopLevel::Module)),
             External(ext) => Some(resolve_external(ctx, *ext).map(abs::TopLevel::External)),
@@ -563,7 +580,19 @@ pub mod top_level {
         ctx.module
             .define(DefinitionKind::Type, decl.visibility.clone(), name.clone());
 
-        let body = decl.body.into_iter().map(|x| resolve_let_signature(submodule.clone(), x)).collect::<Vec<_>>();
+        ctx.module.traits().insert(
+            name.clone(),
+            decl.body
+                .iter()
+                .map(|x| (x.name.symbol(), x.name.0.value.span.clone()))
+                .collect(),
+        );
+
+        let body = decl
+            .body
+            .into_iter()
+            .map(|x| resolve_let_signature(submodule.clone(), x))
+            .collect::<Vec<_>>();
 
         Solver::new(move |ctx| {
             ctx.scoped(|ctx| {
@@ -578,10 +607,17 @@ pub mod top_level {
                     name,
                 };
 
+                let supers = decl
+                    .supers
+                    .into_iter()
+                    .map(|x| transform_type(ctx, *x.typ))
+                    .collect::<Vec<_>>();
+
                 let body = body.into_iter().map(|x| x.eval(ctx.clone())).collect();
-                
+
                 abs::TraitDecl {
                     name,
+                    supers,
                     binders,
                     body,
                 }
@@ -590,11 +626,27 @@ pub mod top_level {
     }
 
     pub fn resolve_impl(ctx: Context, decl: tree::TraitImpl) -> Solver<Option<abs::TraitImpl>> {
-        let body = decl.body.into_iter().map(|x| resolve_let(ctx.clone(), x)).collect::<Vec<_>>();
+        let let_names = decl
+            .body
+            .iter()
+            .map(|x| {
+                (
+                    x.signature.name.symbol(),
+                    x.signature.name.0.value.span.clone(),
+                )
+            })
+            .collect::<HashMap<_, _>>();
 
+        let body = decl
+            .body
+            .into_iter()
+            .map(|x| resolve_let(ctx.clone(), x, false))
+            .collect::<Vec<_>>();
+
+        
         Solver::new(move |ctx| {
             let path = from_constructor_upper_path(&decl.name);
-            let searched = ctx.resolve(DefinitionKind::Type, decl.name.span.clone(), path);
+            let searched = ctx.get_path(DefinitionKind::Type, decl.name.span.clone(), path);
 
             ctx.scoped(|ctx| {
                 let binders = decl
@@ -604,50 +656,87 @@ pub mod top_level {
                     .collect::<Vec<_>>();
 
                 let body = body.into_iter().map(|x| x.eval(ctx.clone())).collect();
-                
-                if let Some(name) = searched {
+
+                if let Some(searched) = searched {
+                    let module = ctx.module.available().get(&searched.path).cloned().unwrap();
+                    let values = module.traits().get(&searched.name).cloned().unwrap();
+
+                    let not_declared = let_names
+                        .iter()
+                        .filter(|x| !values.contains_key(x.0))
+                        .collect::<Vec<_>>();
+
+                    let over_declared = values
+                        .iter()
+                        .filter(|x| !let_names.contains_key(x.0))
+                        .map(|(name, _)| (name.clone(), decl.name.span.clone()))
+                        .collect::<Vec<_>>();
+
+                    for (name, span) in over_declared {
+                        ctx.reporter.report(Diagnostic::new(ResolverError {
+                            span: span.clone(),
+                            kind: error::ResolverErrorKind::NotFound(name.clone()),
+                        }));
+                    }
+
+                    for (name, span) in not_declared {
+                        ctx.reporter.report(Diagnostic::new(ResolverError {
+                            span: span.clone(),
+                            kind: error::ResolverErrorKind::NotImplemented(
+                                searched.name.clone(),
+                                name.clone(),
+                            ),
+                        }));
+                    }
+
                     Some(abs::TraitImpl {
-                        name,
+                        name: abs::Qualified {
+                            path: searched.path.symbol(),
+                            name: searched.name,
+                        },
                         binders,
                         body,
                     })
                 } else {
                     None
                 }
-                
             })
         })
     }
 
-    pub fn resolve_let_signature(ctx: Context, sig: tree::LetSignature) -> Solver<abs::LetSignature> {
+    pub fn resolve_let_signature(
+        ctx: Context,
+        sig: tree::LetSignature,
+    ) -> Solver<abs::LetSignature> {
         let name = sig.name.symbol();
 
         // Gets the location of the name, so we can present the errors in a less annoying way
         // in the IDE.
         let span = sig.name.0.value.span.clone();
 
-        ctx.module.define(DefinitionKind::Value, sig.visibility.clone(), name.clone());
+        ctx.module
+            .define(DefinitionKind::Value, sig.visibility.clone(), name.clone());
 
         Solver::new(move |ctx| {
             ctx.scoped(|ctx| {
                 let binders = sig
                     .binders
                     .into_iter()
-                    .map(|x| transform_binder(ctx, x))
+                    .map(|x| transform_let_binder(ctx, x))
                     .collect();
 
                 let name = abs::Qualified {
                     path: ctx.module.name().symbol(),
                     name,
                 };
-                
+
                 abs::LetSignature {
                     span,
                     name,
                     visibility: sig.visibility.into(),
                     ret: sig
-                    .ret
-                    .map(|(_, type_kind)| transform_type(ctx, *type_kind)),
+                        .ret
+                        .map(|(_, type_kind)| transform_type(ctx, *type_kind)),
                     binders,
                 }
             })
@@ -655,15 +744,20 @@ pub mod top_level {
     }
 
     /// Resolve a let declaration and returns the solver for it.
-    pub fn resolve_let(ctx: Context, decl: tree::LetDecl) -> Solver<abs::LetDecl> {
+    pub fn resolve_let(ctx: Context, decl: tree::LetDecl, declare: bool) -> Solver<abs::LetDecl> {
         let name = decl.signature.name.symbol();
 
         // Gets the location of the name, so we can present the errors in a less annoying way
         // in the IDE.
         let span = decl.signature.name.0.value.span.clone();
 
-        ctx.module
-            .define(DefinitionKind::Value, decl.signature.visibility.clone(), name.clone());
+        if declare {
+            ctx.module.define(
+                DefinitionKind::Value,
+                decl.signature.visibility.clone(),
+                name.clone(),
+            );
+        }
 
         Solver::new(move |ctx| {
             ctx.scoped(|ctx| {
@@ -671,7 +765,7 @@ pub mod top_level {
                     .signature
                     .binders
                     .into_iter()
-                    .map(|x| transform_binder(ctx, x))
+                    .map(|x| transform_let_binder(ctx, x))
                     .collect();
 
                 let name = abs::Qualified {
@@ -703,9 +797,9 @@ pub mod top_level {
                     name,
                     visibility: decl.signature.visibility.into(),
                     ret: decl
-                    .signature
-                    .ret
-                    .map(|(_, type_kind)| transform_type(ctx, *type_kind)),
+                        .signature
+                        .ret
+                        .map(|(_, type_kind)| transform_type(ctx, *type_kind)),
                     binders,
                 };
 
@@ -771,7 +865,7 @@ pub mod top_level {
                             .into_iter()
                             .map(|(field, _)| {
                                 let symbol = field.name.symbol();
-                                let transform_type = transform_type(ctx, *field.ty);
+                                let transform_type = transform_type(ctx, *field.typ);
                                 let into = field.visibility.into();
                                 (
                                     abs::Qualified {
@@ -844,7 +938,7 @@ pub mod top_level {
             },
             namespace: namespace.symbol(),
             visibility: decl.visibility.into(),
-            ty: transform_type(&module, *decl.typ),
+            typ: transform_type(&module, *decl.typ),
             ret: decl.str.symbol(),
         })
     }
@@ -1052,7 +1146,7 @@ pub mod pattern {
 
     /// Transform a pattern into an abstract pattern.
     pub fn transform_pattern_arm(ctx: &mut Context, arm: tree::PatternArm) -> abs::PatternArm {
-        if arm.patterns.len() > 0 {
+        if !arm.patterns.is_empty() {
             ctx.reset_constant()
         }
 
@@ -1258,9 +1352,9 @@ pub mod expr {
             Literal(x) => abs::ExprKind::Literal(transform_literal(x)),
             Annotation(x) => {
                 let expr = transform(ctx, *x.expr);
-                let ty = transform_type(ctx, *x.ty);
+                let ty = transform_type(ctx, *x.typ);
 
-                abs::ExprKind::Annotation(abs::AnnotationExpr { expr, ty })
+                abs::ExprKind::Annotation(abs::AnnotationExpr { expr, typ: ty })
             }
             RecordInstance(record_instance) => {
                 ctx.in_head = false;
@@ -1426,7 +1520,18 @@ pub fn transform_binder(ctx: &Context, binder: tree::Binder) -> abs::Binder {
     let pat = pattern::transform(ctx, *binder.pattern);
     let ty = transform_type(ctx, *binder.typ);
 
-    abs::Binder { pat, ty }
+    abs::Binder { pat, typ: ty }
+}
+
+pub fn transform_trait_binder(ctx: &Context, binder: tree::TraitBinder) -> abs::Type {
+    transform_type(ctx, *binder.typ)
+}
+
+pub fn transform_let_binder(ctx: &Context, binder: tree::LetBinder) -> abs::LetBinder {
+    match binder {
+        tree::LetBinder::Param(t) => abs::LetBinder::Param(transform_binder(ctx,t)),
+        tree::LetBinder::Trait(t) => abs::LetBinder::Trait(transform_trait_binder(ctx, t)),
+    }
 }
 
 pub fn transform_sttm(ctx: &mut Context, sttm: concrete::tree::Sttm) -> abs::Sttm {

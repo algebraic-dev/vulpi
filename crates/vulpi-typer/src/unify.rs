@@ -1,9 +1,6 @@
-//! Module for unication and subsumption of types.
+//! Module for unification and subsumption of types.
 
 #![allow(clippy::only_used_in_recursion)]
-
-
-
 
 use crate::{context::Context, errors::TypeErrorKind};
 
@@ -31,7 +28,7 @@ impl Context {
                 }
                 (TypeKind::Arrow(m), TypeKind::Arrow(n)) => {
                     // Change due to variance.
-                    go(ctx, env.clone(), n.ty.clone(), m.ty.clone())?;
+                    go(ctx, env.clone(), n.typ.clone(), m.typ.clone())?;
                     go(ctx, env, m.body.clone(), n.body.clone())
                 }
                 (_, TypeKind::Forall(forall)) => {
@@ -55,16 +52,14 @@ impl Context {
 
         if let Err(kind) = result {
             match kind {
-                TypeErrorKind::TypeMismatch(_, _, _) => {
-                    self.report(
-                        &env,
-                        TypeErrorKind::TypeMismatch(
-                            env.clone(),
-                            left.quote(env.level),
-                            right.quote(env.level),
-                        ),
-                    )
-                }
+                TypeErrorKind::TypeMismatch(_, _, _) => self.report(
+                    &env,
+                    TypeErrorKind::TypeMismatch(
+                        env.clone(),
+                        left.quote(env.level),
+                        right.quote(env.level),
+                    ),
+                ),
                 _ => self.report(&env, kind),
             }
         }
@@ -81,21 +76,27 @@ impl Context {
                 )
             }
             TypeKind::Arrow(pi) => {
-                let HoleInner::Empty(_, kind, _) = left.0.borrow().clone() else { unreachable!() };
+                let HoleInner::Empty(_, kind, _) = left.0.borrow().clone() else {
+                    unreachable!()
+                };
 
                 let hole_a = self.hole(&env, kind.clone());
                 let hole_b = self.hole(&env, kind);
 
                 left.fill(Type::new(TypeKind::Arrow(Pi {
-                    ty: hole_a.clone(),
+                    typ: hole_a.clone(),
                     body: hole_b.clone(),
                 })));
 
-                let a = pi.ty.clone();
+                let a = pi.typ.clone();
                 let b = pi.body.clone();
 
-                let TypeKind::Hole(hole_a) = hole_a.as_ref() else { unreachable!() };
-                let TypeKind::Hole(hole_b) = hole_b.as_ref() else { unreachable!() };
+                let TypeKind::Hole(hole_a) = hole_a.as_ref() else {
+                    unreachable!()
+                };
+                let TypeKind::Hole(hole_b) = hole_b.as_ref() else {
+                    unreachable!()
+                };
 
                 self.sub_type_hole(env.clone(), a, hole_a.clone())?;
                 self.sub_hole_type(env, hole_b.clone(), b)
@@ -112,21 +113,27 @@ impl Context {
                 self.sub_type_hole(env, left, right)
             }
             TypeKind::Arrow(pi) => {
-                let HoleInner::Empty(_, kind, _) = right.0.borrow().clone() else { unreachable!() };
+                let HoleInner::Empty(_, kind, _) = right.0.borrow().clone() else {
+                    unreachable!()
+                };
 
                 let hole_a = self.hole(&env, kind.clone());
                 let hole_b = self.hole(&env, kind);
 
                 right.fill(Type::new(TypeKind::Arrow(Pi {
-                    ty: hole_a.clone(),
+                    typ: hole_a.clone(),
                     body: hole_b.clone(),
                 })));
 
-                let a = pi.ty.clone();
+                let a = pi.typ.clone();
                 let b = pi.body.clone();
 
-                let TypeKind::Hole(hole_a) = hole_a.as_ref() else { unreachable!() };
-                let TypeKind::Hole(hole_b) = hole_b.as_ref() else { unreachable!() };
+                let TypeKind::Hole(hole_a) = hole_a.as_ref() else {
+                    unreachable!()
+                };
+                let TypeKind::Hole(hole_b) = hole_b.as_ref() else {
+                    unreachable!()
+                };
 
                 self.sub_hole_type(env.clone(), hole_a.clone(), a)?;
                 self.sub_type_hole(env, b, hole_b.clone())
@@ -162,10 +169,10 @@ impl Context {
         }
     }
 
-    fn occurs(&self, env: Env, scope: &Level, hole: Hole<Virtual>, ty: Type<Virtual>) -> Result {
-        match ty.deref().as_ref() {
+    fn occurs(&self, env: Env, scope: &Level, hole: Hole<Virtual>, typ: Type<Virtual>) -> Result {
+        match typ.deref().as_ref() {
             TypeKind::Arrow(pi) => {
-                self.occurs(env.clone(), scope, hole.clone(), pi.ty.clone())?;
+                self.occurs(env.clone(), scope, hole.clone(), pi.typ.clone())?;
                 self.occurs(env, scope, hole, pi.body.clone())
             }
             TypeKind::Forall(forall) => {

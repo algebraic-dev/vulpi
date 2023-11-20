@@ -60,7 +60,7 @@ pub enum TokenData {
     Equal,       // '='
     Bar,         // '|'
     PipeRight,   // '|>'
-    PlusPlus,    // '++'    
+    PlusPlus,    // '++'
 
     Plus,      // '+'
     Minus,     // '-'

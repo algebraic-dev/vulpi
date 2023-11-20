@@ -2,11 +2,9 @@
 
 use crate::coverage::Problem;
 use crate::coverage::Witness;
-use crate::r#type::eval::Eval;
-use crate::r#type::eval::Quote;
-use crate::r#type::r#virtual;
-use crate::r#type::TypeKind;
-use crate::Real;
+use crate::r#virtual;
+use crate::real::Real;
+use crate::TypeKind;
 
 use crate::Kind;
 
@@ -22,11 +20,9 @@ use vulpi_syntax::{
     r#abstract::{Expr, ExprKind, SttmKind},
 };
 
-use crate::{
-    errors::TypeErrorKind,
-    r#type::r#virtual::Virtual,
-    Context, Env, Type,
-};
+use crate::eval::Eval;
+use crate::eval::Quote;
+use crate::{context::Context, errors::TypeErrorKind, r#virtual::Virtual, Env, Type};
 
 use super::Infer;
 
@@ -40,7 +36,7 @@ impl Infer for Expr {
 
         let elem = match &self.data {
             ExprKind::Application(app) => {
-                let (mut ty, func_elab) = app.func.infer((ctx, env.clone()));
+                let (mut typ, func_elab) = app.func.infer((ctx, env.clone()));
                 let mut elab_args = Vec::new();
 
                 for arg in &app.args {
@@ -49,23 +45,26 @@ impl Infer for Expr {
                     let (arg_ty, arg_elab) = arg.infer((ctx, env.clone()));
                     elab_args.push(arg_elab);
 
-                    if let Some((left, right)) = ctx.as_function(&env, ty.deref()) {
+                    if let Some((left, right)) = ctx.as_function(&env, typ.deref()) {
                         ctx.subsumes(env.clone(), arg_ty, left);
-                        ty = right;
+                        typ = right;
                     } else {
                         ctx.report(
                             &env,
-                            TypeErrorKind::NotAFunction(env.clone(), ty.quote(env.level)),
+                            TypeErrorKind::NotAFunction(env.clone(), typ.quote(env.level)),
                         );
-                        return (Type::error(), Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()));
+                        return (
+                            Type::error(),
+                            Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()),
+                        );
                     }
                 }
 
                 (
-                    ty.clone(),
+                    typ.clone(),
                     Box::new(elaborated::ExprKind::Application(
                         elaborated::ApplicationExpr {
-                            typ: ty.quote(env.level),
+                            typ: typ.quote(env.level),
                             func: func_elab,
                             args: elab_args,
                         },
@@ -83,15 +82,13 @@ impl Infer for Expr {
                     n.clone(),
                 )),
             ),
-            ExprKind::Function(n) => {
-                (
+            ExprKind::Function(n) => (
                 ctx.modules.let_decl(n).typ.clone(),
                 Box::new(elaborated::ExprKind::Function(
                     n.clone(),
                     ctx.modules.let_decl(n).typ.clone().quote(env.level),
                 )),
-                )
-            }
+            ),
             ExprKind::Let(e) => {
                 let (val_ty, body_elab) = e.body.infer((ctx, env.clone()));
 
@@ -104,10 +101,10 @@ impl Infer for Expr {
                     env.add_var(binding.0, binding.1)
                 }
 
-                let (ty, value_elab) = e.value.infer((ctx, env.clone()));
+                let (typ, value_elab) = e.value.infer((ctx, env.clone()));
 
                 (
-                    ty,
+                    typ,
                     Box::new(elaborated::ExprKind::Let(elaborated::LetExpr {
                         pattern: pat_elab,
                         next: value_elab,
@@ -119,9 +116,9 @@ impl Infer for Expr {
                 let mut types = Vec::new();
                 let mut elaborated = Vec::new();
 
-                for ty in &t.exprs {
-                    let (ty, elab) = ty.infer((ctx, env.clone()));
-                    types.push(ty);
+                for typ in &t.exprs {
+                    let (typ, elab) = typ.infer((ctx, env.clone()));
+                    types.push(typ);
                     elaborated.push(elab);
                 }
 
@@ -139,8 +136,7 @@ impl Infer for Expr {
 
                 ctx.errored = false;
 
-                let (_, arms, ret, elab_arms) =
-                    when.arms.infer((ctx, env.clone()));
+                let (_, arms, ret, elab_arms) = when.arms.infer((ctx, env.clone()));
 
                 let perform = !ctx.errored;
 
@@ -154,17 +150,16 @@ impl Infer for Expr {
                 let mut elab_scrutinee = Vec::new();
 
                 for (arm, scrutinee) in arms.iter().cloned().zip(when.scrutinee.iter()) {
-                    let (ty, elab) = scrutinee.infer((ctx, env.clone()));
-                    ctx.subsumes(env.clone(), arm, ty);
+                    let (typ, elab) = scrutinee.infer((ctx, env.clone()));
+                    ctx.subsumes(env.clone(), arm, typ);
                     elab_scrutinee.push(elab);
                 }
 
                 ctx.subsumes(env.clone(), ret_type.clone(), ret);
 
                 if perform {
-
                     let arms = arms.iter().map(|x| ctx.instantiate(&env, x)).collect();
-                    
+
                     let problem = Problem::exhaustiveness(&elab_arms, arms);
 
                     if let Witness::NonExhaustive(case) = problem.exaustive(ctx, env.clone()) {
@@ -181,28 +176,28 @@ impl Infer for Expr {
                 )
             }
             ExprKind::Do(block) => {
-                let mut ty = Type::tuple(vec![]);
+                let mut typ = Type::tuple(vec![]);
                 let mut stmts = Vec::new();
 
                 for stmt in &block.sttms {
                     let (new_ty, new_env, stmt) = stmt.infer((ctx, &mut env.clone()));
-                    ty = new_ty;
+                    typ = new_ty;
                     env = new_env;
 
                     stmts.push(stmt);
                 }
 
-                (ty, Box::new(elaborated::ExprKind::Do(stmts)))
+                (typ, Box::new(elaborated::ExprKind::Do(stmts)))
             }
             ExprKind::Literal(n) => {
-                let (ty, elab) = n.infer((ctx, env));
-                (ty, Box::new(elaborated::ExprKind::Literal(elab)))
+                let (typ, elab) = n.infer((ctx, env));
+                (typ, Box::new(elaborated::ExprKind::Literal(elab)))
             }
             ExprKind::Annotation(ann) => {
-                let (ty, elab_expr) = ann.expr.infer((ctx, env.clone()));
-                let (typ, _) = ann.ty.infer((ctx, env.clone()));
+                let (expr_typ, elab_expr) = ann.expr.infer((ctx, env.clone()));
+                let (typ, _) = ann.typ.infer((ctx, env.clone()));
                 let right = typ.eval(&env);
-                ctx.subsumes(env.clone(), ty, right.clone());
+                ctx.subsumes(env.clone(), expr_typ, right.clone());
                 (right, elab_expr.data)
             }
             ExprKind::Lambda(lam) => {
@@ -216,10 +211,7 @@ impl Infer for Expr {
                 let (body, elab_body) = lam.body.infer((ctx, env.clone()));
 
                 (
-                    Type::new(TypeKind::Arrow(r#virtual::Pi {
-                        ty: pat_ty,
-                        body,
-                    })),
+                    Type::new(TypeKind::Arrow(r#virtual::Pi { typ: pat_ty, body })),
                     Box::new(elaborated::ExprKind::Lambda(elaborated::LambdaExpr {
                         param: elab_pat,
                         body: elab_body,
@@ -231,21 +223,30 @@ impl Infer for Expr {
 
                 let (head, spine) = ty.application_spine();
 
-                let TypeKind::Variable(name) = head.as_ref()  else {
+                let TypeKind::Variable(name) = head.as_ref() else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return (Type::error(), Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()));
+                    return (
+                        Type::error(),
+                        Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()),
+                    );
                 };
 
                 let typ = ctx.modules.typ(name);
 
                 let crate::module::Def::Record(rec) = typ.def else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return (Type::error(), Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()));
+                    return (
+                        Type::error(),
+                        Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()),
+                    );
                 };
 
                 let Some(field_name) = rec.iter().find(|x| x.name == expr.field) else {
                     ctx.report(&env, TypeErrorKind::NotFoundField);
-                    return (Type::error(), Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()));
+                    return (
+                        Type::error(),
+                        Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()),
+                    );
                 };
 
                 let field = ctx.modules.field(field_name);
@@ -253,7 +254,7 @@ impl Infer for Expr {
                 let eval_ty = field.eval(&env);
 
                 (
-                    ctx.instantiate_with_args(&eval_ty, spine),
+                    ctx.instantiate_with_arguments(&eval_ty, spine),
                     Box::new(elaborated::ExprKind::Projection(
                         elaborated::ProjectionExpr {
                             expr: elab_expr,
@@ -267,7 +268,10 @@ impl Infer for Expr {
 
                 let crate::module::Def::Record(rec) = typ.def else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return (Type::error(), Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()));
+                    return (
+                        Type::error(),
+                        Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()),
+                    );
                 };
 
                 let iter = rec.into_iter().map(|x| (x.name.clone(), x));
@@ -293,7 +297,7 @@ impl Infer for Expr {
 
                     let Some(qualified) = available.get(name) else {
                         ctx.report(&env, TypeErrorKind::NotFoundField);
-                        continue
+                        continue;
                     };
 
                     if used.contains(name) {
@@ -302,7 +306,7 @@ impl Infer for Expr {
                     }
 
                     let field = ctx.modules.field(qualified).eval(&env);
-                    let inst_field = ctx.instantiate_with_args(&field, binders.clone());
+                    let inst_field = ctx.instantiate_with_arguments(&field, binders.clone());
 
                     let elab_expr = expr.check(inst_field.clone(), (ctx, env.clone()));
 
@@ -338,17 +342,26 @@ impl Infer for Expr {
 
                 let TypeKind::Variable(name) = head.as_ref() else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return (Type::error(), Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()));
+                    return (
+                        Type::error(),
+                        Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()),
+                    );
                 };
 
                 let Some(typ) = ctx.modules.get(&name.path).types.get(&name.name).cloned() else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return (Type::error(), Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()));
+                    return (
+                        Type::error(),
+                        Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()),
+                    );
                 };
 
                 let crate::module::Def::Record(rec) = &typ.def else {
                     ctx.report(&env, TypeErrorKind::NotARecord);
-                    return (Type::error(), Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()));
+                    return (
+                        Type::error(),
+                        Spanned::new(Box::new(elaborated::ExprKind::Error), self.span.clone()),
+                    );
                 };
 
                 let iter = rec.iter().map(|x| (x.name.clone(), x.clone()));
@@ -366,7 +379,7 @@ impl Infer for Expr {
 
                     let Some(qualified) = available.get(name) else {
                         ctx.report(&env, TypeErrorKind::NotFoundField);
-                        continue
+                        continue;
                     };
 
                     if used.contains(name) {
@@ -375,7 +388,7 @@ impl Infer for Expr {
                     }
 
                     let field = ctx.modules.field(qualified).eval(&env);
-                    let inst_field = ctx.instantiate_with_args(&field, binders.clone());
+                    let inst_field = ctx.instantiate_with_arguments(&field, binders.clone());
 
                     let elab = expr.check(inst_field.clone(), (ctx, env.clone()));
 
@@ -429,8 +442,8 @@ impl Infer for Sttm {
                 )
             }
             SttmKind::Expr(expr) => {
-                let (ty, elab_expr) = expr.infer((ctx, env.clone()));
-                (ty, env.clone(), elaborated::SttmKind::Expr(elab_expr))
+                let (typ, elab_expr) = expr.infer((ctx, env.clone()));
+                (typ, env.clone(), elaborated::SttmKind::Expr(elab_expr))
             }
             SttmKind::Error => (Type::error(), env.clone(), elaborated::SttmKind::Error),
         }

@@ -3,7 +3,7 @@
 use vulpi_syntax::{elaborated, r#abstract::Literal, r#abstract::LiteralKind};
 
 use super::Infer;
-use crate::{r#type::r#virtual::Virtual, Context, Env, Type};
+use crate::{context::Context, r#virtual::Virtual, Env, Type};
 
 impl Infer for Literal {
     type Return = (Type<Virtual>, elaborated::Literal);

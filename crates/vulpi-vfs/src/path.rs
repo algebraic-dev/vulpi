@@ -1,4 +1,7 @@
-use std::{path::PathBuf, fmt::{Formatter, Display, Error}};
+use std::{
+    fmt::{Display, Error, Formatter},
+    path::PathBuf,
+};
 
 use vulpi_intern::Symbol;
 
@@ -11,7 +14,7 @@ impl Path {
     pub fn is_empty(&self) -> bool {
         self.segments.is_empty()
     }
-    
+
     pub fn with(&self, new: Symbol) -> Path {
         let mut segments = self.segments.clone();
         segments.push(new);
@@ -19,7 +22,14 @@ impl Path {
     }
 
     pub fn symbol(&self) -> Symbol {
-        Symbol::intern(&self.segments.iter().map(|x| x.get()).collect::<Vec<_>>().join("."))
+        Symbol::intern(
+            &self
+                .segments
+                .iter()
+                .map(|x| x.get())
+                .collect::<Vec<_>>()
+                .join("."),
+        )
     }
 
     pub fn shift(&self) -> Path {
@@ -30,13 +40,13 @@ impl Path {
 
     pub fn to_pathbuf(&self, cwd: PathBuf) -> ::std::path::PathBuf {
         let mut path = cwd;
-        
+
         for segment in &self.segments {
             path.push(segment.get());
         }
 
         path.set_extension("vp");
-        
+
         path
     }
 }

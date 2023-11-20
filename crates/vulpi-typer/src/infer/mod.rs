@@ -1,6 +1,8 @@
 //! The inference trait. It correponds to the `Γ |- e ⇒ A -| ∆` on the paper. It is responsible for
 //! inferring the type of an expression given a context.
 
+use vulpi_location::Spanned;
+
 pub mod expr;
 pub mod kind;
 pub mod literal;
@@ -29,5 +31,15 @@ impl<T: Infer> Infer for Box<T> {
     type Context<'a> = T::Context<'a>;
     fn infer(&self, context: Self::Context<'_>) -> Self::Return {
         Box::new(self.as_ref().infer(context))
+    }
+}
+
+impl<T: Infer> Infer for Spanned<T> {
+    type Return = T::Return;
+
+    type Context<'a> = T::Context<'a>;
+
+    fn infer(&self, context: Self::Context<'_>) -> Self::Return {
+        self.data.infer(context)
     }
 }

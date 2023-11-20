@@ -1,10 +1,11 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 use vulpi_intern::Symbol;
 use vulpi_location::{Span, Spanned};
 use vulpi_macros::Show;
 
 use vulpi_show::{Show, TreeDisplay};
+
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Qualified {
@@ -14,9 +15,11 @@ pub struct Qualified {
 
 impl Qualified {
     pub fn mangle(&self) -> String {
-        format!("{}__{}", self.path.get(), self.name.get()).replace(".", "__").replace("?", "INT")
+        format!("{}__{}", self.path.get(), self.name.get())
+            .replace('.', "__")
+            .replace('?', "INT")
     }
-    
+
     pub fn to_string(&self) -> String {
         format!("{}.{}", self.path.get(), self.name.get())
     }
@@ -93,8 +96,8 @@ impl TypeKind {
             TypeKind::Tuple(t) => {
                 let mut set = HashSet::new();
 
-                for ty in t {
-                    set.extend(ty.data.free_variables());
+                for typ in t {
+                    set.extend(typ.data.free_variables());
                 }
 
                 set
@@ -130,7 +133,6 @@ impl TypeKind {
             _ => HashSet::new(),
         }
     }
-
 }
 
 // Literal
@@ -188,7 +190,6 @@ pub struct PatApplication {
     pub args: Vec<Pattern>,
 }
 
-
 #[derive(Show)]
 pub enum PatternKind {
     Wildcard,
@@ -245,7 +246,7 @@ pub struct WhenExpr {
 #[derive(Show)]
 pub struct AnnotationExpr {
     pub expr: Expr,
-    pub ty: Type,
+    pub typ: Type,
 }
 
 #[derive(Show)]
@@ -302,7 +303,7 @@ impl ExprKind {
                 ExprKind::Application(app2) => {
                     let mut args = app2.args;
                     args.extend(app1.args);
-    
+
                     ExprKind::Application(ApplicationExpr {
                         func: app2.func,
                         args,
@@ -338,7 +339,22 @@ impl From<crate::concrete::top_level::Visibility> for Visibility {
 #[derive(Show)]
 pub struct Binder {
     pub pat: Pattern,
-    pub ty: Type,
+    pub typ: Type,
+}
+
+#[derive(Show)]
+pub enum LetBinder {
+    Param(Binder),
+    Trait(Type),
+}
+
+impl LetBinder {
+    pub fn typ(&self) -> &Type {
+        match self {
+            LetBinder::Param(x) => &x.typ,
+            LetBinder::Trait(typ) => typ,
+        }
+    }
 }
 
 #[derive(Show)]
@@ -346,13 +362,14 @@ pub struct LetSignature {
     pub span: Span,
     pub visibility: Visibility,
     pub name: Qualified,
-    pub binders: Vec<Binder>,
+    pub binders: Vec<LetBinder>,
     pub ret: Option<Type>,
 }
 
 #[derive(Show)]
 pub struct TraitDecl {
     pub name: Qualified,
+    pub supers: Vec<Type>,
     pub binders: Vec<TypeBinder>,
     pub body: Vec<LetSignature>,
 }
@@ -368,7 +385,7 @@ pub struct TraitImpl {
 pub struct LetDecl {
     pub signature: LetSignature,
     pub body: Vec<PatternArm>,
-    pub constant: Option<HashMap<Qualified, Span>>
+    pub constant: Option<HashMap<Qualified, Span>>,
 }
 
 #[derive(Show)]
@@ -412,13 +429,12 @@ pub struct ModuleDecl {
     pub decls: Option<Program>,
 }
 
-
 #[derive(Show)]
 pub struct ExtDecl {
     pub name: Qualified,
     pub visibility: Visibility,
     pub namespace: Symbol,
-    pub ty: Type,
+    pub typ: Type,
     pub ret: Symbol,
 }
 
@@ -429,7 +445,7 @@ pub enum TopLevel {
     External(ExtDecl),
     Trait(TraitDecl),
     Impl(Option<TraitImpl>),
-    Use
+    Use,
 }
 
 #[derive(Show, Default)]

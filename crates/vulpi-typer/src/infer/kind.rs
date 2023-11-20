@@ -1,7 +1,6 @@
 use vulpi_syntax::r#abstract::{Kind, KindType};
 
-use crate::r#type::{
-    self,
+use crate::{
     r#virtual::Env,
     real::{self, Real},
     Type, TypeKind,
@@ -10,7 +9,7 @@ use crate::r#type::{
 use super::Infer;
 
 impl Infer for Kind {
-    type Return = r#type::Kind<Real>;
+    type Return = crate::Kind<Real>;
 
     type Context<'a> = Env;
 
@@ -23,10 +22,7 @@ impl Infer for Kind {
             KindType::Arrow(l, r) => {
                 let l = l.infer(context.clone());
                 let r = r.infer(context);
-                Type::new(TypeKind::Arrow(real::Arrow {
-                    ty: l,
-                    body: r,
-                }))
+                Type::new(TypeKind::Arrow(real::Arrow { typ: l, body: r }))
             }
             KindType::Error => Type::error(),
         }

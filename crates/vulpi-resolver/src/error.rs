@@ -8,7 +8,8 @@ pub enum ResolverErrorKind {
     InvalidPath(Vec<Symbol>),
     DuplicatePattern(Symbol),
     PrivateDefinition,
-    CycleBetweenConstants(Vec<Qualified>)
+    CycleBetweenConstants(Vec<Qualified>),
+    NotImplemented(Symbol, Symbol),
 }
 
 pub struct ResolverError {
@@ -19,6 +20,12 @@ pub struct ResolverError {
 impl IntoDiagnostic for ResolverError {
     fn message(&self) -> vulpi_report::Text {
         match &self.kind {
+            ResolverErrorKind::NotImplemented(name, feature) => format!(
+                "the method '{}' is not present in the trait '{}'",
+                feature.get(),
+                name.get()
+            )
+            .into(),
             ResolverErrorKind::NotFound(name) => format!("cannot find '{}'", name.get()).into(),
             ResolverErrorKind::InvalidPath(name) => format!(
                 "the path '{}' cannot be found",
@@ -35,7 +42,6 @@ impl IntoDiagnostic for ResolverError {
 
                 format!("cycle between '{}'", cycle.join(" -> ")).into()
             }
-
         }
     }
 

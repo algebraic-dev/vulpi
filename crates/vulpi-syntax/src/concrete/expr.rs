@@ -114,7 +114,7 @@ pub struct WhenExpr {
 pub struct AnnotationExpr {
     pub expr: Box<Expr>,
     pub colon: Token,
-    pub ty: Box<Type>,
+    pub typ: Box<Type>,
 }
 
 #[derive(Show, Clone)]

@@ -194,7 +194,7 @@ impl<'a> Parser<'a> {
                 data: ExprKind::Annotation(AnnotationExpr {
                     expr: left,
                     colon,
-                    ty: right,
+                    typ: right,
                 }),
             }))
         } else if self.at(TokenData::LBrace) {

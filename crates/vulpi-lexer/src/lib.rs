@@ -320,8 +320,8 @@ impl<'a> Lexer<'a> {
                         TokenData::PlusPlus
                     } else {
                         TokenData::Plus
-                    }                   
-                },
+                    }
+                }
                 '*' => TokenData::Star,
                 '/' => TokenData::Slash,
                 '\\' => TokenData::BackSlash,
