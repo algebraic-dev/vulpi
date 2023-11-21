@@ -127,7 +127,7 @@ impl Infer for Pattern {
     type Context<'a> = (&'a mut Context, &'a mut HashMap<Symbol, Type<Virtual>>, Env);
 
     fn infer(&self, (ctx, map, env): Self::Context<'_>) -> Self::Return {
-        env.on(self.span.clone());
+        env.set_current_span(self.span.clone());
 
         match &self.data {
             PatternKind::Wildcard => (

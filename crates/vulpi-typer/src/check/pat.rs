@@ -23,7 +23,7 @@ impl Check for PatternArm {
         let mut elaborated_patterns = Vec::new();
 
         for pat in &self.patterns {
-            env.on(pat.span.clone());
+            env.set_current_span(pat.span.clone());
 
             if let Some((left, right)) = ctx.as_function(&env, typ.clone()) {
                 let elab = pat.check(left, (ctx, &mut map, env.clone()));
@@ -104,7 +104,7 @@ impl Check for Pattern {
     type Context<'a> = (&'a mut Context, &'a mut HashMap<Symbol, Type<Virtual>>, Env);
 
     fn check(&self, ann_ty: Type<Virtual>, (ctx, map, env): Self::Context<'_>) -> Self::Return {
-        env.on(self.span.clone());
+        env.set_current_span(self.span.clone());
         match &self.data {
             PatternKind::Wildcard => Box::new(elaborated::PatternKind::Wildcard),
             PatternKind::Variable(n) => {

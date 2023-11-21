@@ -15,6 +15,7 @@ pub enum Def {
     Record(Vec<Qualified>),
     Effect(Vec<Qualified>),
     Type,
+    Constraint
 }
 
 #[derive(Clone)]
@@ -28,7 +29,11 @@ pub struct TypeData {
 #[derive(Clone)]
 pub struct TraitData {
     pub kind: Type<Virtual>,
-    pub binders: Vec<(Symbol, Type<Virtual>)>,
+    pub binders: Vec<Type<Virtual>>,
+    pub supers: Vec<Type<Real>>,
+    pub signatures: Vec<(Qualified, Type<Real>)>,
+
+
 }
 
 #[derive(Clone)]

@@ -618,8 +618,10 @@ pub mod top_level {
                 abs::TraitDecl {
                     name,
                     supers,
+                    namespace: submodule.module.name().symbol(),
                     binders,
                     body,
+                    span: decl.name.0.value.span.clone(),
                 }
             })
         })

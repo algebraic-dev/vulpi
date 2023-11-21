@@ -22,6 +22,8 @@ mod unify;
 
 pub mod declare;
 
+pub use context::Context;
+
 use std::{cell::RefCell, hash::Hash, rc::Rc};
 
 use r#virtual::Virtual;
@@ -243,7 +245,7 @@ pub mod r#virtual {
         }
 
         /// Sets the location of the environment. It is used for error reporting.
-        pub fn on(&self, span: Span) {
+        pub fn set_current_span(&self, span: Span) {
             *self.span.borrow_mut() = span;
         }
 

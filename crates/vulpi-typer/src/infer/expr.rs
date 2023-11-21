@@ -32,7 +32,7 @@ impl Infer for Expr {
     type Context<'a> = (&'a mut Context, Env);
 
     fn infer(&self, (ctx, mut env): Self::Context<'_>) -> Self::Return {
-        env.on(self.span.clone());
+        env.set_current_span(self.span.clone());
 
         let elem = match &self.data {
             ExprKind::Application(app) => {
@@ -40,7 +40,7 @@ impl Infer for Expr {
                 let mut elab_args = Vec::new();
 
                 for arg in &app.args {
-                    env.on(arg.span.clone());
+                    env.set_current_span(arg.span.clone());
 
                     let (arg_ty, arg_elab) = arg.infer((ctx, env.clone()));
                     elab_args.push(arg_elab);
@@ -133,11 +133,9 @@ impl Infer for Expr {
             ExprKind::When(when) => {
                 // TODO: Check mode
                 let ret_type = ctx.hole(&env, Kind::typ());
-
                 ctx.errored = false;
 
                 let (_, arms, ret, elab_arms) = when.arms.infer((ctx, env.clone()));
-
                 let perform = !ctx.errored;
 
                 if arms.len() != when.scrutinee.len() {
@@ -220,7 +218,6 @@ impl Infer for Expr {
             }
             ExprKind::Projection(expr) => {
                 let (ty, elab_expr) = expr.expr.infer((ctx, env.clone()));
-
                 let (head, spine) = ty.application_spine();
 
                 let TypeKind::Variable(name) = head.as_ref() else {
@@ -293,7 +290,7 @@ impl Infer for Expr {
                 let mut elab_fields = Vec::new();
 
                 for (span, name, expr) in &instance.fields {
-                    env.on(span.clone());
+                    env.set_current_span(span.clone());
 
                     let Some(qualified) = available.get(name) else {
                         ctx.report(&env, TypeErrorKind::NotFoundField);
@@ -337,7 +334,6 @@ impl Infer for Expr {
             }
             ExprKind::RecordUpdate(update) => {
                 let (typ, elab_expr) = update.expr.infer((ctx, env.clone()));
-
                 let (head, binders) = typ.deref().application_spine();
 
                 let TypeKind::Variable(name) = head.as_ref() else {
@@ -375,7 +371,7 @@ impl Infer for Expr {
                 let mut elab_fields = Vec::new();
 
                 for (span, name, expr) in &update.fields {
-                    env.on(span.clone());
+                    env.set_current_span(span.clone());
 
                     let Some(qualified) = available.get(name) else {
                         ctx.report(&env, TypeErrorKind::NotFoundField);
@@ -420,7 +416,7 @@ impl Infer for Sttm {
     type Context<'a> = (&'a mut Context, &'a mut Env);
 
     fn infer(&self, (ctx, env): Self::Context<'_>) -> Self::Return {
-        env.on(self.span.clone());
+        env.set_current_span(self.span.clone());
         match &self.data {
             SttmKind::Let(decl) => {
                 let mut hashmap = Default::default();

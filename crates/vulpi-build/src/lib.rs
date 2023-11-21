@@ -13,6 +13,7 @@ use vulpi_resolver::{
 };
 
 use vulpi_syntax::concrete::tree::Program;
+use vulpi_typer::declare::{Programs, Declare};
 use vulpi_vfs::{path::Path, FileSystem};
 
 pub mod real;
@@ -114,5 +115,15 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         }
 
         dep.report_cycles(self.reporter.clone());
+
+        let mut ctx = vulpi_typer::Context::new(self.reporter.clone());
+        let env = vulpi_typer::Env::default();
+
+        let programs = Programs(programs);
+
+        Declare::declare(&programs, (&mut ctx, env.clone()));
+        let programs = Declare::define(&programs, (&mut ctx, env));
+        
+        
     }
 }

@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+
+use vulpi_intern::Symbol;
 use vulpi_syntax::{
     elaborated::{self},
     r#abstract::{
@@ -13,18 +16,32 @@ use crate::{
     eval::Eval,
     eval::Quote,
     infer::Infer,
-    module::{Def, LetDef, TypeData, TraitData},
+    module::{Def, LetDef, TraitData, TypeData},
     r#virtual::Virtual,
     real::{Forall, Real},
     Env, Index, Kind, Type,
 };
 
+fn free_variables(let_sig: &vulpi_syntax::r#abstract::LetSignature) -> HashSet<Symbol> {
+    let mut fvs = let_sig
+        .ret
+        .as_ref()
+        .map(|x| x.data.free_variables())
+        .unwrap_or_default();
+
+    for arg in &let_sig.binders {
+        fvs.extend(arg.typ().data.free_variables());
+    }
+
+    fvs
+}
+
 /// Trait for declaration of top level items inside the type checker.
 pub trait Declare {
     type Return;
 
-    fn declare(&self, context: (&mut Context, Env));
-    fn define(&self, _context: (&mut Context, Env)) -> Self::Return;
+    fn declare(&self, ctx: (&mut Context, Env));
+    fn define(&self, ctx: (&mut Context, Env)) -> Self::Return;
 }
 
 impl<T: Declare> Declare for Vec<T> {
@@ -68,53 +85,134 @@ impl<T: Declare> Declare for Option<T> {
 impl Declare for TraitDecl {
     type Return = ();
 
-    fn declare(&self, (context, env): (&mut Context, Env)) {
+    fn declare(&self, (ctx, mut env): (&mut Context, Env)) {        
+        env.set_current_span(self.span.clone());
         let vec = &self.binders;
 
         let mut names = Vec::new();
         let mut binders = Vec::new();
+        let mut fvs = Vec::new();
 
         for binder in vec {
-            let (n, binder) = binder.infer((context, env.clone()));
-            binders.push(binder.eval(&env));
-            names.push(n);
+            let (n, binder) = binder.infer((ctx, env.clone()));
+            let value = binder.eval(&env);
+            binders.push(value.clone());
+            names.push(n.clone());
+            env = env.add(Some(n), value);
         }
 
-        let kind = Type::<Virtual>::function(binders.clone(), Type::typ());
+        fvs.extend(self.binders.iter().map(|x| x.name().clone()));
+
+        let kind = Type::<Virtual>::function(binders.clone(), Type::constraint());
 
         let mut supers = vec![];
 
+        ctx.modules.get(&self.name.path).types.insert(
+            self.name.name.clone(),
+            TypeData {
+                kind: kind.clone(),
+                binders: names.into_iter().zip(binders.clone()).collect(),
+                module: self.namespace.clone(),
+                def: Def::Constraint,
+            },
+        );
+
         for super_ in &self.supers {
-            let (value, typ) = super_.infer((context, env.clone()));
-            context.subsumes(env.clone(), typ, Type::constraint());
+            env.set_current_span(super_.span.clone());
+            let (value, typ) = super_.infer((ctx, env.clone()));
+            ctx.subsumes(env.clone(), typ, Type::constraint());
             supers.push(value);
         }
-        
-        context.modules.get(&self.name.path).traits.insert(
+
+        let mut signatures = Vec::new();
+
+        for let_signature in &self.body {
+            let mut env = env.clone();
+
+            let free_variables = &free_variables(let_signature);
+            let diff = HashSet::from_iter(fvs.iter().cloned());
+            let signature_fvs = free_variables.difference(&diff);
+
+            let mut unbound = Vec::new();
+
+            for fv in fvs.iter() {
+                let typ = ctx.hole(&env, Type::typ());
+                env = env.add(Some(fv.clone()), typ.clone());
+                unbound.push((fv, typ.quote(env.level)))
+            }            
+
+            for fv in signature_fvs {
+                let typ = ctx.hole(&env, Type::typ());
+                env = env.add(Some(fv.clone()), typ.clone());
+                unbound.push((fv, typ.quote(env.level)))
+            }
+
+            let mut args = Vec::new();
+
+            for arg in &let_signature.binders {
+                let (typ, kind) = arg.typ().infer((ctx, env.clone()));
+                env.set_current_span(arg.typ().span.clone());
+                ctx.subsumes(env.clone(), kind, Kind::typ());    
+                args.push(typ);
+            }
+
+            let ret = if let Some(ret) = &let_signature.ret {
+                let (typ, kind) = ret.infer((ctx, env.clone()));
+                env.set_current_span(ret.span.clone());
+                ctx.subsumes(env.clone(), kind, Kind::typ());
+    
+                typ
+            } else {
+                ctx.hole(&env, Kind::typ())
+            };
+            
+            let mut typ = Type::<Real>::function(args.clone(), ret.clone());
+    
+            let fvs = fvs.iter().map(|x| {
+                let Some((index, _, _)) = env.find(x) else { unreachable!() };
+                Type::bound(Index(index))
+            }).collect();
+
+            let constraint = Type::<Real>::application(Type::variable(self.name.clone()), fvs);
+
+            typ = Type::qualified(constraint, typ);
+
+            for (name, kind) in unbound.iter().rev().cloned() {
+                typ = Type::forall(Forall {
+                    name: name.clone(),
+                    kind,
+                    body: typ,
+                });
+            }
+
+            signatures.push((self.name.clone(), typ));
+        }
+
+        ctx.modules.get(&self.name.path).traits.insert(
             self.name.name.clone(),
             TraitData {
                 kind,
-                binders: names.into_iter().zip(binders).collect(),
+                binders,
+                supers,
+                signatures,
             },
         );
     }
 
-    fn define(&self, _context: (&mut Context, Env)) -> Self::Return {
-        todo!()
-    }
+    fn define(&self, _context: (&mut Context, Env)) -> Self::Return {}
 }
 
 impl Declare for TypeDecl {
     type Return = (Qualified, elaborated::TypeDecl);
 
-    fn declare(&self, (context, env): (&mut Context, Env)) {
+    fn declare(&self, (ctx, env): (&mut Context, Env)) {
         let vec = &self.binders;
 
         let mut names = Vec::new();
         let mut binders = Vec::new();
 
         for binder in vec {
-            let (n, binder) = binder.infer((context, env.clone()));
+            let (n, binder) = binder.infer((ctx, env.clone()));
             binders.push(binder.eval(&env));
             names.push(n);
         }
@@ -124,7 +222,7 @@ impl Declare for TypeDecl {
         let type_def = &self.def;
         let def = get_definition_of_type(type_def);
 
-        context.modules.get(&self.name.path).types.insert(
+        ctx.modules.get(&self.name.path).types.insert(
             self.name.name.clone(),
             TypeData {
                 kind,
@@ -162,7 +260,7 @@ impl Declare for TypeDecl {
                     let mut types = Vec::new();
 
                     for arg in &cons.args {
-                        env.on(arg.span.clone());
+                        env.set_current_span(arg.span.clone());
                         let (typ, kind) = arg.infer((ctx, env.clone()));
                         ctx.subsumes(env.clone(), kind, Kind::typ());
                         types.push(typ);
@@ -197,7 +295,7 @@ impl Declare for TypeDecl {
                     names.push(field.0.clone());
 
                     let (typ, kind) = field.1.infer((ctx, env.clone()));
-                    env.on(field.1.span.clone());
+                    env.set_current_span(field.1.span.clone());
 
                     ctx.subsumes(env.clone(), kind, Kind::typ());
 
@@ -322,7 +420,7 @@ impl Declare for LetDecl {
 
         for arg in &self.signature.binders {
             let (typ, kind) = arg.typ().infer((ctx, env.clone()));
-            env.on(arg.typ().span.clone());
+            env.set_current_span(arg.typ().span.clone());
 
             ctx.subsumes(env.clone(), kind, Kind::typ());
 
@@ -331,7 +429,7 @@ impl Declare for LetDecl {
 
         let ret = if let Some(ret) = &self.signature.ret {
             let (typ, kind) = ret.infer((ctx, env.clone()));
-            env.on(ret.span.clone());
+            env.set_current_span(ret.span.clone());
             ctx.subsumes(env.clone(), kind, Kind::typ());
 
             typ
@@ -366,7 +464,7 @@ impl Declare for LetDecl {
     }
 
     fn define(&self, (ctx, mut env): (&mut Context, Env)) -> Self::Return {
-        env.on(self.signature.span.clone());
+        env.set_current_span(self.signature.span.clone());
 
         let let_decl = ctx.modules.let_decl(&self.signature.name).clone();
 
@@ -395,7 +493,7 @@ impl Declare for LetDecl {
         let binders = elab_binders;
 
         ctx.errored = false;
-        
+
         let body = self.body.check(typ.clone(), (ctx, env.clone()));
         let types = typ.arrow_spine();
 
@@ -404,7 +502,7 @@ impl Declare for LetDecl {
             let patterns = &self.body.last().unwrap().patterns;
 
             if patterns.first().is_some() {
-                env.on(patterns
+                env.set_current_span(patterns
                     .first()
                     .unwrap()
                     .span
@@ -452,21 +550,21 @@ impl Declare for Programs {
         }
     }
 
-    fn define(&self, (ctx, env): (&mut Context, Env)) -> Self::Return {
+    fn define(&self, (context, env): (&mut Context, Env)) -> Self::Return {
         let mut programs = vec![elaborated::Program::default(); self.0.len()];
 
         for (i, program) in self.0.iter().enumerate() {
-            let typ = program.types.define((ctx, env.clone()));
+            let typ = program.types.define((context, env.clone()));
             programs[i].types = typ.into_iter().collect();
         }
 
         for (i, program) in self.0.iter().enumerate() {
-            let let_decl = program.lets.define((ctx, env.clone()));
+            let let_decl = program.lets.define((context, env.clone()));
             programs[i].lets = let_decl.into_iter().collect();
         }
 
         for (i, program) in self.0.iter().enumerate() {
-            let ext_decl = program.externals.define((ctx, env.clone()));
+            let ext_decl = program.externals.define((context, env.clone()));
             programs[i].externals = ext_decl.into_iter().collect();
         }
 

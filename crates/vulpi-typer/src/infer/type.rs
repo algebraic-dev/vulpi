@@ -19,16 +19,16 @@ impl Infer for r#abstract::Type {
     type Context<'a> = (&'a mut Context, Env);
 
     fn infer(&self, (ctx, env): Self::Context<'_>) -> Self::Return {
-        env.on(self.span.clone());
+        env.set_current_span(self.span.clone());
 
         match &self.data {
             TypeKind::Arrow(pi) => {
                 let (typ, kind) = pi.left.infer((ctx, env.clone()));
-                env.on(pi.left.span.clone());
+                env.set_current_span(pi.left.span.clone());
                 ctx.subsumes(env.clone(), kind, Kind::typ());
 
                 let (body, kind) = pi.right.infer((ctx, env.clone()));
-                env.on(pi.right.span.clone());
+                env.set_current_span(pi.right.span.clone());
                 ctx.subsumes(env.clone(), kind, Kind::typ());
 
                 let typ = Type::new(crate::TypeKind::Arrow(real::Arrow { typ, body }));
@@ -51,7 +51,7 @@ impl Infer for r#abstract::Type {
                 let mut args = Vec::new();
 
                 for arg in &app.args {
-                    env.on(arg.span.clone());
+                    env.set_current_span(arg.span.clone());
 
                     let (arg_ty, arg_kind) = arg.infer((ctx, env.clone()));
 

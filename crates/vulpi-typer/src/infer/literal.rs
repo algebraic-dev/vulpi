@@ -11,7 +11,7 @@ impl Infer for Literal {
     type Context<'a> = (&'a mut Context, Env);
 
     fn infer(&self, (ctx, env): Self::Context<'_>) -> Self::Return {
-        env.on(self.span.clone());
+        env.set_current_span(self.span.clone());
 
         match &self.data {
             LiteralKind::String(n) => (

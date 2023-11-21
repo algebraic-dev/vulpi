@@ -23,7 +23,7 @@ pub struct Context {
     pub modules: Modules,
     pub elaborated: elaborated::Program<Type<Real>>,
     pub errored: bool,
-}
+    }
 
 impl Context {
     pub fn new(reporter: Report) -> Self {

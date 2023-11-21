@@ -142,7 +142,12 @@ impl Context {
         }
     }
 
-    fn unify(&mut self, env: Env, left: Type<Virtual>, right: Type<Virtual>) -> Result {
+    pub fn overlaps(&mut self, env: Env, left: Type<Virtual>, right: Type<Virtual>) -> bool {
+        let result = self.unify(env, left, right);
+        result.is_ok()
+    }
+
+    pub fn unify(&mut self, env: Env, left: Type<Virtual>, right: Type<Virtual>) -> Result {
         let l = left.deref();
         let r = right.deref();
         match (l.as_ref(), r.as_ref()) {
@@ -154,12 +159,17 @@ impl Context {
                 self.unify(env.clone(), f.clone(), g.clone())?;
                 self.unify(env, a.clone(), b.clone())
             }
+            (TypeKind::Qualified(f, u), TypeKind::Qualified(f1, u1)) => {
+                self.unify(env.clone(), f.clone(), f1.clone())?;
+                self.unify(env, u.clone(), u1.clone())
+            }
             (TypeKind::Hole(n), TypeKind::Hole(m)) if n == m => Ok(()),
             (TypeKind::Hole(m), _) => self.unify_hole(env, m.clone(), r),
             (_, TypeKind::Hole(m)) => self.unify_hole(env, m.clone(), l),
             (TypeKind::Bound(x), TypeKind::Bound(y)) if x == y => Ok(()),
             (TypeKind::Variable(x), TypeKind::Variable(y)) if x == y => Ok(()),
             (TypeKind::Type, TypeKind::Type) => Ok(()),
+            (TypeKind::Constraint, TypeKind::Constraint) => Ok(()),
             (TypeKind::Error, _) | (_, TypeKind::Error) => Ok(()),
             (_, _) => Err(TypeErrorKind::TypeMismatch(
                 env.clone(),

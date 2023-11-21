@@ -1,26 +1,5 @@
-use Prelude
+type String
 
-pub type B =
+type Bool =
     | T
     | F
-
-use Yal.Main.B
-
-let and (x: B) (y: B) : B = 
-    when x, y is
-        T, T => T
-        T, F => F
-        F, T => F
-        F, F => F
-
-let toString (x: B) : String =
-    when x is
-        T => "T"
-        F => "F"
-
-let main : Int = do
-    log (toString (and T T))
-    log (toString (and T F))
-    log (toString (and F T))
-    log (toString (and F F))
-    

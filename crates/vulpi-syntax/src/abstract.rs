@@ -63,6 +63,15 @@ pub enum TypeBinder {
     Explicit(Symbol, Kind),
 }
 
+impl TypeBinder {
+    pub fn name(&self) -> &Symbol {
+        match self {
+            TypeBinder::Implicit(n) => n,
+            TypeBinder::Explicit(n, _) => n,
+        }
+    }
+}
+
 #[derive(Show)]
 pub struct TypeForall {
     pub params: Vec<TypeBinder>,
@@ -370,8 +379,10 @@ pub struct LetSignature {
 pub struct TraitDecl {
     pub name: Qualified,
     pub supers: Vec<Type>,
+    pub namespace: Symbol,
     pub binders: Vec<TypeBinder>,
     pub body: Vec<LetSignature>,
+    pub span: Span,
 }
 
 #[derive(Show)]

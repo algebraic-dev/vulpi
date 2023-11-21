@@ -18,7 +18,7 @@ impl Check for Expr {
         typ: crate::Type<crate::Virtual>,
         (ctx, mut env): Self::Context<'_>,
     ) -> Self::Return {
-        env.on(self.span.clone());
+        env.set_current_span(self.span.clone());
 
         let elem = match (&self.data, typ.deref().as_ref()) {
             (ExprKind::Do(block), _) => {
@@ -67,7 +67,7 @@ impl Check for Sttm {
     type Context<'a> = (&'a mut Context, Env);
 
     fn check(&self, ann_ty: Type<Virtual>, (ctx, env): Self::Context<'_>) -> Self::Return {
-        env.on(self.span.clone());
+        env.set_current_span(self.span.clone());
 
         let (typ, env, elab) = self.infer((ctx, &mut env.clone()));
 

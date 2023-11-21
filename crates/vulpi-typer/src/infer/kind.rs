@@ -14,7 +14,7 @@ impl Infer for Kind {
     type Context<'a> = Env;
 
     fn infer(&self, context: Self::Context<'_>) -> Self::Return {
-        context.on(self.span.clone());
+        context.set_current_span(self.span.clone());
 
         match &self.data {
             KindType::Star => Type::typ(),
