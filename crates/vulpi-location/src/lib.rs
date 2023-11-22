@@ -24,6 +24,17 @@ impl Show for Span {
             self.start.0, self.end.0
         )))
     }
+    
+}
+
+impl Span {
+    pub fn ghost() -> Self {
+        Self {
+            file: FileId(0),
+            start: Byte(0),
+            end: Byte(0),
+        }
+    }
 }
 
 impl Debug for Span {

@@ -6,14 +6,38 @@ use vulpi_intern::Symbol;
 use vulpi_macros::Show;
 use vulpi_syntax::{
     elaborated::{PatApplication, Pattern, PatternKind},
-    lambda::{Case, Index, Occurrence, Tree, Expr},
+    lambda::{Expr, Case},
 };
 
-#[derive(Default, Show)]
+#[derive(Default)]
 pub struct Problem {
     matrix: Vec<Row>,
     occurrences: Vec<Occurrence>,
     actions: Vec<usize>,
+}
+
+#[derive(Clone)]
+pub enum Index {
+    Cons(usize),
+    Tuple(usize),
+}
+
+#[derive(Clone)]
+pub struct Occurrence(pub Expr, pub Vec<Index>);
+
+impl Occurrence {
+    pub fn with(&self, index: Index) -> Occurrence {
+        let mut indices = self.1.clone();
+        indices.push(index);
+        Occurrence(self.0.clone(), indices)
+    }
+}
+
+#[derive(Clone)]
+pub enum Tree {
+    Fail,
+    Leaf(usize, Vec<Occurrence>),
+    Switch(Occurrence, Vec<(Case, Tree)>),
 }
 
 pub fn specialize(ocur: &Occurrence, case: Case) -> Vec<Occurrence> {
@@ -220,7 +244,7 @@ pub fn pattern_binders(expr: Expr, pat: &Pattern) -> Vec<(Occurrence, Symbol)> {
             }
             PatternKind::Application(func) => {
                 for (i, arg) in func.args.iter().enumerate() {
-                    bind(&arg, ocur.with(Index::Cons(i + 1)), binders);
+                    bind(&arg, ocur.with(Index::Cons(i)), binders);
                 }
             }
             PatternKind::Tuple(parts) => {

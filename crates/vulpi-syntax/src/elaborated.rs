@@ -74,7 +74,7 @@ pub enum AppKind {
 pub struct ApplicationExpr<T> {
     pub typ: T,
     pub func: Expr<T>,
-    pub args: Vec<Expr<T>>,
+    pub args: Expr<T>,
 }
 
 #[derive(Show, Clone)]
@@ -111,7 +111,7 @@ pub struct RecordInstance<T> {
 
 #[derive(Show, Clone)]
 pub struct RecordUpdate<T> {
-    pub qualified: Qualified,
+    pub name: Qualified,
     pub expr: Expr<T>,
     pub fields: Vec<(Symbol, Expr<T>)>,
 }

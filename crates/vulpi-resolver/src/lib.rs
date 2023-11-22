@@ -70,7 +70,6 @@ pub struct Namespace {
     aliases: Bag<HashMap<Symbol, Alias>>,
     modules: HashMap<Symbol, (Path, abs::Visibility)>,
     submodules: HashMap<Symbol, Module>,
-    available: HashMap<Path, Module>,
     opened: HashMap<Path, Visibility>,
 }
 
@@ -119,10 +118,6 @@ pub struct Module(Rc<RefCell<Namespace>>);
 
 /// Getters for the namespace.
 impl Module {
-    pub fn add_available(&self, path: Path, module: Module) {
-        self.borrow_mut().available.insert(path, module);
-    }
-
     pub fn modules_mut(&self) -> RefMut<'_, HashMap<Symbol, (Path, abs::Visibility)>> {
         std::cell::RefMut::map(self.borrow_mut(), |this| &mut this.modules)
     }
@@ -141,10 +136,6 @@ impl Module {
 
     fn aliases(&self) -> Ref<'_, Bag<HashMap<Symbol, Alias>>> {
         std::cell::Ref::map(self.borrow(), |this| &this.aliases)
-    }
-
-    fn available(&self) -> Ref<'_, HashMap<Path, Module>> {
-        std::cell::Ref::map(self.borrow(), |this| &this.available)
     }
 
     fn opened(&self) -> Ref<'_, HashMap<Path, abs::Visibility>> {
@@ -170,7 +161,6 @@ impl Module {
             traits: Default::default(),
             constants: Default::default(),
             submodules: Default::default(),
-            available: Default::default(),
             opened: Default::default(),
             modules: Default::default(),
         })))
@@ -199,17 +189,11 @@ impl Module {
     pub fn fork(&self, name: Symbol) -> Module {
         let path = { self.borrow().name.clone() };
 
-        let module = self
+        self
             .borrow_mut()
             .submodules
             .entry(name.clone())
             .or_insert_with(|| Module::new(path.with(name.clone())))
-            .clone();
-
-        self.borrow_mut()
-            .available
-            .entry(path.with(name))
-            .or_insert_with(|| module.clone())
             .clone()
     }
 }
@@ -235,6 +219,7 @@ impl Module {
     /// The `last` parameter is the exclude list, it is used to avoid cyclic imports.
     fn search_recursively(
         &self,
+        availables: Rc<RefCell<HashMap<Path, Module>>>,
         kind: DefinitionKind,
         name: Symbol,
         last: NodeIndex<u32>,
@@ -275,7 +260,7 @@ impl Module {
                 }));
             }
 
-            let available = self.available();
+            let available = availables.borrow();
             let path = available.get(&qualified.path).cloned().ok_or_else(|| {
                 Diagnostic::new(error::ResolverError {
                     span: Default::default(),
@@ -283,17 +268,25 @@ impl Module {
                 })
             })?;
 
-            return path.search_recursively(kind, qualified.name.clone(), last, nodes, graph);
+            return path.search_recursively(
+                availables.clone(),
+                kind,
+                qualified.name.clone(),
+                last,
+                nodes,
+                graph,
+            );
         }
 
         for (path, visibility) in self.opened().iter() {
-            let module = self.available().get(path).cloned();
+            let module = availables.borrow().get(path).cloned();
 
             if module.is_none() || visibility == &abs::Visibility::Private {
                 continue;
             }
 
             if let Some(path) = module.unwrap().search_recursively(
+                availables.clone(),
                 kind,
                 name.clone(),
                 last,
@@ -309,6 +302,7 @@ impl Module {
 
     pub fn search(
         &self,
+        availables: Rc<RefCell<HashMap<Path, Module>>>,
         kind: DefinitionKind,
         name: Symbol,
     ) -> Result<Option<Qualified>, Diagnostic> {
@@ -328,7 +322,7 @@ impl Module {
         }
 
         if let Some((qualified, _)) = self.search_aliases(kind, name.clone()) {
-            let available = self.available();
+            let available = availables.borrow();
             let path = available.get(&qualified.path).ok_or_else(|| {
                 Diagnostic::new(error::ResolverError {
                     span: Default::default(),
@@ -336,17 +330,27 @@ impl Module {
                 })
             })?;
 
-            return path.search_recursively(kind, qualified.name, fst, &mut map, &mut graph);
+            return path.search_recursively(
+                availables.clone(),
+                kind,
+                qualified.name,
+                fst,
+                &mut map,
+                &mut graph,
+            );
         }
 
+        
         for (path, _) in self.opened().iter() {
-            let module = self.available().get(path).cloned();
-
+            let module = availables.borrow().get(path).cloned();
+            
             if module.is_none() {
                 continue;
             }
+            
 
             if let Some(path) = module.unwrap().search_recursively(
+                availables.clone(),
                 kind,
                 name.clone(),
                 fst,
@@ -368,6 +372,7 @@ pub struct Context {
     pub module: Module,
     scope: RefCell<Bag<im_rc::HashSet<Symbol>>>,
     reporter: Report,
+    available: Rc<RefCell<HashMap<Path, Module>>>,
 
     in_head: bool,
     constant: Option<abs::Qualified>,
@@ -390,15 +395,24 @@ impl Context {
         self.in_head = true;
     }
 
+    pub fn add_available(&mut self, path: Path, module: Module) {
+        self.available.borrow_mut().insert(path, module);
+    }
+
+    pub fn available(&self) -> Ref<'_, HashMap<Path, Module>> {
+        self.available.borrow()
+    }
+
     pub fn reset_constant(&mut self) {
         self.constant = None;
         self.in_head = false;
     }
 
-    pub fn new(name: Path, report: Report) -> Context {
+    pub fn new(available: Rc<RefCell<HashMap<Path, Module>>>, name: Path, report: Report) -> Context {
         Context {
             module: Module::new(name),
             scope: Default::default(),
+            available,
             reporter: report,
 
             in_head: false,
@@ -406,8 +420,13 @@ impl Context {
         }
     }
 
-    pub fn search(&self, kind: DefinitionKind, span: Span, name: Symbol) -> Option<abs::Qualified> {
-        let searched = self.module.search(kind, name.clone());
+    pub fn search(
+        &self,
+        kind: DefinitionKind,
+        span: Span,
+        name: Symbol,
+    ) -> Option<abs::Qualified> {
+        let searched = self.module.search(self.available.clone(), kind, name.clone());
 
         match searched {
             Ok(Some(res)) => Some(abs::Qualified {
@@ -440,7 +459,7 @@ impl Context {
 
         let module = if path.path.is_empty() {
             self.module.clone()
-        } else if let Some(module) = self.module.available().get(&path.path).cloned() {
+        } else if let Some(module) = self.available().get(&path.path).cloned() {
             module
         } else if let Some(module) = self.module.search_submodules(path.path.symbol()) {
             module
@@ -452,7 +471,7 @@ impl Context {
             return None;
         };
 
-        let searched = module.search(kind, path.name.clone());
+        let searched = module.search(self.available.clone(), kind, path.name.clone());
 
         match searched {
             Ok(Some(res)) => Some(res),
@@ -485,14 +504,21 @@ impl Context {
 
     /// Creates a nested context.
     pub fn fork(&self, name: Symbol) -> Context {
-        let module = self.module.fork(name);
+        let path = { self.module.borrow().name.clone() };
+
+        let module = self.module.fork(name.clone());
         let scope = Default::default();
+
+
+        self.available.borrow_mut()
+            .entry(path.with(name))
+            .or_insert_with(|| module.clone());
 
         Context {
             module,
             scope,
             reporter: self.reporter.clone(),
-
+            available: self.available.clone(),
             in_head: self.in_head,
             constant: self.constant.clone(),
         }
@@ -645,7 +671,6 @@ pub mod top_level {
             .map(|x| resolve_let(ctx.clone(), x, false))
             .collect::<Vec<_>>();
 
-        
         Solver::new(move |ctx| {
             let path = from_constructor_upper_path(&decl.name);
             let searched = ctx.get_path(DefinitionKind::Type, decl.name.span.clone(), path);
@@ -660,7 +685,7 @@ pub mod top_level {
                 let body = body.into_iter().map(|x| x.eval(ctx.clone())).collect();
 
                 if let Some(searched) = searched {
-                    let module = ctx.module.available().get(&searched.path).cloned().unwrap();
+                    let module = ctx.available().get(&searched.path).cloned().unwrap();
                     let values = module.traits().get(&searched.name).cloned().unwrap();
 
                     let not_declared = let_names
@@ -817,7 +842,7 @@ pub mod top_level {
     /// Resolve a type declaration and returns the solver for it.
     pub fn resolve_type_decl(ctx: Context, decl: tree::TypeDecl) -> Solver<abs::TypeDecl> {
         let name = decl.name.symbol();
-        let submodule = ctx.module.fork(decl.name.symbol());
+        let submodule = ctx.fork(decl.name.symbol());
 
         ctx.module
             .define(DefinitionKind::Type, decl.visibility.clone(), name.clone());
@@ -828,19 +853,19 @@ pub mod top_level {
                 for (field, _) in &record.fields {
                     let name = field.name.symbol();
                     let vis = into_field_visiblity(field.visibility.clone().into());
-                    submodule.define(DefinitionKind::Value, vis, name);
+                    submodule.module.define(DefinitionKind::Value, vis, name);
                 }
             }
             Some((_, tree::TypeDef::Sum(sum))) => {
                 for cons in &sum.constructors {
                     let name = cons.name.symbol();
-                    submodule.define(DefinitionKind::Value, Visibility::Public, name);
+                    submodule.module.define(DefinitionKind::Value, Visibility::Public, name);
                 }
             }
             Some((_, tree::TypeDef::Synonym(_synonym))) => todo!(),
         }
 
-        let namespace = submodule.name().clone();
+        let namespace = submodule.module.name().clone();
 
         Solver::new(move |ctx| {
             ctx.scoped(|ctx| {
@@ -1006,7 +1031,7 @@ pub mod top_level {
         Solver::new(move |ctx| {
             let path = from_upper_path(&decl.path);
 
-            if !ctx.module.available().contains_key(&path) {
+            if !ctx.available().contains_key(&path) {
                 ctx.reporter.report(Diagnostic::new(ResolverError {
                     span: decl.path.span.clone(),
                     kind: error::ResolverErrorKind::InvalidPath(path.segments),
@@ -1096,14 +1121,16 @@ pub mod pattern {
                     from_constructor_upper_path(&app.func),
                 );
 
-                let args = app
-                    .args
-                    .into_iter()
-                    .map(|x| transform_pat(ctx, *x, vars))
-                    .collect();
-
                 match func {
-                    Some(func) => abs::PatternKind::Application(abs::PatApplication { func, args }),
+                    Some(func) => {
+                        let args = app
+                        .args
+                        .into_iter()
+                        .map(|x| transform_pat(ctx, *x, vars))
+                        .collect();
+    
+                        abs::PatternKind::Application(abs::PatApplication { func, args })
+                    },
                     None => abs::PatternKind::Error,
                 }
             }
@@ -1243,7 +1270,10 @@ pub mod expr {
                     expr.span.clone(),
                     from_constructor_upper_path(&x),
                 ) {
-                    Some(res) => abs::ExprKind::Constructor(res),
+                    Some(res) => {
+                        ctx.insert_constant(res.clone(), expr.span.clone());
+                        abs::ExprKind::Constructor(res)
+                    }
                     None => abs::ExprKind::Error,
                 }
             }
@@ -1531,7 +1561,7 @@ pub fn transform_trait_binder(ctx: &Context, binder: tree::TraitBinder) -> abs::
 
 pub fn transform_let_binder(ctx: &Context, binder: tree::LetBinder) -> abs::LetBinder {
     match binder {
-        tree::LetBinder::Param(t) => abs::LetBinder::Param(transform_binder(ctx,t)),
+        tree::LetBinder::Param(t) => abs::LetBinder::Param(transform_binder(ctx, t)),
         tree::LetBinder::Trait(t) => abs::LetBinder::Trait(transform_trait_binder(ctx, t)),
     }
 }

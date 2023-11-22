@@ -1,9 +1,11 @@
 //! Facilities to build a entire crate of vulpi files. This module is responsible for building the
 //! crate from the source files and resolving the modules.
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, fs::File, rc::Rc, cell::RefCell};
 
+use resw::Writer;
 use vulpi_intern::Symbol;
+use vulpi_ir::transform;
 use vulpi_location::{FileId, Span};
 use vulpi_report::Report;
 use vulpi_resolver::{
@@ -60,7 +62,7 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         }
     }
 
-    pub fn compile(&mut self, module: Symbol, path: FS::Path, _output: PathBuf) {
+    pub fn compile(&mut self, module: Symbol, path: FS::Path, output: PathBuf) {
         // TODO: Fix this error :( I can't now because it would require changes
         // to the vulpi-report module. Good luck Sofia from the future!
 
@@ -79,13 +81,15 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
 
         let mut modules = HashMap::new();
 
+        let available: Rc<RefCell<HashMap<Path, Module>>> = Default::default();
+
         for (path, (program, deps)) in bag {
             match program {
                 Interface::Compiled(module, _) => {
                     modules.insert(path, (module, None, deps));
                 }
                 Interface::Uncompiled(parsed) => {
-                    let context = Context::new(path.clone(), self.reporter.clone());
+                    let context = Context::new(available.clone(), path.clone(), self.reporter.clone());
                     let solved = vulpi_resolver::resolve(&context, parsed);
                     modules.insert(
                         path,
@@ -95,11 +99,10 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
             }
         }
 
-        for (actual_module, _, _) in modules.values() {
-            for (module, _, _) in modules.values() {
-                let path = module.name().clone();
-                actual_module.add_available(path, module.clone())
-            }
+        for (module, _, _) in modules.values() {
+            let path = module.name().clone();
+            let mut borrow_mut = available.borrow_mut();
+            borrow_mut.insert(path, module.clone());
         }
 
         let mut programs = vec![];
@@ -124,6 +127,14 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         Declare::declare(&programs, (&mut ctx, env.clone()));
         let programs = Declare::define(&programs, (&mut ctx, env));
         
+        if !self.reporter.has_errors() {
+            let res = transform::Transform::transform(&vulpi_ir::transform::Programs(programs), &mut Default::default());
+            let js = vulpi_js::Transform::transform(vulpi_js::Programs(res), &mut Default::default());
+            let f = File::create(output).unwrap();
+            let mut w = Writer::new(f);
+
+            w.write_program(&js).unwrap();
+        }
         
     }
 }

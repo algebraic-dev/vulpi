@@ -1,304 +1,675 @@
 //! This module compiles a TypedTree to a Vulpi IR tree called Lambda. This is the first step in
 //! lowering the AST to a form that is easier to work with for code generation.
 
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc, vec};
 
 use vulpi_intern::Symbol;
-use vulpi_location::Spanned;
+
 use vulpi_syntax::{
-    elaborated,
-    lambda::{self, ExprKind},
+    elaborated::*,
+    lambda::{self, Case, ConsDef, Stmt, TagType},
     r#abstract::Qualified,
 };
-use vulpi_typer::{Real, Type};
 
-use crate::pattern::{self, pattern_binders};
+use crate::pattern;
+use vulpi_typer::{real::Real, Type};
 
-#[derive(Default)]
-pub struct Ctx {
-    var: usize,
+#[derive(Clone)]
+pub enum TypeDef {
+    NewType,
+    Enumerated,
+    Heavy,
+    Tuple,
+    Abstract,
+    Record,
 }
 
-pub fn compile_match_with_names(
+pub enum Flag {
+    InHead,
+    InTail,
+    InBlock,
+}
+
+/// The context used to generate new variable names and other things.
+#[derive(Default, Clone)]
+pub struct Context {
+    counter: Rc<RefCell<usize>>,
+    upwards: Rc<RefCell<Vec<lambda::Stmt>>>,
+    constructors: Rc<RefCell<HashMap<Qualified, (ConsDef, usize)>>>,
+    vars: im_rc::HashMap<Symbol, usize>,
+    types: im_rc::HashMap<Qualified, TypeDef>,
+}
+
+impl Context {
+    pub fn new_var(&mut self, name: String) -> Symbol {
+        let mut counter = self.counter.borrow_mut();
+        let id = *counter;
+        *counter += 1;
+        Symbol::intern(&format!("{}${}", name, id))
+    }
+
+    pub fn add_var(&mut self, name: Symbol) -> Symbol {
+        let i = self
+            .vars
+            .entry(name.clone())
+            .and_modify(|x| *x += 1)
+            .or_insert(0);
+        if *i == 0 {
+            name
+        } else {
+            Symbol::intern(&format!("{}${}", name.get(), i))
+        }
+    }
+
+    pub fn add_var_local(&self, name: Symbol) -> Context {
+        let mut context = self.clone();
+        context.add_var(name);
+        context
+    }
+
+    pub fn find_var(&self, name: Symbol) -> Symbol {
+        let mut name = name;
+        if let Some(count) = self.vars.get(&name) {
+            if *count > 0 {
+                name = Symbol::intern(&format!("{}${}", name.get(), count));
+            }
+        }
+        name
+    }
+
+    pub fn add_upwards(&mut self, expr: lambda::Stmt) {
+        self.upwards.borrow_mut().push(expr);
+    }
+
+    pub fn drain_upwards(&mut self) -> Vec<lambda::Stmt> {
+        std::mem::take(&mut *self.upwards.borrow_mut())
+    }
+
+    pub fn has_upwards(&self) -> bool {
+        !self.upwards.borrow().is_empty()
+    }
+
+    pub fn add_constructor(&mut self, name: Qualified, cons: ConsDef, size: usize) {
+        self.constructors.borrow_mut().insert(name, (cons, size));
+    }
+
+    pub fn get_constructor(&self, name: &Qualified) -> ConsDef {
+        self.constructors.borrow().get(name).cloned().unwrap().0
+    }
+
+    pub fn is_newtype(&self, name: &Qualified) -> bool {
+        if let Some(cons) = self.constructors.borrow().get(name) {
+            matches!(cons, (ConsDef::NewType, 1))
+        } else {
+            false
+        }
+    }
+
+    pub fn scope<T>(&self, f: impl FnOnce(&mut Context) -> T) -> T {
+        let mut context = self.clone();
+        f(&mut context)
+    }
+}
+
+fn translate_occurence(occ: pattern::Occurrence) -> lambda::Expr {
+    occ.1.into_iter().fold(occ.0, |acc, x| match x {
+        pattern::Index::Cons(i) => Box::new(lambda::ExprKind::Access(acc, i)),
+        pattern::Index::Tuple(i) => Box::new(lambda::ExprKind::Access(acc, i)),
+    })
+}
+
+fn translate_case_to_tagged_expr(context: &mut Context, case: Case) -> TagType {
+    match case {
+        Case::Constructor(name, _) => match context.get_constructor(&name) {
+            ConsDef::Enumerated(_, i) => TagType::Number(i),
+            ConsDef::Heavy(_, i, _) => TagType::Field(i),
+            ConsDef::NewType => TagType::None,
+            ConsDef::Tuple => TagType::None,
+        },
+        Case::Literal(_) => TagType::None,
+        Case::Tuple(_) => TagType::Size,
+    }
+}
+
+fn generate_pattern_name(context: &mut Context, pat: &Pattern) -> (Symbol, bool) {
+    match &**pat {
+        PatternKind::Wildcard => (Symbol::intern("_"), false),
+        PatternKind::Variable(x) => (context.add_var(x.clone()), false),
+        PatternKind::Application(app) if context.is_newtype(&app.func) => {
+            generate_pattern_name(context, &app.args[0])
+        }
+        _ => (context.new_var("v".to_string()), true),
+    }
+}
+
+fn generate_scrutinee_name(context: &mut Context, expr: &lambda::Expr) -> (Symbol, bool) {
+    match &**expr {
+        lambda::ExprKind::Variable(x) => (context.find_var(x.clone()), false),
+        _ => (context.new_var("v".to_string()), true),
+    }
+}
+
+fn translate_tree(
+    context: &mut Context,
+    tree: pattern::Tree,
+    actions: Vec<lambda::Expr>,
+) -> lambda::Expr {
+    fn translate(context: &mut Context, tree: pattern::Tree) -> lambda::Tree {
+        match tree {
+            pattern::Tree::Fail => unreachable!(),
+            pattern::Tree::Leaf(i, _) => lambda::Tree::Leaf(i),
+            pattern::Tree::Switch(occ, cases) => {
+                if cases.len() == 1 {
+                    translate(context, cases[0].1.clone())
+                } else {
+                    let branches = cases
+                        .into_iter()
+                        .map(|(case, tree)| {
+                            (
+                                case.clone(),
+                                translate_case_to_tagged_expr(context, case),
+                                translate(context, tree),
+                            )
+                        })
+                        .collect();
+
+                    lambda::Tree::Switch(translate_occurence(occ), branches)
+                }
+            }
+        }
+    }
+
+    match tree {
+        pattern::Tree::Fail => unreachable!(),
+        pattern::Tree::Leaf(i, _) => actions[i].clone(),
+        pattern::Tree::Switch(_, _) => {
+            let tree = translate(context, tree);
+            Box::new(lambda::ExprKind::Switch(context.new_var("r".to_string()), tree, actions))
+        }
+    }
+}
+fn compile_binders_without_names(
+    context: &mut Context,
     scrutinee_names: Vec<Symbol>,
-    arms: Vec<Vec<elaborated::Pattern>>,
-    next: Vec<lambda::Expr>,
-) -> lambda::ExprKind {
-    let mut result = vec![];
+    patterns: Vec<Pattern>,
+) {
+    for (scrutinee, pat) in scrutinee_names.iter().zip(patterns) {
+        // We assume that all the scrutines are variables right now.
+        let scrutinee = lambda::ExprKind::Variable(scrutinee.clone());
+        for (binder, name) in pattern::pattern_binders(Box::new(scrutinee), &pat) {
+            // If binder is not redundant, then we need to add a let binding.
+            if binder.1.len() != 0 {
+                let translate_occurence = translate_occurence(binder);
+                context.add_upwards(Stmt::Let(name, translate_occurence))
+            }
+        }
+    }
+}
 
-    for (patterns, next) in arms.iter().zip(next.into_iter()) {
-        let mut result_binders = vec![];
+fn compile_binders(
+    context: &mut Context,
+    scrutinee: Vec<Expr<Type<Real>>>,
+    patterns: Vec<Pattern>,
+) {
+    let scrutinee = scrutinee
+        .into_iter()
+        .map(|x| x.transform(context))
+        .collect::<Vec<_>>();
 
-        for (scrutinee, pat) in scrutinee_names.iter().zip(patterns.iter()) {
-            let var = Box::new(ExprKind::Variable(scrutinee.clone()));
-            for (binder, name) in pattern_binders(var.clone(), &*pat) {
-                result_binders.push((name, ExprKind::Access(binder)));
+    let (scrutinee_names, _): (Vec<_>, Vec<_>) = patterns
+        .iter()
+        .map(|x| generate_pattern_name(context, x))
+        .unzip();
+
+    for (name, scrutinee) in scrutinee_names.iter().zip(scrutinee) {
+        context.add_upwards(Stmt::Let(name.clone(), scrutinee));
+    }
+
+    compile_binders_without_names(context, scrutinee_names, patterns);
+}
+
+fn compile_match_with_names(
+    context: &mut Context,
+    scrutinee_names: Vec<Symbol>,
+    arms: Vec<Vec<Pattern>>,
+    actions: Vec<Expr<Type<Real>>>,
+) -> lambda::Expr {
+    // Vector of all the result actions with let bindings.
+    let mut result_actions = vec![];
+
+    for (patterns, action) in arms.iter().zip(actions) {
+        let action = action.transform(context);
+
+        let mut statements = context.drain_upwards();
+
+        for (scrutinee, pat) in scrutinee_names.iter().zip(patterns) {
+            // We assume that all the scrutines are variables right now.
+            let scrutinee = lambda::ExprKind::Variable(scrutinee.clone());
+            for (binder, name) in pattern::pattern_binders(Box::new(scrutinee), &pat) {
+                // If binder is not redundant, then we need to add a let binding.
+                if binder.1.len() != 0 {
+                    let translate_occurence = translate_occurence(binder);
+                    statements.push(Stmt::Let(name, translate_occurence))
+                }
             }
         }
 
-        result.push(
-            result_binders
-                .into_iter()
-                .fold(next, |next, (name, occ)| {
-                    Box::new(ExprKind::Let(name, Box::new(occ), next))
-                }),
-        )
+        // If it's empty then we should not add a block
+        if statements.is_empty() {
+            result_actions.push(action);
+        } else {
+            statements.push(Stmt::Expr(action));
+            result_actions.push(Box::new(lambda::ExprKind::Block(statements)));
+        }
     }
 
-    let scrutinee = scrutinee_names.iter().map(|x| Box::new(lambda::ExprKind::Variable(x.clone()))).collect();
-    let pat = pattern::compile(scrutinee, arms);
+    let scrutinee = scrutinee_names
+        .iter()
+        .map(|x| Box::new(lambda::ExprKind::Variable(x.clone())))
+        .collect();
+    let compiled_tree = pattern::compile(scrutinee, arms);
 
-    match pat {
-        lambda::Tree::Fail => todo!(),
-        lambda::Tree::Leaf(x, _) => {
-            *result[x].clone()
-        },
-        lambda::Tree::Switch(_, _) => {
-            ExprKind::Switch(
-                scrutinee_names
-                    .iter()
-                    .map(|x| Box::new(ExprKind::Variable(x.clone())))
-                    .collect(),
-                pat,
-                result,
-            )
-        },
-    }
+    translate_tree(context, compiled_tree, result_actions)
 }
 
-pub fn compile_match(
-    ctx: &mut Ctx,
-    scrutinee: Vec<elaborated::Expr<Type<Real>>>,
-    arms: Vec<Vec<elaborated::Pattern>>,
-    next: Vec<lambda::Expr>,
-) -> lambda::ExprKind {
-    let scrutinee_names = (0..scrutinee.len())
-        .map(|_| ctx.new_var_name())
+// Compiles a pattern match expression into a [lambda::Expr].
+fn compile_match(
+    context: &mut Context,
+    scrutinee: Vec<Expr<Type<Real>>>,
+    arms: Vec<Vec<Pattern>>,
+    actions: Vec<Expr<Type<Real>>>,
+) -> lambda::Expr {
+    let scrutinee = scrutinee
+        .into_iter()
+        .map(|x| x.transform(context))
         .collect::<Vec<_>>();
 
-    let result = compile_match_with_names(scrutinee_names.clone(), arms, next);
-
-    *scrutinee_names
+    let (scrutinee_names, should_create_let): (Vec<_>, Vec<_>) = scrutinee
         .iter()
-        .zip(scrutinee.transform(ctx).into_iter())
-        .fold(Box::new(result), |next, (name, value)| {
-            Box::new(ExprKind::Let(name.clone(), value, next))
-        })
-}
+        .map(|x| generate_scrutinee_name(context, x))
+        .unzip();
 
-impl Ctx {
-    pub fn new_var_name(&mut self) -> Symbol {
-        let name = format!("_v{}", self.var);
-        self.var += 1;
-        Symbol::intern(&name)
+    for ((name, should_create_let), scrutinee) in
+        scrutinee_names.iter().zip(should_create_let).zip(scrutinee)
+    {
+        if should_create_let {
+            context.add_upwards(Stmt::Let(name.clone(), scrutinee));
+        }
     }
+
+    compile_match_with_names(context, scrutinee_names, arms, actions)
 }
 
 pub trait Transform {
     type Out;
-
-    fn transform(self, ctx: &mut Ctx) -> Self::Out;
+    fn transform<'a>(&self, context: &mut Context) -> Self::Out;
 }
 
-impl<T: Transform> Transform for Box<T> {
-    type Out = Box<T::Out>;
+impl Transform for SttmKind<Type<Real>> {
+    type Out = ();
 
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-        Box::new((*self).transform(ctx))
+    fn transform<'a>(&self, context: &mut Context) -> Self::Out {
+        match self {
+            SttmKind::Let(let_) => {
+                let arms = vec![let_.pattern.clone()];
+                let scrutinee = vec![let_.expr.clone()];
+
+                compile_binders(context, scrutinee, arms);
+            }
+            SttmKind::Expr(e) => {
+                let transform = e.transform(context);
+                context.add_upwards(Stmt::Expr(transform));
+            }
+            SttmKind::Error => unreachable!(),
+        }
     }
 }
 
 impl<T: Transform> Transform for Vec<T> {
     type Out = Vec<T::Out>;
 
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-        self.into_iter().map(|x| x.transform(ctx)).collect()
+    fn transform<'a>(&self, context: &mut Context) -> Self::Out {
+        self.iter().map(|x| x.transform(context)).collect()
     }
 }
 
-impl<T: Transform> Transform for Option<T> {
-    type Out = Option<T::Out>;
+impl Transform for Expr<Type<Real>> {
+    type Out = lambda::Expr;
 
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-        self.map(|x| x.transform(ctx))
-    }
-}
+    fn transform<'a>(&self, context: &mut Context) -> Self::Out {
+        match &*self.data {
+            ExprKind::Lambda(lambda) => context.scope(|context| {
+                let arms = vec![lambda.param.clone()];
+                let scrutinee = vec![generate_pattern_name(context, &lambda.param).0];
+                compile_binders_without_names(context, scrutinee.clone(), arms);
 
-impl<T: Transform> Transform for HashMap<Qualified, T> {
-    type Out = HashMap<Qualified, T::Out>;
+                let mut upwards = context.drain_upwards();
+                let body = lambda.body.transform(context);
 
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-        self.into_iter()
-            .map(|(k, v)| (k, v.transform(ctx)))
-            .collect()
-    }
-}
-
-impl Transform for Vec<elaborated::Statement<Type<Real>>> {
-    type Out = lambda::ExprKind;
-
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-
-        fn fold(x: Vec<elaborated::Statement<Type<Real>>>, ctx: &mut Ctx) -> lambda::ExprKind {
-            let (fst, tail) = x.split_first().unwrap();
-
-            match fst.clone() {
-                elaborated::Statement::Let(x) => {
-                    let pats = vec![vec![x.pattern]];
-                    let next = vec![Box::new(fold(tail.to_vec(), ctx))];
-                    let scrutinee = vec![x.expr];
-                    compile_match(ctx, scrutinee, pats, next)
-                }
-                elaborated::Statement::Expr(x) => {
-                    let expr_kind = Box::new(*x.data.transform(ctx));
-                    if tail.is_empty() {
-                        *expr_kind
-                    } else {
-                        ExprKind::Seq(expr_kind, Box::new(fold(tail.to_vec(), ctx)))
-                    }
-                }
-                elaborated::Statement::Error => unreachable!(),
-            }
-        }
-
-        fold(self, ctx)
-    }
-}
-
-impl<T: Transform> Transform for (Symbol, T) {
-    type Out = (Symbol, T::Out);
-
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-        (self.0, self.1.transform(ctx))
-    }
-}
-
-impl<T: Transform> Transform for Spanned<T> {
-    type Out = T::Out;
-
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-        self.data.transform(ctx)
-    }
-}
-
-impl Transform for elaborated::ExprKind<Type<Real>> {
-    type Out = lambda::ExprKind;
-
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-        use lambda::ExprKind::*;
-
-        match self {
-            elaborated::ExprKind::Lambda(x) => {
-                let name = ctx.new_var_name();
-
-                let t = x.body.transform(ctx);
-                let res = compile_match_with_names(vec![name.clone()], vec![vec![x.param]], vec![t]);
-
-                Lambda(
-                    name.clone(),
-                    Box::new(res),
-                )
-            }
-            elaborated::ExprKind::Application(x) => {
-                if let elaborated::ExprKind::Constructor(z, y) = *x.func.data {
-                    Constructor(z, y, x.args.transform(ctx))
+                if upwards.is_empty() {
+                    Box::new(lambda::ExprKind::Lambda(scrutinee, body))
                 } else {
-                    Application(x.func.transform(ctx), x.args.transform(ctx))
+                    upwards.push(Stmt::Expr(body));
+                    Box::new(lambda::ExprKind::Lambda(
+                        scrutinee,
+                        Box::new(lambda::ExprKind::Block(upwards)),
+                    ))
                 }
+            }),
+            ExprKind::Application(app) => {
+                let func = app.func.transform(context);
+                let arg = app.args.transform(context);
+                Box::new(lambda::ExprKind::Application(func, vec![arg]))
             }
-            elaborated::ExprKind::Variable(x) => Variable(x),
-            elaborated::ExprKind::Constructor(x, y) => Constructor(x, y, vec![]),
-            elaborated::ExprKind::Function(x, _) => Function(x),
-            elaborated::ExprKind::Projection(x) => Projection(x.field, x.expr.transform(ctx)),
-            elaborated::ExprKind::Let(x) => {
-                let patterns = vec![vec![x.pattern]];
-                
-                let scrutinee = vec![x.body];
+            ExprKind::Variable(var) => {
+                Box::new(lambda::ExprKind::Variable(context.find_var(var.clone())))
+            }
+            ExprKind::Constructor(_, name) => Box::new(lambda::ExprKind::Constructor(name.clone())),
+            ExprKind::Function(name, _) => Box::new(lambda::ExprKind::Function(name.clone())),
 
-                let next = vec![x.next.transform(ctx)];
+            ExprKind::Projection(field) => Box::new(lambda::ExprKind::Projection(
+                field.field.clone(),
+                field.expr.transform(context),
+            )),
+            ExprKind::Let(let_expr) => {
+                let arms = vec![let_expr.pattern.clone()];
+                let scrutinee = vec![let_expr.body.clone()];
 
-                compile_match(ctx, scrutinee, patterns, next)
+                compile_binders(context, scrutinee, arms);
+                let_expr.next.transform(context)
             }
-            elaborated::ExprKind::When(x) => {
-                let rest = x.arms.into_iter().map(|x| (x.patterns, x.expr));
+            ExprKind::When(when_expr) => {
+                let (actions, patterns): (Vec<_>, Vec<_>) = when_expr
+                    .arms
+                    .clone()
+                    .into_iter()
+                    .map(|x| (x.expr, x.patterns))
+                    .unzip();
 
-                let (switches, exprs): (Vec<_>, Vec<_>) = rest.unzip();
-
-                let next = exprs.transform(ctx);
-                compile_match(ctx, x.scrutinee, switches, next)
+                compile_match(context, when_expr.scrutinee.clone(), patterns, actions)
             }
-            elaborated::ExprKind::Do(x) => x.transform(ctx),
-            elaborated::ExprKind::Literal(x) => Literal(x),
-            elaborated::ExprKind::RecordInstance(x) => {
-                RecordInstance(x.name, x.fields.transform(ctx))
+            ExprKind::Do(sttms) => context.scope(|context| {
+                sttms.into_iter().for_each(|x| x.transform(context));
+                let statements = context.drain_upwards();
+                Box::new(lambda::ExprKind::Block(statements))
+            }),
+            ExprKind::Literal(lit) => Box::new(lambda::ExprKind::Literal(lit.clone())),
+            ExprKind::RecordInstance(instance) => {
+                let mut fields = vec![];
+                for (name, expr) in instance.fields.iter() {
+                    fields.push((name.clone(), expr.transform(context)));
+                }
+                Box::new(lambda::ExprKind::RecordInstance(
+                    instance.name.clone(),
+                    fields,
+                ))
             }
-            elaborated::ExprKind::RecordUpdate(x) => {
-                RecordUpdate(x.qualified, x.expr.transform(ctx), x.fields.transform(ctx))
+            ExprKind::RecordUpdate(update) => {
+                let mut fields = vec![];
+                for (name, expr) in update.fields.iter() {
+                    fields.push((name.clone(), expr.transform(context)));
+                }
+                Box::new(lambda::ExprKind::RecordUpdate(
+                    update.name.clone(),
+                    update.expr.transform(context),
+                    fields,
+                ))
             }
-            elaborated::ExprKind::Tuple(x) => Tuple(x.exprs.transform(ctx)),
-            elaborated::ExprKind::Error => todo!(),
+            ExprKind::Tuple(t) => {
+                let t = t.exprs.transform(context);
+                Box::new(lambda::ExprKind::Tuple(t))
+            }
+            ExprKind::Error => unreachable!(),
         }
     }
 }
 
-impl Transform for elaborated::LetDecl<Type<Real>> {
+impl Transform for (Qualified, LetDecl<Type<Real>>) {
     type Out = lambda::LetDecl;
 
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-        let (patterns, next) : (Vec<_>, Vec<_>) = self.body.into_iter().map(|x| (x.patterns, x.expr)).unzip();
-        let scrutinee_names = (0..patterns[0].len()).map(|_| ctx.new_var_name()).collect::<Vec<_>>();
+    fn transform<'a>(&self, context: &mut Context) -> Self::Out {
+        let count = self
+            .1
+            .body
+            .get(0)
+            .map(|x| x.patterns.len())
+            .unwrap_or_default();
 
-        let next = next.transform(ctx);
-        let result = compile_match_with_names(scrutinee_names.clone(), patterns, next);
+        let new_names = (0..count)
+            .map(|_| context.new_var("v".to_string()))
+            .collect::<Vec<_>>();
 
-        let binder_names = (0..self.binders.len()).map(|_| ctx.new_var_name()).collect::<Vec<_>>();
-        let binders = self.binders.into_iter().map(|x| x.0).collect::<Vec<_>>();
+        let binders = self
+            .1
+            .binders
+            .iter()
+            .map(|x| generate_pattern_name(context, &x.0).0)
+            .collect::<Vec<_>>();
 
-        let result = compile_match_with_names(binder_names.clone(), vec![binders], vec![Box::new(result)]);
+        compile_binders_without_names(
+            context,
+            binders.clone(),
+            self.1.binders.iter().map(|x| x.0.clone()).collect(),
+        );
 
-        let all_names = binder_names.into_iter().chain(scrutinee_names.into_iter()).collect::<Vec<_>>();
+        let (actions, patterns): (Vec<_>, Vec<_>) = self
+            .1
+            .body
+            .iter()
+            .map(|x| (x.expr.clone(), x.patterns.clone()))
+            .unzip();
 
-        lambda::LetDecl {
-            name: self.name.clone(),
-            binders: all_names,
-            body: Box::new(result),
-            constants: self.constants.clone()
+        let expr = compile_match_with_names(context, new_names.clone(), patterns, actions);
+
+        let mut upwards = context.drain_upwards();
+
+        if upwards.is_empty() {
+            lambda::LetDecl {
+                name: self.0.clone(),
+                body: binders
+                    .into_iter()
+                    .chain(new_names)
+                    .rfold(expr, |acc, name| {
+                        Box::new(lambda::ExprKind::Lambda(vec![name], acc))
+                    }),
+                constants: self.1.constants.clone(),
+            }
+        } else {
+            upwards.push(Stmt::Expr(expr));
+
+            lambda::LetDecl {
+                name: self.0.clone(),
+                body: binders
+                    .into_iter()
+                    .chain(new_names)
+                    .rfold(Box::new(lambda::ExprKind::Block(upwards)), |acc, name| {
+                        Box::new(lambda::ExprKind::Lambda(vec![name], acc))
+                    }),
+                constants: self.1.constants.clone(),
+            }
         }
     }
 }
 
-impl Transform for elaborated::ExternalDecl<Type<Real>> {
-    type Out = lambda::ExternalDecl;
+impl Transform for (Qualified, TypeDecl) {
+    type Out = ();
 
-    fn transform(self, _ctx: &mut Ctx) -> Self::Out {
-        lambda::ExternalDecl {
-            name: self.name.clone(),
-            binding: self.binding,
-        }
+    fn transform<'a>(&self, context: &mut Context) -> Self::Out {
+        // This block is used to classify the type definition. This is used later on to determine
+        // how to lower the type. For example, if the type is a newtype, then we can just use the
+        // underlying type.
+
+        let classification = match &self.1 {
+            TypeDecl::Abstract => TypeDef::Abstract,
+            TypeDecl::Enum(constructors) => {
+                if constructors.len() == 1 {
+                    if constructors[0].1 == 1 {
+                        context.add_constructor(constructors[0].0.clone(), ConsDef::NewType, 1);
+                        TypeDef::NewType
+                    } else if constructors[0].1 == 0 {
+                        context.add_constructor(
+                            constructors[0].0.clone(),
+                            ConsDef::Enumerated(constructors[0].0.clone(), 0),
+                            0,
+                        );
+                        TypeDef::Enumerated
+                    } else {
+                        context.add_constructor(
+                            constructors[0].0.clone(),
+                            ConsDef::Tuple,
+                            constructors[0].1,
+                        );
+                        TypeDef::Tuple
+                    }
+                } else {
+                    if constructors.iter().all(|x| x.1 == 0) {
+                        for (id, (name, size)) in constructors.iter().enumerate() {
+                            context.add_constructor(
+                                name.clone(),
+                                ConsDef::Enumerated(name.clone(), id),
+                                *size,
+                            );
+                        }
+
+                        TypeDef::Enumerated
+                    } else {
+                        for (id, (name, size)) in constructors.iter().enumerate() {
+                            context.add_constructor(
+                                name.clone(),
+                                ConsDef::Heavy(name.clone(), id, *size),
+                                *size,
+                            );
+                        }
+
+                        TypeDef::Heavy
+                    }
+                }
+            }
+            TypeDecl::Record(fields) => {
+                if fields.len() == 1 {
+                    TypeDef::Heavy
+                } else {
+                    TypeDef::Record
+                }
+            }
+        };
+
+        context.types.insert(self.0.clone(), classification);
     }
 }
 
-impl Transform for elaborated::TypeDecl {
-    type Out = lambda::TypeDecl;
-
-    fn transform(self, _ctx: &mut Ctx) -> Self::Out {
-        use lambda::TypeDecl::*;
-        match self {
-            elaborated::TypeDecl::Abstract => Abstract,
-            elaborated::TypeDecl::Enum(x) => Enum(x),
-            elaborated::TypeDecl::Record(x) => Record(x),
-        }
-    }
-}
-
-impl Transform for elaborated::Program<Type<Real>> {
+impl Transform for Program<Type<Real>> {
     type Out = lambda::Program;
 
-    fn transform(self, ctx: &mut Ctx) -> Self::Out {
-        lambda::Program {
-            lets: self.lets.transform(ctx),
-            types: self.types.transform(ctx),
-            externals: self.externals.transform(ctx),
+    fn transform<'a>(&self, context: &mut Context) -> Self::Out {
+        let mut lets = vec![];
+        let mut types = vec![];
+
+        for (name, decl) in self.types.iter() {
+            types.push((
+                name.clone(),
+                (name.clone(), decl.clone()).transform(context),
+            ));
         }
+
+        for (name, decl) in self.lets.iter() {
+            lets.push((
+                name.clone(),
+                (name.clone(), decl.clone()).transform(context),
+            ));
+        }
+
+        let definitions = context.constructors.borrow().clone();
+
+        lambda::Program {
+            lets,
+            externals: self
+                .externals
+                .clone()
+                .into_iter()
+                .map(|(x, y)| (x, y.binding.clone()))
+                .collect(),
+            definitions,
+        }
+    }
+}
+
+pub struct Programs(pub Vec<Program<Type<Real>>>);
+
+impl Transform for Programs {
+    type Out = Vec<lambda::Program>;
+
+    fn transform<'a>(&self, context: &mut Context) -> Self::Out {
+        let mut programs: Vec<_> = vec![lambda::Program::default(); self.0.len()];
+
+        // Multiple contexts to isolate the output of each program.
+        let mut contexts = vec![Context::default(); self.0.len()];
+
+        for (i, program) in self.0.iter().enumerate() {
+            for (name, external) in &program.externals {
+                programs[i].externals.push((name.clone(), external.binding.clone()));
+            }
+
+            for (name, type_expr) in &program.types {
+                (name.clone(), type_expr.clone()).transform(&mut contexts[i]);
+                let definitions = contexts[i].constructors.borrow().clone();
+                programs[i].definitions = definitions;
+            }
+
+            for (name, (def, size)) in programs[i].definitions.clone() {
+                context.add_constructor(name.clone(), def.clone(), size);
+
+                let names: Vec<_> = (0..size)
+                    .map(|_| context.new_var("v".to_string()))
+                    .collect();
+
+                programs[i]
+                    .lets
+                    .push((name.clone(), derive_let_from_constructor(name, names, def)))
+            }
+        }
+
+        for (i, program) in self.0.iter().enumerate() {
+            for (name, type_expr) in &program.lets {
+                let let_expr = (name.clone(), type_expr.clone()).transform(context);
+                programs[i].lets.push((name.clone(), let_expr));
+            }
+        }
+
+        programs
+    }
+}
+
+fn derive_let_from_constructor(
+    name: Qualified,
+    names: Vec<Symbol>,
+    def: ConsDef,
+) -> lambda::LetDecl {
+    let body = match def {
+            ConsDef::Enumerated(_, i) => Box::new(lambda::ExprKind::Literal(Box::new(
+                LiteralKind::Integer(Symbol::intern(&i.to_string())),
+            ))),
+            ConsDef::Heavy(_, id, _) => Box::new(lambda::ExprKind::Object(
+                id,
+                names
+                    .iter()
+                    .map(|x| Box::new(lambda::ExprKind::Variable(x.clone())))
+                    .collect(),
+            )),
+            ConsDef::NewType => Box::new(lambda::ExprKind::Variable(names[0].clone())),
+            ConsDef::Tuple => Box::new(lambda::ExprKind::Tuple(
+                names
+                    .iter()
+                    .map(|x| Box::new(lambda::ExprKind::Variable(x.clone())))
+                    .collect(),
+            )),
+        };
+    
+    lambda::LetDecl {
+        name: name.clone(),
+        body: names
+            .into_iter()
+            .rfold(body, |acc, name| Box::new(lambda::ExprKind::Lambda(vec![name], acc))),
+        constants: None,
     }
 }

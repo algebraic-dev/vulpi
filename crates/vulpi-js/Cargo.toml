@@ -9,6 +9,7 @@ edition = "2021"
 vulpi-syntax = { path = "../vulpi-syntax" }
 vulpi-ir = { path = "../vulpi-ir" }
 vulpi-intern = { path = "../vulpi-intern" }
+vulpi-location = { path = "../vulpi-location" }
 
 resast = "0.5.0"
 resw = "0.6.0-alpha.2"

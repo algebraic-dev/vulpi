@@ -30,10 +30,10 @@ impl Infer for Expr {
     type Return = (Type<Virtual>, elaborated::Expr<Type<Real>>);
 
     type Context<'a> = (&'a mut Context, Env);
-
+    
     fn infer(&self, (ctx, mut env): Self::Context<'_>) -> Self::Return {
         env.set_current_span(self.span.clone());
-
+        
         let elem = match &self.data {
             ExprKind::Application(app) => {
                 let (mut typ, func_elab) = app.func.infer((ctx, env.clone()));
@@ -42,11 +42,9 @@ impl Infer for Expr {
                 for arg in &app.args {
                     env.set_current_span(arg.span.clone());
 
-                    let (arg_ty, arg_elab) = arg.infer((ctx, env.clone()));
-                    elab_args.push(arg_elab);
-
                     if let Some((left, right)) = ctx.as_function(&env, typ.deref()) {
-                        ctx.subsumes(env.clone(), arg_ty, left);
+                        let arg = arg.check(left, (ctx, env.clone()));
+                        elab_args.push(arg);
                         typ = right;
                     } else {
                         ctx.report(
@@ -59,16 +57,22 @@ impl Infer for Expr {
                         );
                     }
                 }
+                
 
                 (
                     typ.clone(),
-                    Box::new(elaborated::ExprKind::Application(
-                        elaborated::ApplicationExpr {
-                            typ: typ.quote(env.level),
-                            func: func_elab,
-                            args: elab_args,
-                        },
-                    )),
+                    elab_args.into_iter().fold(func_elab, |acc, arg| {
+                        Spanned::new(
+                            Box::new(elaborated::ExprKind::Application(
+                                elaborated::ApplicationExpr {
+                                    typ: typ.quote(env.level),
+                                    func: acc,
+                                    args: arg,
+                                },
+                            )),
+                            self.span.clone(),
+                        )
+                    }).data,
                 )
             }
             ExprKind::Variable(m) => (
@@ -397,7 +401,7 @@ impl Infer for Expr {
                     ret_type,
                     Box::new(elaborated::ExprKind::RecordUpdate(
                         elaborated::RecordUpdate {
-                            qualified: name.clone(),
+                            name: name.clone(),
                             expr: elab_expr,
                             fields: elab_fields,
                         },

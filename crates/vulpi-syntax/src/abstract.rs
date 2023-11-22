@@ -15,8 +15,8 @@ pub struct Qualified {
 
 impl Qualified {
     pub fn mangle(&self) -> String {
-        format!("{}__{}", self.path.get(), self.name.get())
-            .replace('.', "__")
+        format!("{}${}", self.path.get(), self.name.get())
+            .replace('.', "$")
             .replace('?', "INT")
     }
 
