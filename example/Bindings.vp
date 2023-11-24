@@ -1,0 +1,43 @@
+use Prelude
+
+#javascript "
+  let addEventListener = el => sym => ev => data => {
+    el[ev] = () => {
+      if(window.events && window.events.get(sym)) {
+        let [fn, state] = window.events.get(sym);
+        window.events.set(sym, [fn, fn(data, state)])
+      }
+    }
+  }
+
+  let addListener = symbol => fn => def => {
+      if(window.events == undefined) {
+          window.events = new Map();
+      }
+      window.events.set(symbol, [(a,b) => fn(a)(b), def])
+  }
+"
+
+pub type GenericNode
+pub type NodeElement
+pub type TextElement
+pub type Children
+pub type Symbol msg model
+
+pub external createNode           : String -> NodeElement                   = "document.createElement"
+pub external createText           : String -> NodeElement                   = "document.createTextNode"
+pub external setAttribute         : NodeElement -> String -> String -> ()   = "(el => attr => val => el.setAttribute(attr, val))"
+pub external appendChild          : NodeElement -> GenericNode -> ()        = "(el => child => el.appendChild(child))"
+pub external getParent            : GenericNode -> NodeElement              = "(child) => child.parentNode"
+pub external remove               : GenericNode -> ()                       = "(el) => el.remove()"
+pub external replaceWith          : GenericNode -> GenericNode -> ()        = "(old => neww => old.replaceWith(neww))"
+pub external removeAttribute      : NodeElement -> String -> ()             = "(el => attr => el.removeAttribute(attr))"
+pub external prim_getElementById  : String -> NodeElement                   = "(id => document.getElementById(id))"
+pub external prim_getChildren     : NodeElement -> Children                 = "(el => el.childNodes)"
+pub external childLength          : Children -> Int                         = "(el => el.length)"
+pub external idxChild             : Children -> Int -> GenericNode          = "(child => n => child[n])"
+pub external createSymbol         : forall a b. String -> Symbol a b        = "(name => Symbol(name))"
+pub external isNullOrUndefined    : forall a. a -> Bool                     = "(x => x === null || x === undefined ? 1 : 0)"
+pub external addEventListener     : forall a b. GenericNode -> Symbol a b -> String -> a -> () = "addEventListener"
+pub external addListener          : forall a b c. Symbol a b -> (a -> c -> c) -> c -> ()       = "addListener"
+pub external removeListener       : NodeElement -> String -> ()                                = "(el => attr => {el[attr] = undefined})"

@@ -66,4 +66,4 @@ pub external trustMe : forall a b. a -> b = "id"
 
 pub external intToString : Int -> String = "id"
 
-pub let pipe (f: a -> b) (p: a) : b = f p
+pub let pipe (p: a) (f: a -> b) : b = f p

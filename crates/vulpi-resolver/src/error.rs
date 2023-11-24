@@ -5,6 +5,7 @@ use vulpi_syntax::r#abstract::Qualified;
 
 pub enum ResolverErrorKind {
     NotFound(Symbol),
+    ListIsNotAvailable,
     InvalidPath(Vec<Symbol>),
     DuplicatePattern(Symbol),
     PrivateDefinition,
@@ -26,6 +27,7 @@ impl IntoDiagnostic for ResolverError {
                 name.get()
             )
             .into(),
+            ResolverErrorKind::ListIsNotAvailable => "List is not available".into(), 
             ResolverErrorKind::NotFound(name) => format!("cannot find '{}'", name.get()).into(),
             ResolverErrorKind::InvalidPath(name) => format!(
                 "the path '{}' cannot be found",

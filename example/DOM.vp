@@ -1,0 +1,161 @@
+use Prelude
+use Yal.List
+use Yal.Bindings
+
+pub type AttributePatch msg =
+  | Add (Attribute msg)
+  | Remove (Attribute msg)
+
+pub type Patch msg =
+  | Add (Html msg)
+  | Remove
+  | Update (List (Patch msg)) (List (AttributePatch msg))
+  | Replace (Html msg)
+  | NoPatch
+
+pub type Attribute msg =
+  | Id String 
+  | ClassList (List String) 
+  | OnClick msg
+
+pub type Node msg = {
+  tag        : String,
+  attributes : List (Attribute msg),
+  children   : List (Html msg)
+}
+
+pub type Html msg = 
+  | Node (Node msg) 
+  | Text String
+
+-- Diffing
+
+let diffChildren : List (Html msg) -> List (Html msg) -> List (Patch msg) -> List (Patch msg)
+  | Nil      , Nil      , acc => reverseList acc
+  | Cons x xs, Nil      , acc => diffChildren xs Nil (Cons Patch.Remove acc)
+  | Nil      , Cons y ys, acc => diffChildren Nil ys (Cons (Patch.Add y) acc)
+  | Cons x xs, Cons y ys, acc => diffChildren xs ys       (Cons (diff x y) acc)
+
+let diffAttrs (old: List (Attribute msg)) (new1: List (Attribute msg)) : List (AttributePatch msg) =
+  concatList (listMap AttributePatch.Remove (difference old new1))
+             (listMap AttributePatch.Add    (difference new1 old))
+
+let diff : Html msg -> Html msg -> Patch msg 
+  | Html.Node node, Html.Text text  => Patch.Replace (Html.Text text)
+  | Html.Text text, Html.Node node  => Patch.Replace (Html.Node node)
+  | Html.Text text, Html.Text text1 => 
+    when text == text1 is
+      True  => Patch.NoPatch
+      False => Patch.Replace (Html.Text text1)
+  | Html.Node node, Html.Node node1 =>
+    when node.tag != node1.tag is
+      True  => Patch.Replace (Html.Node node1)
+      False => do
+        let children   = diffChildren node.children node1.children Nil
+        let attributes = diffAttrs node.attributes node1.attributes
+        Patch.Update children attributes 
+
+type Element = 
+  | Node NodeElement
+  | Text TextElement
+
+type State model msg = {
+  model: model,
+  view: Html msg
+}
+
+let createTextNode (s: String) : TextElement = trustMe (createText s)
+
+let toGeneric : Element -> GenericNode
+  | Element.Node x => trustMe x
+  | Element.Text t => trustMe t
+
+let toText (x: GenericNode) : Element = Element.Text (trustMe x)
+let toNode (x: GenericNode) : Element = Element.Node (trustMe x)
+
+let getChildren (element: NodeElement) : List GenericNode = do
+  let children = prim_getChildren element
+  let length   = childLength children
+  listMap (idxChild children) (range 0 length)
+
+let getElementById (x: String) : Option NodeElement = do
+  let res = prim_getElementById x
+  when isNullOrUndefined res is
+    True  => None 
+    False => Some res
+
+-- Render
+
+let renderAttribute (symbol: Symbol msg model) (parent: NodeElement) : Attribute msg -> ()
+  | Attribute.Id i              => setAttribute parent "id" i
+  | Attribute.ClassList classes => setAttribute parent "className" (unwords classes)
+  | Attribute.OnClick msg       => addEventListener (trustMe parent) symbol "onclick" msg
+
+let renderNode (symbol: Symbol msg model) (node: Node msg) : NodeElement = do
+  let parent = createNode node.tag
+  forEach (\a => a |> render symbol |> appendChild parent) node.children
+  forEach (renderAttribute symbol parent) node.attributes
+  parent
+
+let render (symbol: Symbol msg model) : Html msg -> GenericNode
+  | Html.Node node => trustMe (renderNode symbol node)
+  | Html.Text text => trustMe (createTextNode text)
+
+let deleteAttribute (element: NodeElement) : (Attribute msg) -> () 
+  | Attribute.OnClick _   => removeListener element "onevent"
+  | Attribute.Id _        => removeAttribute element "id"
+  | Attribute.ClassList _ => removeAttribute element "className"
+
+let patchAttributes (symbol: Symbol msg model) (element: NodeElement) : List (AttributePatch msg) -> ()
+  | Nil => ()
+  | Cons (AttributePatch.Add attr) attrs => do
+       renderAttribute symbol element attr
+       patchAttributes symbol element attrs
+  | Cons (AttributePatch.Remove attr) attrs => do
+       deleteAttribute element attr
+       patchAttributes symbol element attrs
+
+let patchChildren (symbol: Symbol msg model) (parent: GenericNode) : List GenericNode -> List (Patch msg) -> ()
+  | Cons x xs, Cons p ps => do
+      patch symbol x p
+      patchChildren symbol parent xs ps
+  | Nil, Cons p ps => do
+      patch symbol parent p
+      patchChildren symbol parent Nil ps
+  | Nil     , Nil => ()
+  | Cons _ _, Nil => ()
+
+let patch (symbol: Symbol msg model) (parent: GenericNode) : Patch msg -> ()
+  | Patch.NoPatch => ()
+  | Patch.Replace html => do
+      let res = render symbol html
+      replaceWith (trustMe parent) res
+  | Patch.Update children attrs => do
+      let domChildren = getChildren (trustMe parent)
+      patchChildren symbol parent domChildren children
+      patchAttributes symbol (trustMe parent) attrs
+  | Patch.Add element => do
+      let res = render symbol element
+      appendChild (trustMe parent) res
+  | Patch.Remove => 
+      remove parent
+
+-- Start
+
+let rootUpdater (symbol: Symbol msg model) (view: model -> Html msg) (update: model -> msg -> model)
+                (parent: NodeElement) (msg: msg) (state: State model msg) : State model msg = do
+  let newModel = update state.model msg
+  let newView  = view newModel
+  patch symbol (trustMe parent) (diff state.view newView)
+  State { model = newModel, view = newView }
+
+pub let start (view: model -> Html msg) (update: model -> msg -> model) (initial: model) : () = do
+  when getElementById "main" is
+    None      => log "cannot find main"
+    Some main => do
+      let symbol   = createSymbol "events"
+      let html     = view initial
+      let rendered = render symbol html
+      appendChild (trustMe main) rendered
+      let state = State { model = initial, view = html }
+      addListener symbol (rootUpdater symbol view update (trustMe rendered)) state

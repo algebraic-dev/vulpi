@@ -1,19 +1,18 @@
 //! The resolver is responsible for taking a single concrete tree and turn it into an abstract
 //! syntax tree with all the names resolved.
 
+use std::{cell::RefCell, rc::Rc};
 use std::cell::{Ref, RefMut};
 use std::collections::HashMap;
-use std::{cell::RefCell, rc::Rc};
 
 use petgraph::prelude::DiGraph;
 use petgraph::stable_graph::NodeIndex;
 
 use vulpi_intern::Symbol;
-
 use vulpi_location::{Span, Spanned};
 use vulpi_report::{Diagnostic, Report};
-use vulpi_syntax::concrete::tree::LetMode;
 use vulpi_syntax::concrete::{self, tree};
+use vulpi_syntax::concrete::tree::LetMode;
 use vulpi_syntax::r#abstract as abs;
 use vulpi_syntax::r#abstract::Visibility;
 use vulpi_vfs::path::{Path, Qualified};
@@ -470,11 +469,13 @@ impl Context {
             module
         } else {
             for (module_path, _) in self.module.opened().iter() {
-                let available = self.available().get(module_path).cloned().unwrap();
-                let mut forked = self.clone();
-                forked.module = available;
-                if let Some(result) = forked.get_path(kind, span.clone(), path.clone(), false) {
-                    return Some(result);
+                let available = self.available().get(module_path).cloned();
+                if let Some(module) = available {
+                    let mut forked = self.clone();
+                    forked.module = module;
+                    if let Some(result) = forked.get_path(kind, span.clone(), path.clone(), false) {
+                        return Some(result);
+                    }
                 }
             }
 
@@ -595,7 +596,6 @@ impl<T: 'static> Solver<T> {
 
 /// Top level declarations are the ones that can be declared at the top level of a module.
 pub mod top_level {
-
     use crate::error::ResolverError;
 
     use super::*;
@@ -1084,6 +1084,7 @@ pub fn transform_literal(literal: tree::Literal) -> abs::Literal {
 /// Patterns are the ones that can be used in a match expression.
 pub mod pattern {
     use im_rc::HashSet;
+
     use vulpi_report::Diagnostic;
 
     use super::*;
@@ -1235,6 +1236,8 @@ pub mod pattern {
 
 /// Expressions are the ones that can be used in a function body.
 pub mod expr {
+    use vulpi_syntax::r#abstract::SttmKind::Expr;
+    use crate::error::ResolverError;
     use super::*;
 
     /// Transforms an expression into an abstract expression.
@@ -1260,6 +1263,55 @@ pub mod expr {
                     })
                 });
             }
+
+            List(list) => {
+                let nil = ctx.resolve(
+                    DefinitionKind::Value,
+                    expr.span.clone(),
+                    Qualified {
+                        path: Path {
+                            segments: vec![Symbol::intern("List")]
+                        },
+                        name: Symbol::intern("Nil"),
+                    },
+                );
+
+                let cons = ctx.resolve(
+                    DefinitionKind::Value,
+                    expr.span.clone(),
+                    Qualified {
+                        path: Path {
+                            segments: vec![Symbol::intern("List")]
+                        },
+                        name: Symbol::intern("Cons"),
+                    },
+                );
+                
+               if let Some((nil, cons)) = nil.zip(cons) {
+                ctx.insert_constant(nil.clone(), expr.span.clone());
+                ctx.insert_constant(cons.clone(), expr.span.clone());
+
+                   let values: Vec<_> = list.values.into_iter().map(|(expr, _)| {
+                       transform(ctx, *expr)
+                   }).collect();
+
+                   values.into_iter().rfold(abs::ExprKind::Constructor(nil.clone()), | acc, value | {
+                        abs::ExprKind::Application(abs::ApplicationExpr {
+                            app: abs::AppKind::Normal,
+                            func: Box::new(Spanned::new(abs::ExprKind::Constructor(cons.clone()), Default::default())),
+                            args: vec![value, Box::new(Spanned::new(acc, Default::default()))]
+                        })   
+                   })    
+               } else {
+                   ctx.reporter.report(Diagnostic::new(ResolverError {
+                       span: expr.span.clone(),
+                       kind: error::ResolverErrorKind::ListIsNotAvailable,
+                   }));                  
+                   
+                   abs::ExprKind::Error
+               } 
+            }
+
             Application(app) => {
                 ctx.in_head = false;
 
