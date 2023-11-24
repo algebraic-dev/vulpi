@@ -1,19 +1,69 @@
+#javascript "
+  let obj = (tag, arr) => {
+    arr.tag = tag
+    return arr
+  }
+
+  let add = x => y => x + y
+
+  let sub = x => y => x - y
+
+  let concat = x => y => x + y
+
+  let eq = x => y => {
+    if (x === y) {
+        return 1;
+    } else if ((typeof x == \"object\" && x != null) && (typeof y == \"object\" && y != null)) {
+        if (Object.keys(x).length != Object.keys(y).length) return 0;
+        for (var prop in x) {
+            if (y.hasOwnProperty(prop)) {  
+                if (!eq(x[prop])(y[prop])) return 0;
+            } else {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    else 
+        return 0;
+    }
+
+    let id = x => x
+"
+
+pub use Prelude.Bool
+pub use Prelude.Option
+pub use Prelude.Result
+
 pub type Int
 pub type String
 
-pub type Unit =
-    | Unit
-
 pub type Bool =
-    | True
     | False
+    | True
 
 pub type Result ok err =
     | Ok ok
     | Err err
 
+pub type Option data =
+    | Some data
+    | None 
+
 pub external add : Int -> Int -> Int = "add"
 
-pub external pipe : forall a b. a -> (a -> b) -> b = "($0 + $1)"
+pub external sub : Int -> Int -> Int = "sub"
 
-pub external log : String -> Int = "console.log"
+pub external log : forall a. a -> () = "console.log"
+
+pub external concat : String -> String -> String = "concat"
+
+pub external eq : forall a. a -> a -> Bool = "eq"
+
+pub external neq : forall a. a -> a -> Bool = "1 - eq"
+
+pub external trustMe : forall a b. a -> b = "id"
+
+pub external intToString : Int -> String = "id"
+
+pub let pipe (f: a -> b) (p: a) : b = f p
