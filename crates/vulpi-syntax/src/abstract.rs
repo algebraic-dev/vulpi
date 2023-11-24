@@ -456,6 +456,7 @@ pub enum TopLevel {
     External(ExtDecl),
     Trait(TraitDecl),
     Impl(Option<TraitImpl>),
+    Command(Symbol, Symbol),
     Use,
 }
 
@@ -467,4 +468,5 @@ pub struct Program {
     pub traits: Vec<TraitDecl>,
     pub impls: Vec<TraitImpl>,
     pub externals: Vec<ExtDecl>,
+    pub commands: Vec<(Symbol, Symbol)>
 }

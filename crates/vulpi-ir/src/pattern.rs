@@ -9,20 +9,20 @@ use vulpi_syntax::{
     lambda::{Expr, Case},
 };
 
-#[derive(Default)]
+#[derive(Default, Show)]
 pub struct Problem {
     matrix: Vec<Row>,
     occurrences: Vec<Occurrence>,
     actions: Vec<usize>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Show)]
 pub enum Index {
     Cons(usize),
     Tuple(usize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Show)]
 pub struct Occurrence(pub Expr, pub Vec<Index>);
 
 impl Occurrence {
@@ -163,6 +163,8 @@ impl Problem {
         problem.actions = self.actions.clone();
         problem.occurrences = self.occurrences.clone();
 
+        problem.occurrences.swap(from, to);
+
         problem
     }
 
@@ -226,7 +228,7 @@ impl Problem {
                 branches.push((head, branch));
             }
 
-            Tree::Switch(self.occurrences[0].clone(), branches)
+            Tree::Switch(problem.occurrences[0].clone(), branches)
         }
     }
 }

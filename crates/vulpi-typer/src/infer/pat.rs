@@ -87,7 +87,11 @@ impl Infer for Vec<PatternArm> {
                 vec![],
             )
         } else {
-            let (types, ret_type, elab_arm) = self[0].infer((ctx, env.clone()));
+            let ret = ctx.hole(&env, Kind::typ());
+
+            let (types, fst_type, elab_arm) = self[0].infer((ctx, env.clone()));
+
+            ctx.subsumes(env.clone(), fst_type.clone(), ret.clone());
 
             let mut elab_arms = vec![elab_arm];
 
@@ -108,13 +112,13 @@ impl Infer for Vec<PatternArm> {
                     ctx.subsumes(env.clone(), old.clone(), new);
                 }
 
-                ctx.subsumes(env.clone(), ret_type.clone(), new_ret_type);
+                ctx.subsumes(env.clone(), new_ret_type.clone(), ret.clone());
             }
 
             (
-                Type::<Virtual>::function(types.clone(), ret_type.clone()),
+                Type::<Virtual>::function(types.clone(), fst_type.clone()),
                 types,
-                ret_type,
+                fst_type,
                 elab_arms,
             )
         }

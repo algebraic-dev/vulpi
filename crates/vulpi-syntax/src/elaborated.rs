@@ -173,6 +173,7 @@ pub struct Program<T> {
     pub lets: HashMap<Qualified, LetDecl<T>>,
     pub types: HashMap<Qualified, TypeDecl>,
     pub externals: HashMap<Qualified, ExternalDecl<T>>,
+    pub commands: Vec<(Symbol, Symbol)>,
 }
 
 impl<T> Default for Program<T> {
@@ -182,6 +183,7 @@ impl<T> Default for Program<T> {
             lets: HashMap::new(),
             types: HashMap::new(),
             externals: HashMap::new(),
+            commands: Vec::new(),
         }
     }
 }

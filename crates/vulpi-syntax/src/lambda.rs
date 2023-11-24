@@ -92,5 +92,6 @@ pub struct ExternalDecl {
 pub struct Program {
     pub lets: Vec<(Qualified, LetDecl)>,
     pub externals: Vec<(Qualified, Symbol)>,
+    pub commands: Vec<(Symbol, Symbol)>,
     pub definitions: HashMap<Qualified, (ConsDef, usize)>,
 }

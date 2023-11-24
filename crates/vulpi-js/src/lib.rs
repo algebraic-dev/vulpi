@@ -133,8 +133,10 @@ impl Transform for lambda::ExprKind {
     fn transform<'a>(self, ctx: &mut Context<'a>) -> Self::Out<'a> {
         match self {
             lambda::ExprKind::Lambda(symbols, expr) => {
-                let result = *expr.transform(ctx);
-                let mut upwards = ctx.take_upwards();
+                let (result, mut upwards) = ctx.scope(|ctx| {
+                    let result = *expr.transform(ctx);
+                    (result, ctx.take_upwards())
+                });
 
                 if upwards.is_empty() {
                     Expr::Func(Func {
@@ -188,7 +190,7 @@ impl Transform for lambda::ExprKind {
                 ],
             }),
             lambda::ExprKind::Projection(field, obj) => Expr::Member(MemberExpr {
-                computed: true,
+                computed: false,
                 object: Box::new(*obj.transform(ctx)),
                 property: Box::new(Expr::Ident(Ident::new(field.name.get()))),
             }),
@@ -197,16 +199,16 @@ impl Transform for lambda::ExprKind {
                 object: Box::new(*obj.transform(ctx)),
                 property: Box::new(Expr::Lit(Lit::Number(Cow::Owned(place.to_string())))),
             }),
-            lambda::ExprKind::Block(x) => {
-                let statements = x.transform(ctx);
+            lambda::ExprKind::Block(statements) => {
 
                 let size = statements.len() - 1;
                 for (i, statement) in statements.into_iter().enumerate() {
                     let is_last = i == size;
                     if !is_last {
+                        let statement = statement.transform(ctx);
                         ctx.add_upwards(statement);
-                    } else if let Stmt::Expr(e) = statement {
-                        return e;
+                    } else if let lambda::Stmt::Expr(e) = statement {
+                        return *e.transform(ctx);
                     }
                 }
 
@@ -416,10 +418,22 @@ impl Transform for Programs {
         let mut decls = HashMap::new();
         let mut petgraph = DiGraph::new();
         let mut nodes = HashMap::new();
+        let mut parts = Vec::new();
 
         for program in &self.0 {
             for (name, symbol) in &program.externals {
                 ctx.externals.insert(name.clone(), symbol.clone());
+            }
+        }
+
+        for program in &self.0 {
+            for (result, command) in &program.commands {
+                if command.get() == "javascript" {
+                    let js = ressa::Parser::new(&result.get_static()).unwrap();
+                    for part in js.flatten() {
+                        parts.push(part.clone());
+                    }
+                }
             }
         }
         
@@ -449,6 +463,6 @@ impl Transform for Programs {
             decls.get(&inv_map[x].clone()).cloned()
         }).flatten().collect::<Vec<_>>();
 
-        Program::Script(ordered_expr)
+        Program::Script(parts.into_iter().chain(ordered_expr.into_iter()).collect())
     }
 }

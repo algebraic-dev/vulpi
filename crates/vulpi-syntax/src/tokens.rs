@@ -50,6 +50,7 @@ pub enum TokenData {
 
     LowerIdent, // Identifier
     UpperIdent, // Identifier
+    Command,    // Command
     Wildcard,
 
     Colon,       // ':'
@@ -205,6 +206,7 @@ impl ToString for Token {
             Effect => "effect".to_string(),
             External => "external".to_string(),
             PlusPlus => "++".to_string(),
+            Command => format!("command {}", self.value.data.get()),
         }
     }
 }

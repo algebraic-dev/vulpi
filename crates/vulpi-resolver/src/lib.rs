@@ -189,8 +189,7 @@ impl Module {
     pub fn fork(&self, name: Symbol) -> Module {
         let path = { self.borrow().name.clone() };
 
-        self
-            .borrow_mut()
+        self.borrow_mut()
             .submodules
             .entry(name.clone())
             .or_insert_with(|| Module::new(path.with(name.clone())))
@@ -340,14 +339,12 @@ impl Module {
             );
         }
 
-        
         for (path, _) in self.opened().iter() {
             let module = availables.borrow().get(path).cloned();
-            
+
             if module.is_none() {
                 continue;
             }
-            
 
             if let Some(path) = module.unwrap().search_recursively(
                 availables.clone(),
@@ -408,7 +405,11 @@ impl Context {
         self.in_head = false;
     }
 
-    pub fn new(available: Rc<RefCell<HashMap<Path, Module>>>, name: Path, report: Report) -> Context {
+    pub fn new(
+        available: Rc<RefCell<HashMap<Path, Module>>>,
+        name: Path,
+        report: Report,
+    ) -> Context {
         Context {
             module: Module::new(name),
             scope: Default::default(),
@@ -420,13 +421,10 @@ impl Context {
         }
     }
 
-    pub fn search(
-        &self,
-        kind: DefinitionKind,
-        span: Span,
-        name: Symbol,
-    ) -> Option<abs::Qualified> {
-        let searched = self.module.search(self.available.clone(), kind, name.clone());
+    pub fn search(&self, kind: DefinitionKind, span: Span, name: Symbol) -> Option<abs::Qualified> {
+        let searched = self
+            .module
+            .search(self.available.clone(), kind, name.clone());
 
         match searched {
             Ok(Some(res)) => Some(abs::Qualified {
@@ -509,8 +507,8 @@ impl Context {
         let module = self.module.fork(name.clone());
         let scope = Default::default();
 
-
-        self.available.borrow_mut()
+        self.available
+            .borrow_mut()
             .entry(path.with(name))
             .or_insert_with(|| module.clone());
 
@@ -595,6 +593,9 @@ pub mod top_level {
             Use(use_decl) => Some(resolve_use(ctx, *use_decl).map(|_| abs::TopLevel::Use)),
             Trait(trait_) => Some(resolve_trait(ctx, *trait_).map(abs::TopLevel::Trait)),
             Impl(impl_) => Some(resolve_impl(ctx, *impl_).map(abs::TopLevel::Impl)),
+            Command(cmd) => Some(Solver::new(move |_| {
+                abs::TopLevel::Command(cmd.name.clone(), cmd.command.clone())
+            })),
             Error(_) => None,
         }
     }
@@ -859,7 +860,9 @@ pub mod top_level {
             Some((_, tree::TypeDef::Sum(sum))) => {
                 for cons in &sum.constructors {
                     let name = cons.name.symbol();
-                    submodule.module.define(DefinitionKind::Value, Visibility::Public, name);
+                    submodule
+                        .module
+                        .define(DefinitionKind::Value, Visibility::Public, name);
                 }
             }
             Some((_, tree::TypeDef::Synonym(_synonym))) => todo!(),
@@ -996,6 +999,9 @@ pub mod top_level {
                         abs::TopLevel::Trait(t) => program.traits.push(t),
                         abs::TopLevel::Impl(Some(t)) => program.impls.push(t),
                         abs::TopLevel::Impl(None) => (),
+                        abs::TopLevel::Command(name, symbol) => {
+                            program.commands.push((name, symbol))
+                        }
                         abs::TopLevel::Use => (),
                     }
                 }
@@ -1124,13 +1130,13 @@ pub mod pattern {
                 match func {
                     Some(func) => {
                         let args = app
-                        .args
-                        .into_iter()
-                        .map(|x| transform_pat(ctx, *x, vars))
-                        .collect();
-    
+                            .args
+                            .into_iter()
+                            .map(|x| transform_pat(ctx, *x, vars))
+                            .collect();
+
                         abs::PatternKind::Application(abs::PatApplication { func, args })
-                    },
+                    }
                     None => abs::PatternKind::Error,
                 }
             }
@@ -1608,6 +1614,7 @@ pub fn resolve(ctx: &Context, program: tree::Program) -> Solver<abs::Program> {
                 abs::TopLevel::External(x) => program.externals.push(x),
                 abs::TopLevel::Trait(x) => program.traits.push(x),
                 abs::TopLevel::Impl(Some(t)) => program.impls.push(t),
+                abs::TopLevel::Command(name, symbol) => program.commands.push((name, symbol)),
                 abs::TopLevel::Impl(None) => (),
                 abs::TopLevel::Use => (),
             }

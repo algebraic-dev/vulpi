@@ -568,6 +568,11 @@ impl Declare for Programs {
             programs[i].externals = ext_decl.into_iter().collect();
         }
 
+        for (i, program) in self.0.iter().enumerate() {
+            let trait_decl = program.traits.define((context, env.clone()));
+            programs[i].commands = program.commands.clone();
+        }
+
         programs
     }
 }

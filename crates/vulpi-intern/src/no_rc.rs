@@ -33,6 +33,17 @@ impl Symbol {
     pub fn get(&self) -> String {
         INTERNER.with(|i| i.get(self).unwrap())
     }
+
+    pub fn get_static(&self) -> &'static str {
+        INTERNER.with(|i| match self {
+            Symbol::Generated(_) => todo!(),
+            Symbol::Interned(id) => {
+                let id_to_string = i.id_to_string.borrow();
+                let string = id_to_string.get(*id).unwrap();
+                Box::leak(string.clone().into_boxed_str())
+            },
+        })
+    }
 }
 
 impl Show for Symbol {

@@ -6,8 +6,6 @@ use crate::r#virtual;
 use crate::real::Real;
 use crate::TypeKind;
 
-use crate::Kind;
-
 use crate::check::Check;
 use im_rc::HashMap;
 use im_rc::HashSet;
@@ -136,7 +134,6 @@ impl Infer for Expr {
             ExprKind::Error => (Type::error(), Box::new(elaborated::ExprKind::Error)),
             ExprKind::When(when) => {
                 // TODO: Check mode
-                let ret_type = ctx.hole(&env, Kind::typ());
                 ctx.errored = false;
 
                 let (_, arms, ret, elab_arms) = when.arms.infer((ctx, env.clone()));
@@ -157,8 +154,6 @@ impl Infer for Expr {
                     elab_scrutinee.push(elab);
                 }
 
-                ctx.subsumes(env.clone(), ret_type.clone(), ret);
-
                 if perform {
                     let arms = arms.iter().map(|x| ctx.instantiate(&env, x)).collect();
 
@@ -170,7 +165,7 @@ impl Infer for Expr {
                 }
 
                 (
-                    ret_type,
+                    ret,
                     Box::new(elaborated::ExprKind::When(elaborated::WhenExpr {
                         scrutinee: elab_scrutinee,
                         arms: elab_arms,

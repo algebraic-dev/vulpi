@@ -277,6 +277,11 @@ impl<'a> Lexer<'a> {
 
         let result = if let Some(char) = self.advance() {
             match char {
+                '#' => {
+                    self.bump();
+                    self.accumulate(|char| char.is_ascii_digit());
+                    TokenData::Command
+                }
                 '{' => TokenData::LBrace,
                 '}' => TokenData::RBrace,
                 '(' => {

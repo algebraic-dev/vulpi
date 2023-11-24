@@ -223,6 +223,12 @@ pub struct ExtDecl {
 }
 
 #[derive(Show, Clone)]
+pub struct CommandDecl {
+    pub name: Symbol,
+    pub command: Symbol,
+}
+
+#[derive(Show, Clone)]
 pub enum TopLevel {
     Let(Box<LetDecl>),
     Type(Box<TypeDecl>),
@@ -232,6 +238,7 @@ pub enum TopLevel {
     Module(Box<ModuleDecl>),
     Error(Vec<Token>),
     External(Box<ExtDecl>),
+    Command(Box<CommandDecl>),
 }
 
 #[derive(Show, Clone)]

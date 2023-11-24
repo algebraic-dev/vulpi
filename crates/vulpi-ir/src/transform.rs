@@ -5,6 +5,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, vec};
 
 use vulpi_intern::Symbol;
 
+use vulpi_show::Show;
 use vulpi_syntax::{
     elaborated::*,
     lambda::{self, Case, ConsDef, Stmt, TagType},
@@ -35,6 +36,7 @@ pub enum Flag {
 pub struct Context {
     counter: Rc<RefCell<usize>>,
     upwards: Rc<RefCell<Vec<lambda::Stmt>>>,
+    scoped: Rc<RefCell<Vec<usize>>>,
     constructors: Rc<RefCell<HashMap<Qualified, (ConsDef, usize)>>>,
     vars: im_rc::HashMap<Symbol, usize>,
     types: im_rc::HashMap<Qualified, TypeDef>,
@@ -82,7 +84,15 @@ impl Context {
     }
 
     pub fn drain_upwards(&mut self) -> Vec<lambda::Stmt> {
-        std::mem::take(&mut *self.upwards.borrow_mut())
+        let start = self.scoped.borrow().last().cloned().unwrap_or_default();
+        self.upwards.borrow_mut().drain(start..).collect()
+    }
+
+    pub fn scope<T>(&mut self, f: impl FnOnce(&mut Context) -> T) -> T {
+        self.scoped.borrow_mut().push(self.upwards.borrow().len());
+        let res = f(&mut self.clone());
+        self.scoped.borrow_mut().pop();
+        res
     }
 
     pub fn has_upwards(&self) -> bool {
@@ -103,11 +113,6 @@ impl Context {
         } else {
             false
         }
-    }
-
-    pub fn scope<T>(&self, f: impl FnOnce(&mut Context) -> T) -> T {
-        let mut context = self.clone();
-        f(&mut context)
     }
 }
 
@@ -184,7 +189,11 @@ fn translate_tree(
         pattern::Tree::Leaf(i, _) => actions[i].clone(),
         pattern::Tree::Switch(_, _) => {
             let tree = translate(context, tree);
-            Box::new(lambda::ExprKind::Switch(context.new_var("r".to_string()), tree, actions))
+            Box::new(lambda::ExprKind::Switch(
+                context.new_var("r".to_string()),
+                tree,
+                actions,
+            ))
         }
     }
 }
@@ -238,21 +247,23 @@ fn compile_match_with_names(
     let mut result_actions = vec![];
 
     for (patterns, action) in arms.iter().zip(actions) {
-        let action = action.transform(context);
-
-        let mut statements = context.drain_upwards();
+        let mut statements = vec![];
 
         for (scrutinee, pat) in scrutinee_names.iter().zip(patterns) {
             // We assume that all the scrutines are variables right now.
             let scrutinee = lambda::ExprKind::Variable(scrutinee.clone());
             for (binder, name) in pattern::pattern_binders(Box::new(scrutinee), &pat) {
                 // If binder is not redundant, then we need to add a let binding.
-                if binder.1.len() != 0 {
+                if binder.1.len() != 0 || arms.len() > 1 {
                     let translate_occurence = translate_occurence(binder);
                     statements.push(Stmt::Let(name, translate_occurence))
                 }
             }
         }
+
+        let action = action.transform(context);
+
+        statements.extend(context.drain_upwards());
 
         // If it's empty then we should not add a block
         if statements.is_empty() {
@@ -266,10 +277,13 @@ fn compile_match_with_names(
     let scrutinee = scrutinee_names
         .iter()
         .map(|x| Box::new(lambda::ExprKind::Variable(x.clone())))
-        .collect();
+        .collect::<Vec<_>>();
+
     let compiled_tree = pattern::compile(scrutinee, arms);
 
-    translate_tree(context, compiled_tree, result_actions)
+    let t = translate_tree(context, compiled_tree, result_actions);
+
+    t
 }
 
 // Compiles a pattern match expression into a [lambda::Expr].
@@ -297,7 +311,7 @@ fn compile_match(
         }
     }
 
-    compile_match_with_names(context, scrutinee_names, arms, actions)
+    context.scope(|context| compile_match_with_names(context, scrutinee_names, arms, actions))
 }
 
 pub trait Transform {
@@ -343,18 +357,20 @@ impl Transform for Expr<Type<Real>> {
                 let scrutinee = vec![generate_pattern_name(context, &lambda.param).0];
                 compile_binders_without_names(context, scrutinee.clone(), arms);
 
-                let mut upwards = context.drain_upwards();
-                let body = lambda.body.transform(context);
+                context.scope(|context| {
+                    let mut upwards = context.drain_upwards();
+                    let body = lambda.body.transform(context);
 
-                if upwards.is_empty() {
-                    Box::new(lambda::ExprKind::Lambda(scrutinee, body))
-                } else {
-                    upwards.push(Stmt::Expr(body));
-                    Box::new(lambda::ExprKind::Lambda(
-                        scrutinee,
-                        Box::new(lambda::ExprKind::Block(upwards)),
-                    ))
-                }
+                    if upwards.is_empty() {
+                        Box::new(lambda::ExprKind::Lambda(scrutinee, body))
+                    } else {
+                        upwards.push(Stmt::Expr(body));
+                        Box::new(lambda::ExprKind::Lambda(
+                            scrutinee,
+                            Box::new(lambda::ExprKind::Block(upwards)),
+                        ))
+                    }
+                })
             }),
             ExprKind::Application(app) => {
                 let func = app.func.transform(context);
@@ -428,6 +444,8 @@ impl Transform for (Qualified, LetDecl<Type<Real>>) {
     type Out = lambda::LetDecl;
 
     fn transform<'a>(&self, context: &mut Context) -> Self::Out {
+        let mut context = context.clone();
+
         let count = self
             .1
             .body
@@ -435,19 +453,25 @@ impl Transform for (Qualified, LetDecl<Type<Real>>) {
             .map(|x| x.patterns.len())
             .unwrap_or_default();
 
-        let new_names = (0..count)
-            .map(|_| context.new_var("v".to_string()))
+        let new_names = self.1.body[0].patterns.iter()
+            .map(|x| {
+                if self.1.body.len() == 1 {
+                    generate_pattern_name(&mut context, x).0
+                } else {
+                    context.new_var("v".to_string())
+                }
+            })
             .collect::<Vec<_>>();
 
         let binders = self
             .1
             .binders
             .iter()
-            .map(|x| generate_pattern_name(context, &x.0).0)
+            .map(|x| generate_pattern_name(&mut context, &x.0).0)
             .collect::<Vec<_>>();
 
         compile_binders_without_names(
-            context,
+            &mut context,
             binders.clone(),
             self.1.binders.iter().map(|x| x.0.clone()).collect(),
         );
@@ -459,7 +483,7 @@ impl Transform for (Qualified, LetDecl<Type<Real>>) {
             .map(|x| (x.expr.clone(), x.patterns.clone()))
             .unzip();
 
-        let expr = compile_match_with_names(context, new_names.clone(), patterns, actions);
+        let expr = compile_match_with_names(&mut context, new_names.clone(), patterns, actions);
 
         let mut upwards = context.drain_upwards();
 
@@ -590,6 +614,7 @@ impl Transform for Program<Type<Real>> {
                 .map(|(x, y)| (x, y.binding.clone()))
                 .collect(),
             definitions,
+            commands: self.commands.clone(),
         }
     }
 }
@@ -607,8 +632,12 @@ impl Transform for Programs {
 
         for (i, program) in self.0.iter().enumerate() {
             for (name, external) in &program.externals {
-                programs[i].externals.push((name.clone(), external.binding.clone()));
+                programs[i]
+                    .externals
+                    .push((name.clone(), external.binding.clone()));
             }
+
+            programs[i].commands.extend(program.commands.clone());
 
             for (name, type_expr) in &program.types {
                 (name.clone(), type_expr.clone()).transform(&mut contexts[i]);
@@ -646,30 +675,30 @@ fn derive_let_from_constructor(
     def: ConsDef,
 ) -> lambda::LetDecl {
     let body = match def {
-            ConsDef::Enumerated(_, i) => Box::new(lambda::ExprKind::Literal(Box::new(
-                LiteralKind::Integer(Symbol::intern(&i.to_string())),
-            ))),
-            ConsDef::Heavy(_, id, _) => Box::new(lambda::ExprKind::Object(
-                id,
-                names
-                    .iter()
-                    .map(|x| Box::new(lambda::ExprKind::Variable(x.clone())))
-                    .collect(),
-            )),
-            ConsDef::NewType => Box::new(lambda::ExprKind::Variable(names[0].clone())),
-            ConsDef::Tuple => Box::new(lambda::ExprKind::Tuple(
-                names
-                    .iter()
-                    .map(|x| Box::new(lambda::ExprKind::Variable(x.clone())))
-                    .collect(),
-            )),
-        };
-    
+        ConsDef::Enumerated(_, i) => Box::new(lambda::ExprKind::Literal(Box::new(
+            LiteralKind::Integer(Symbol::intern(&i.to_string())),
+        ))),
+        ConsDef::Heavy(_, id, _) => Box::new(lambda::ExprKind::Object(
+            id,
+            names
+                .iter()
+                .map(|x| Box::new(lambda::ExprKind::Variable(x.clone())))
+                .collect(),
+        )),
+        ConsDef::NewType => Box::new(lambda::ExprKind::Variable(names[0].clone())),
+        ConsDef::Tuple => Box::new(lambda::ExprKind::Tuple(
+            names
+                .iter()
+                .map(|x| Box::new(lambda::ExprKind::Variable(x.clone())))
+                .collect(),
+        )),
+    };
+
     lambda::LetDecl {
         name: name.clone(),
-        body: names
-            .into_iter()
-            .rfold(body, |acc, name| Box::new(lambda::ExprKind::Lambda(vec![name], acc))),
+        body: names.into_iter().rfold(body, |acc, name| {
+            Box::new(lambda::ExprKind::Lambda(vec![name], acc))
+        }),
         constants: None,
     }
 }

@@ -174,6 +174,15 @@ impl<'a> Parser<'a> {
         })
     }
 
+    pub fn command_decl(&mut self) -> Result<CommandDecl> {
+        let command = self.expect(TokenData::Command)?;
+        let name = self.expect(TokenData::String)?;
+        Ok(CommandDecl {
+            command: command.symbol(),
+            name: name.symbol(),
+        })
+    }
+
     pub fn record_decl(&mut self) -> Result<RecordDecl> {
         let left_brace = self.expect(TokenData::LBrace)?;
         let fields = self.sep_by(TokenData::Comma, Self::field)?;
@@ -301,6 +310,7 @@ impl<'a> Parser<'a> {
             TokenData::Impl => self.trait_impl().map(Box::new).map(TopLevel::Impl),
             TokenData::Trait => self.trait_decl(vis).map(Box::new).map(TopLevel::Trait),
             TokenData::Mod => self.mod_decl(vis).map(Box::new).map(TopLevel::Module),
+            TokenData::Command => self.command_decl().map(Box::new).map(TopLevel::Command),
             TokenData::External => self
                 .external_decl(vis)
                 .map(Box::new)

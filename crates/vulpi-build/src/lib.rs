@@ -14,7 +14,8 @@ use vulpi_resolver::{
     Context, Module,
 };
 
-use vulpi_syntax::concrete::tree::Program;
+use vulpi_show::Show;
+use vulpi_syntax::{concrete::tree::Program, r#abstract::Qualified};
 use vulpi_typer::declare::{Programs, Declare};
 use vulpi_vfs::{path::Path, FileSystem};
 
