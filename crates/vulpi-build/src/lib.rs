@@ -8,14 +8,14 @@ use vulpi_intern::Symbol;
 use vulpi_ir::transform;
 use vulpi_location::{FileId, Span};
 use vulpi_report::Report;
+
 use vulpi_resolver::{
     cycle::DepHolder,
     dependencies::{self, Dependencies},
     Context, Module,
 };
 
-use vulpi_show::Show;
-use vulpi_syntax::{concrete::tree::Program, r#abstract::Qualified};
+use vulpi_syntax::concrete::tree::Program;
 use vulpi_typer::declare::{Programs, Declare};
 use vulpi_vfs::{path::Path, FileSystem};
 

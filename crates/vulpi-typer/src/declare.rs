@@ -569,7 +569,7 @@ impl Declare for Programs {
         }
 
         for (i, program) in self.0.iter().enumerate() {
-            let trait_decl = program.traits.define((context, env.clone()));
+            let _trait_decl = program.traits.define((context, env.clone()));
             programs[i].commands = program.commands.clone();
         }
 

@@ -218,6 +218,7 @@ impl Module {
     /// The `last` parameter is the exclude list, it is used to avoid cyclic imports.
     fn search_recursively(
         &self,
+        span: Span,
         availables: Rc<RefCell<HashMap<Path, Module>>>,
         kind: DefinitionKind,
         name: Symbol,
@@ -243,7 +244,7 @@ impl Module {
         if let Some(visibility) = self.search_declared(kind, name.clone()) {
             if let abs::Visibility::Private = visibility {
                 return Err(Diagnostic::new(error::ResolverError {
-                    span: Default::default(),
+                    span,
                     kind: error::ResolverErrorKind::PrivateDefinition,
                 }));
             }
@@ -254,7 +255,7 @@ impl Module {
         if let Some((qualified, visibility)) = self.search_aliases(kind, name.clone()) {
             if let abs::Visibility::Private = visibility {
                 return Err(Diagnostic::new(error::ResolverError {
-                    span: Default::default(),
+                    span,
                     kind: error::ResolverErrorKind::PrivateDefinition,
                 }));
             }
@@ -262,12 +263,13 @@ impl Module {
             let available = availables.borrow();
             let path = available.get(&qualified.path).cloned().ok_or_else(|| {
                 Diagnostic::new(error::ResolverError {
-                    span: Default::default(),
+                    span: span.clone(),
                     kind: error::ResolverErrorKind::InvalidPath(qualified.path.segments.clone()),
                 })
             })?;
 
             return path.search_recursively(
+                span,
                 availables.clone(),
                 kind,
                 qualified.name.clone(),
@@ -285,6 +287,7 @@ impl Module {
             }
 
             if let Some(path) = module.unwrap().search_recursively(
+                span.clone(),
                 availables.clone(),
                 kind,
                 name.clone(),
@@ -301,6 +304,7 @@ impl Module {
 
     pub fn search(
         &self,
+        span: Span,
         availables: Rc<RefCell<HashMap<Path, Module>>>,
         kind: DefinitionKind,
         name: Symbol,
@@ -330,6 +334,7 @@ impl Module {
             })?;
 
             return path.search_recursively(
+                span,
                 availables.clone(),
                 kind,
                 qualified.name,
@@ -347,6 +352,7 @@ impl Module {
             }
 
             if let Some(path) = module.unwrap().search_recursively(
+                span.clone(),
                 availables.clone(),
                 kind,
                 name.clone(),
@@ -424,7 +430,7 @@ impl Context {
     pub fn search(&self, kind: DefinitionKind, span: Span, name: Symbol) -> Option<abs::Qualified> {
         let searched = self
             .module
-            .search(self.available.clone(), kind, name.clone());
+            .search(span.clone(), self.available.clone(), kind, name.clone());
 
         match searched {
             Ok(Some(res)) => Some(abs::Qualified {
@@ -450,6 +456,7 @@ impl Context {
         kind: DefinitionKind,
         span: Span,
         mut path: Qualified,
+        first: bool,
     ) -> Option<Qualified> {
         if let Some((alias, _)) = self.module.modules().get(&path.path.symbol()) {
             path.path = alias.clone();
@@ -462,14 +469,26 @@ impl Context {
         } else if let Some(module) = self.module.search_submodules(path.path.symbol()) {
             module
         } else {
-            self.reporter.report(Diagnostic::new(error::ResolverError {
-                span: span.clone(),
-                kind: error::ResolverErrorKind::InvalidPath(path.path.segments.clone()),
-            }));
+            for (module_path, _) in self.module.opened().iter() {
+                let available = self.available().get(module_path).cloned().unwrap();
+                let mut forked = self.clone();
+                forked.module = available;
+                if let Some(result) = forked.get_path(kind, span.clone(), path.clone(), false) {
+                    return Some(result);
+                }
+            }
+
+            if first {
+                self.reporter.report(Diagnostic::new(error::ResolverError {
+                    span: span.clone(),
+                    kind: error::ResolverErrorKind::InvalidPath(path.path.segments.clone()),
+                }));
+            }
+
             return None;
         };
 
-        let searched = module.search(self.available.clone(), kind, path.name.clone());
+        let searched = module.search(span.clone(), self.available.clone(), kind, path.name.clone());
 
         match searched {
             Ok(Some(res)) => Some(res),
@@ -493,7 +512,7 @@ impl Context {
         span: Span,
         path: Qualified,
     ) -> Option<abs::Qualified> {
-        let path = self.get_path(kind, span, path)?;
+        let path = self.get_path(kind, span, path, true)?;
         Some(abs::Qualified {
             path: path.path.symbol(),
             name: path.name,
@@ -674,7 +693,7 @@ pub mod top_level {
 
         Solver::new(move |ctx| {
             let path = from_constructor_upper_path(&decl.name);
-            let searched = ctx.get_path(DefinitionKind::Type, decl.name.span.clone(), path);
+            let searched = ctx.get_path(DefinitionKind::Type, decl.name.span.clone(), path, true);
 
             ctx.scoped(|ctx| {
                 let binders = decl

@@ -5,7 +5,6 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc, vec};
 
 use vulpi_intern::Symbol;
 
-use vulpi_show::Show;
 use vulpi_syntax::{
     elaborated::*,
     lambda::{self, Case, ConsDef, Stmt, TagType},
@@ -445,13 +444,6 @@ impl Transform for (Qualified, LetDecl<Type<Real>>) {
 
     fn transform<'a>(&self, context: &mut Context) -> Self::Out {
         let mut context = context.clone();
-
-        let count = self
-            .1
-            .body
-            .get(0)
-            .map(|x| x.patterns.len())
-            .unwrap_or_default();
 
         let new_names = self.1.body[0].patterns.iter()
             .map(|x| {
