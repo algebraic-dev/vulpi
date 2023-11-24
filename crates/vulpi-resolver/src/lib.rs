@@ -469,11 +469,13 @@ impl Context {
             module
         } else {
             for (module_path, _) in self.module.opened().iter() {
-                let available = self.available().get(module_path).cloned().unwrap();
-                let mut forked = self.clone();
-                forked.module = available;
-                if let Some(result) = forked.get_path(kind, span.clone(), path.clone(), false) {
-                    return Some(result);
+                let available = self.available().get(module_path).cloned();
+                if let Some(module) = available {
+                    let mut forked = self.clone();
+                    forked.module = module;
+                    if let Some(result) = forked.get_path(kind, span.clone(), path.clone(), false) {
+                        return Some(result);
+                    }
                 }
             }
 
@@ -1286,11 +1288,14 @@ pub mod expr {
                 );
                 
                if let Some((nil, cons)) = nil.zip(cons) {
+                ctx.insert_constant(nil.clone(), expr.span.clone());
+                ctx.insert_constant(cons.clone(), expr.span.clone());
+
                    let values: Vec<_> = list.values.into_iter().map(|(expr, _)| {
                        transform(ctx, *expr)
                    }).collect();
 
-                   values.into_iter().fold(abs::ExprKind::Constructor(nil.clone()), | acc, value | {
+                   values.into_iter().rfold(abs::ExprKind::Constructor(nil.clone()), | acc, value | {
                         abs::ExprKind::Application(abs::ApplicationExpr {
                             app: abs::AppKind::Normal,
                             func: Box::new(Spanned::new(abs::ExprKind::Constructor(cons.clone()), Default::default())),

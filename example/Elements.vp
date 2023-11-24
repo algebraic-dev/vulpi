@@ -1,0 +1,11 @@
+use Prelude
+use Yal.DOM
+use Yal.List
+
+pub let mk (tag: String) (attrs: List (Attribute msg)) (html: List (Html msg)) : Html msg =
+  Html.Node (Node { tag = tag, attributes = attrs, children = html })
+
+pub let div    : List (Attribute msg) -> List (Html msg) -> Html msg = mk "div"
+pub let p      : List (Attribute msg) -> List (Html msg) -> Html msg = mk "p"
+pub let button : List (Attribute msg) -> List (Html msg) -> Html msg = mk "button"
+pub let text   : String -> Html msg                                  = Html.Text

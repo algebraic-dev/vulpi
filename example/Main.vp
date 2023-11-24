@@ -1,7 +1,25 @@
 use Prelude
+use Yal.Bindings
+use Yal.DOM
+use Yal.Elements
+use Yal.List
 
-type List x = 
-  | Cons x (List x)
-  | Nil
+-- App
 
-let ata = [1,2,3]
+type Msg = 
+  | Increment
+  | Decrement
+
+let update (x: Int) : Msg -> Int
+  | Msg.Increment => x + 1
+  | Msg.Decrement => x - 1
+
+let view (model: Int) : Html Msg =
+  div [ Attribute.Id "pudim" ]
+      [ button [Attribute.OnClick Msg.Increment] [text "Increment"] 
+      , p [] [text ("Count:" ++ intToString model)]
+      , button [Attribute.OnClick Msg.Decrement] [text "Decrement"] 
+      ]
+
+let main = do
+  start view update 0
