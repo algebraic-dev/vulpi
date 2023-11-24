@@ -65,6 +65,13 @@ pub struct LambdaExpr {
 }
 
 #[derive(Show, Clone)]
+pub struct ListExpr {
+    pub left_bracket: Token,
+    pub values: Vec<(Box<Expr>, Option<Token>)>,
+    pub right_bracket: Token,
+}
+
+#[derive(Show, Clone)]
 pub struct ApplicationExpr {
     pub func: Box<Expr>,
     pub args: Vec<Box<Expr>>,
@@ -155,6 +162,7 @@ pub type Tuple = Parenthesis<Vec<(Box<Spanned<ExprKind>>, Option<Token>)>>;
 #[derive(Show, Clone)]
 pub enum ExprKind {
     Lambda(LambdaExpr),
+    List(ListExpr),
     Application(ApplicationExpr),
 
     Variable(Lower),

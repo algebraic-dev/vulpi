@@ -84,9 +84,25 @@ impl<'a> Parser<'a> {
 
         Ok(statements)
     }
+    
+    pub fn list_expr(&mut self) -> Result<ListExpr> {
+        let left_bracket = self.expect(TokenData::LBracket)?;
+        
+        let values = self.sep_by(TokenData::Comma, Self::expr)?;
+        
+        let right_bracket = self.expect(TokenData::RBracket)?;
+        
+        Ok(ListExpr {
+            left_bracket,
+            values,
+            right_bracket,
+        })
+    }
 
     pub fn expr_atom_kind(&mut self) -> Result<ExprKind> {
         match self.token() {
+            TokenData::LBracket => Ok(ExprKind::List(self.list_expr()?)),
+            
             TokenData::UpperIdent | TokenData::LowerIdent => {
                 let path = self.path_ident()?;
 
