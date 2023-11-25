@@ -1,0 +1,51 @@
+pub use Yal.List.List
+use Prelude
+
+pub type List x =
+  | Cons x (List x)
+  | Nil
+
+pub let unwords : List String -> String
+  | List.Cons x (List.Cons y xs) => x ++ " " ++ unwords (List.Cons y xs)
+  | List.Cons x List.Nil         => x
+  | List.Nil                     => ""
+
+pub let range (from: Int) (to: Int) : List Int =
+  when from != to is
+    True  => List.Cons from (range (from + 1) to)
+    False => List.Nil
+
+pub let forEach (f: x -> ()) : List x -> ()
+  | List.Nil       => ()
+  | List.Cons x xs => do
+      f x
+      forEach f xs
+
+pub let reverseListHelper : List x -> List x -> List x
+  | List.Nil,       ys => ys
+  | List.Cons x xs, ys => reverseListHelper xs (List.Cons x ys)
+
+pub let reverseList (x: List x) : List x =
+  reverseListHelper x List.Nil
+
+pub let deleteFromList : List x -> x -> List x
+  | List.Nil,       y => List.Nil
+  | List.Cons x xs, y => 
+      when x == y is
+        True  => deleteFromList xs y
+        False => List.Cons x (deleteFromList xs y)  
+
+pub let fold : (b -> a -> b) -> b -> List a -> b
+  | f, acc, List.Nil       => acc 
+  | f, acc, List.Cons x xs => fold f (f acc x) xs
+
+pub let difference : List x -> List x -> List x = 
+  fold deleteFromList
+
+pub let concatList : List x -> List x -> List x
+  | List.Cons x xs, ys => List.Cons x (concatList xs ys)
+  | List.Nil      , ys => ys
+
+pub let listMap (f: a -> b) : List a -> List b
+  | List.Cons x xs => List.Cons (f x) (listMap f xs)
+  | List.Nil       => List.Nil
