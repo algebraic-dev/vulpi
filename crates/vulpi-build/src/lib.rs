@@ -5,7 +5,7 @@ use std::{collections::HashMap, path::PathBuf, fs::File, rc::Rc, cell::RefCell};
 
 use resw::Writer;
 use vulpi_intern::Symbol;
-use vulpi_ir::transform;
+use vulpi_ir::{transform, inline, dead_code, uncurry};
 use vulpi_location::{FileId, Span};
 use vulpi_report::Report;
 
@@ -15,6 +15,7 @@ use vulpi_resolver::{
     Context, Module,
 };
 
+use vulpi_show::Show;
 use vulpi_syntax::concrete::tree::Program;
 use vulpi_typer::declare::{Programs, Declare};
 use vulpi_vfs::{path::Path, FileSystem};
@@ -129,7 +130,12 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         let programs = Declare::define(&programs, (&mut ctx, env));
         
         if !self.reporter.has_errors() {
-            let res = transform::Transform::transform(&vulpi_ir::transform::Programs(programs), &mut Default::default());
+            let mut res = transform::Transform::transform(&vulpi_ir::transform::Programs(programs), &mut Default::default());
+
+            uncurry::uncurry(&mut res);
+            inline::inline(&mut res);
+            dead_code::dead_code_remove(&mut res);
+            
             let js = vulpi_js::Transform::transform(vulpi_js::Programs(res), &mut Default::default());
             let f = File::create(output).unwrap();
             let mut w = Writer::new(f);

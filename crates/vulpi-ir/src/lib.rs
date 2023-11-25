@@ -3,3 +3,6 @@
 
 pub mod transform;
 pub mod pattern;
+pub mod inline;
+pub mod dead_code;
+pub mod uncurry;

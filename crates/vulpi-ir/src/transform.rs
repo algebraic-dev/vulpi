@@ -488,6 +488,7 @@ impl Transform for (Qualified, LetDecl<Type<Real>>) {
                     .rfold(expr, |acc, name| {
                         Box::new(lambda::ExprKind::Lambda(vec![name], acc))
                     }),
+                is_in_source_code: true,
                 constants: self.1.constants.clone(),
             }
         } else {
@@ -501,6 +502,7 @@ impl Transform for (Qualified, LetDecl<Type<Real>>) {
                     .rfold(Box::new(lambda::ExprKind::Block(upwards)), |acc, name| {
                         Box::new(lambda::ExprKind::Lambda(vec![name], acc))
                     }),
+                is_in_source_code: true,
                 constants: self.1.constants.clone(),
             }
         }
@@ -692,5 +694,6 @@ fn derive_let_from_constructor(
             Box::new(lambda::ExprKind::Lambda(vec![name], acc))
         }),
         constants: None,
+        is_in_source_code: false
     }
 }

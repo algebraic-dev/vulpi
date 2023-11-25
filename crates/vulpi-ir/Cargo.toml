@@ -13,3 +13,4 @@ vulpi-macros = { path = "../vulpi-macros" }
 vulpi-show = { path = "../vulpi-show" }
 vulpi-location = { path = "../vulpi-location" }
 im-rc = "15.1.0"
+petgraph = "0.6.4"

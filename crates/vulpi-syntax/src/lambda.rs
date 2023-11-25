@@ -72,7 +72,8 @@ pub type Expr = Box<ExprKind>;
 pub struct LetDecl {
     pub name: Qualified,
     pub body: Expr,
-    pub constants: Option<HashMap<Qualified, Span>>
+    pub is_in_source_code: bool,
+    pub constants: Option<HashMap<Qualified, Span>>,
 }
 
 #[derive(Show, Clone)]
