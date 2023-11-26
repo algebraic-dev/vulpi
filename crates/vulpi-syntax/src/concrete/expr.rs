@@ -135,6 +135,25 @@ pub struct LetExpr {
 }
 
 #[derive(Show, Clone)]
+pub struct Attribute {
+    pub name: Upper,
+    pub eq: Token,
+    pub value: Box<Expr>,
+}
+
+#[derive(Show, Clone)]
+pub struct HtmlNode {
+    pub left_angle: Token,
+    pub name: Lower,
+    pub attributes: Vec<Attribute>,
+    pub right_angle: Token,
+    pub children: Vec<HtmlNode>,
+    pub left_angle_slash: Token,
+    pub name_end: Lower,
+    pub right_angle_end: Token,
+}
+
+#[derive(Show, Clone)]
 pub struct RecordField {
     pub name: Lower,
     pub eq: Token,
@@ -164,6 +183,7 @@ pub enum ExprKind {
     Lambda(LambdaExpr),
     List(ListExpr),
     Application(ApplicationExpr),
+    HtmlNode(HtmlNode),
 
     Variable(Lower),
     Constructor(Path<Upper>),

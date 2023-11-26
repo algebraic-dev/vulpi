@@ -125,13 +125,15 @@ impl<FS: FileSystem> ProjectCompiler<FS> {
         let env = vulpi_typer::Env::default();
 
         let programs = Programs(programs);
+        println!("{}", programs.0[0].show());
 
         Declare::declare(&programs, (&mut ctx, env.clone()));
         let programs = Declare::define(&programs, (&mut ctx, env));
+
         
         if !self.reporter.has_errors() {
             let mut res = transform::Transform::transform(&vulpi_ir::transform::Programs(programs), &mut Default::default());
-
+            
             uncurry::uncurry(&mut res);
             inline::inline(&mut res);
             dead_code::dead_code_remove(&mut res);

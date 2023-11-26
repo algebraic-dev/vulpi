@@ -1,9 +1,9 @@
 //! The resolver is responsible for taking a single concrete tree and turn it into an abstract
 //! syntax tree with all the names resolved.
 
-use std::{cell::RefCell, rc::Rc};
 use std::cell::{Ref, RefMut};
 use std::collections::HashMap;
+use std::{cell::RefCell, rc::Rc};
 
 use petgraph::prelude::DiGraph;
 use petgraph::stable_graph::NodeIndex;
@@ -11,8 +11,8 @@ use petgraph::stable_graph::NodeIndex;
 use vulpi_intern::Symbol;
 use vulpi_location::{Span, Spanned};
 use vulpi_report::{Diagnostic, Report};
-use vulpi_syntax::concrete::{self, tree};
 use vulpi_syntax::concrete::tree::LetMode;
+use vulpi_syntax::concrete::{self, tree};
 use vulpi_syntax::r#abstract as abs;
 use vulpi_syntax::r#abstract::Visibility;
 use vulpi_vfs::path::{Path, Qualified};
@@ -489,7 +489,12 @@ impl Context {
             return None;
         };
 
-        let searched = module.search(span.clone(), self.available.clone(), kind, path.name.clone());
+        let searched = module.search(
+            span.clone(),
+            self.available.clone(),
+            kind,
+            path.name.clone(),
+        );
 
         match searched {
             Ok(Some(res)) => Some(res),
@@ -1199,6 +1204,33 @@ pub mod pattern {
         patterns
     }
 
+    pub fn transform_attribute(ctx: &mut Context, attribute: tree::Attribute) -> abs::Expr {
+        let func = ctx.resolve(
+            DefinitionKind::Value,
+            attribute.name.0.value.span.clone(),
+            Qualified {
+                path: Path { segments: vec![] },
+                name: attribute.name.symbol(),
+            },
+        );
+
+        let res = if let Some(func) = func {
+            let expr = expr::transform(ctx, *attribute.value);
+            abs::ExprKind::Application(abs::ApplicationExpr {
+                app: abs::AppKind::Normal,
+                func: Box::new(Spanned::new(
+                    abs::ExprKind::Constructor(func),
+                    Default::default(),
+                )),
+                args: vec![expr],
+            })
+        } else {
+            abs::ExprKind::Error
+        };
+
+        Box::new(Spanned::new(res, Default::default()))
+    }
+
     /// Transform a pattern into an abstract pattern.
     pub fn transform_pattern_arm(ctx: &mut Context, arm: tree::PatternArm) -> abs::PatternArm {
         if !arm.patterns.is_empty() {
@@ -1236,9 +1268,9 @@ pub mod pattern {
 
 /// Expressions are the ones that can be used in a function body.
 pub mod expr {
-    use vulpi_syntax::r#abstract::SttmKind::Expr;
-    use crate::error::ResolverError;
     use super::*;
+    use crate::error::ResolverError;
+    use vulpi_syntax::r#abstract::SttmKind::Expr;
 
     /// Transforms an expression into an abstract expression.
     pub fn transform(ctx: &mut Context, expr: concrete::tree::Expr) -> abs::Expr {
@@ -1265,51 +1297,13 @@ pub mod expr {
             }
 
             List(list) => {
-                let nil = ctx.resolve(
-                    DefinitionKind::Value,
-                    expr.span.clone(),
-                    Qualified {
-                        path: Path {
-                            segments: vec![Symbol::intern("List")]
-                        },
-                        name: Symbol::intern("Nil"),
-                    },
-                );
+                let values: Vec<_> = list
+                    .values
+                    .into_iter()
+                    .map(|(expr, _)| transform(ctx, *expr))
+                    .collect();
 
-                let cons = ctx.resolve(
-                    DefinitionKind::Value,
-                    expr.span.clone(),
-                    Qualified {
-                        path: Path {
-                            segments: vec![Symbol::intern("List")]
-                        },
-                        name: Symbol::intern("Cons"),
-                    },
-                );
-                
-               if let Some((nil, cons)) = nil.zip(cons) {
-                ctx.insert_constant(nil.clone(), expr.span.clone());
-                ctx.insert_constant(cons.clone(), expr.span.clone());
-
-                   let values: Vec<_> = list.values.into_iter().map(|(expr, _)| {
-                       transform(ctx, *expr)
-                   }).collect();
-
-                   values.into_iter().rfold(abs::ExprKind::Constructor(nil.clone()), | acc, value | {
-                        abs::ExprKind::Application(abs::ApplicationExpr {
-                            app: abs::AppKind::Normal,
-                            func: Box::new(Spanned::new(abs::ExprKind::Constructor(cons.clone()), Default::default())),
-                            args: vec![value, Box::new(Spanned::new(acc, Default::default()))]
-                        })   
-                   })    
-               } else {
-                   ctx.reporter.report(Diagnostic::new(ResolverError {
-                       span: expr.span.clone(),
-                       kind: error::ResolverErrorKind::ListIsNotAvailable,
-                   }));                  
-                   
-                   abs::ExprKind::Error
-               } 
+                fold_list(ctx, expr.span.clone(), values)
             }
 
             Application(app) => {
@@ -1515,12 +1509,110 @@ pub mod expr {
                 })
             }
             Parenthesis(parenthesis) => return transform(ctx, *parenthesis.data.0),
+            HtmlNode(node) => {
+                transform_html(ctx, expr.span.clone(), node).data
+            }
         };
 
         Box::new(Spanned {
             data,
             span: expr.span.clone(),
         })
+    }
+
+    fn transform_html(ctx: &mut Context, span: Span, node: tree::HtmlNode) -> abs::Expr {
+        let name = ctx.resolve(
+            DefinitionKind::Value,
+            span.clone(),
+            Qualified {
+                path: Path { segments: vec![] },
+                name: Symbol::intern("mk"),
+            },
+        );
+
+        let kind = if let Some(name) = name {
+            let attributes = node.attributes.into_iter().map(|attr| {
+                pattern::transform_attribute(ctx, attr)
+            }).collect();
+
+            let children = node.children.into_iter().map(|child| {
+                transform_html(ctx, span.clone(), child)
+            }).collect();
+
+            abs::ExprKind::Application(abs::ApplicationExpr {
+                app: abs::AppKind::Normal,
+                func: Box::new(Spanned::new(
+                    abs::ExprKind::Function(name),
+                    span.clone(),
+                )),
+                args: vec![Box::new(Spanned::new(
+                    abs::ExprKind::Literal(Box::new(Spanned {
+                        data: abs::LiteralKind::String(node.name.symbol()),
+                        span: node.name.0.value.span.clone(),
+                    })),
+                    node.name.0.value.span.clone(),
+                )),
+                Box::new(Spanned::new(fold_list(ctx, span.clone(), attributes), span.clone())),
+                Box::new(Spanned::new(fold_list(ctx, span.clone(), children), span.clone())),
+                ]
+            })
+        } else {
+            abs::ExprKind::Error
+        };
+
+        Box::new(Spanned {
+            data: kind,
+            span: span.clone(),
+        })
+    }
+
+    fn fold_list(ctx: &mut Context, span: Span, values: Vec<abs::Expr>) -> abs::ExprKind {
+        let nil = ctx.resolve(
+            DefinitionKind::Value,
+            span.clone(),
+            Qualified {
+                path: Path {
+                    segments: vec![Symbol::intern("List")],
+                },
+                name: Symbol::intern("Nil"),
+            },
+        );
+
+        let cons = ctx.resolve(
+            DefinitionKind::Value,
+            span.clone(),
+            Qualified {
+                path: Path {
+                    segments: vec![Symbol::intern("List")],
+                },
+                name: Symbol::intern("Cons"),
+            },
+        );
+
+        if let Some((nil, cons)) = nil.zip(cons) {
+            ctx.insert_constant(nil.clone(), span.clone());
+            ctx.insert_constant(cons.clone(), span.clone());
+
+            values
+                .into_iter()
+                .rfold(abs::ExprKind::Constructor(nil.clone()), |acc, value| {
+                    abs::ExprKind::Application(abs::ApplicationExpr {
+                        app: abs::AppKind::Normal,
+                        func: Box::new(Spanned::new(
+                            abs::ExprKind::Constructor(cons.clone()),
+                            Default::default(),
+                        )),
+                        args: vec![value, Box::new(Spanned::new(acc, Default::default()))],
+                    })
+                })
+        } else {
+            ctx.reporter.report(Diagnostic::new(ResolverError {
+                span: span.clone(),
+                kind: error::ResolverErrorKind::ListIsNotAvailable,
+            }));
+
+            abs::ExprKind::Error
+        }
     }
 }
 

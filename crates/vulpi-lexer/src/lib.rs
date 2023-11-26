@@ -299,6 +299,9 @@ impl<'a> Lexer<'a> {
                     if let Some('-') = self.peekable.peek() {
                         self.advance();
                         TokenData::LeftArrow
+                    } else if let Some('/') = self.peekable.peek() {
+                        self.advance();
+                        TokenData::LessSlash
                     } else {
                         TokenData::Less
                     }

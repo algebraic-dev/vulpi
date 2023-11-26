@@ -75,6 +75,7 @@ pub enum TokenData {
 
     Greater,      // '>'
     Less,         // '<'
+    LessSlash,    // '</'
     GreaterEqual, // '>='
     LessEqual,    // '<='
     NotEqual,     // '!='
@@ -192,6 +193,7 @@ impl ToString for Token {
             RPar => ")".to_string(),
             LBracket => "[".to_string(),
             RBracket => "]".to_string(),
+            LessSlash => "</".to_string(),
             LeftArrow => "<-".to_string(),
             RightArrow => "->".to_string(),
             FatArrow => "=>".to_string(),

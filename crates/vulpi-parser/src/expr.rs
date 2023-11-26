@@ -87,9 +87,7 @@ impl<'a> Parser<'a> {
     
     pub fn list_expr(&mut self) -> Result<ListExpr> {
         let left_bracket = self.expect(TokenData::LBracket)?;
-        
         let values = self.sep_by(TokenData::Comma, Self::expr)?;
-        
         let right_bracket = self.expect(TokenData::RBracket)?;
         
         Ok(ListExpr {
@@ -102,7 +100,7 @@ impl<'a> Parser<'a> {
     pub fn expr_atom_kind(&mut self) -> Result<ExprKind> {
         match self.token() {
             TokenData::LBracket => Ok(ExprKind::List(self.list_expr()?)),
-            
+            TokenData::Less => Ok(ExprKind::HtmlNode(self.html_node()?)),
             TokenData::UpperIdent | TokenData::LowerIdent => {
                 let path = self.path_ident()?;
 
@@ -295,6 +293,35 @@ impl<'a> Parser<'a> {
                 value: body,
             }),
         }))
+    }
+
+    pub fn attribute_node(&mut self) -> Result<Attribute> {
+        let name = self.upper()?;
+        let eq = self.expect(TokenData::Equal)?;
+        let value = self.expr_atom()?;
+        Ok(Attribute { name, eq, value })
+    }
+    
+    pub fn html_node(&mut self) -> Result<HtmlNode> {
+        let left_angle = self.expect(TokenData::Less)?;
+        let name = self.lower()?;
+        let attributes = self.many(Self::attribute_node)?;
+        let right_angle = self.expect(TokenData::Greater)?;
+        let children = self.many(Self::html_node)?;
+        let left_angle_slash = self.expect(TokenData::LessSlash)?;
+        let name_end = self.lower()?;
+        let right_angle_end = self.expect(TokenData::Greater)?;
+        
+        Ok(HtmlNode {
+            left_angle,
+            name,
+            attributes,
+            right_angle,
+            children,
+            left_angle_slash,
+            name_end,
+            right_angle_end,
+        })
     }
 
     pub fn pattern_arm(&mut self) -> Result<PatternArm> {
